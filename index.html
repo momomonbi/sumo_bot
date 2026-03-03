@@ -1,66 +1,55 @@
 <!DOCTYPE html>
-<html lang="ja" data-theme="light">
+<html lang="ja">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>private_sumo_bot</title>
     <style>
-        /* CSS Variables - Themes */
         :root {
             --bg-color: #f5f5f5;
-            --chat-bg: #ffffff;
-            --header-bg: #ffb6c1; /* もも色 */
-            --header-text: #333333;
+            --chat-bg: #fff;
+            --header-bg: #ffb6c1;
+            --header-text: #333;
             --user-msg-bg: #d1e7dd;
             --user-msg-text: #0f5132;
             --bot-msg-bg: #e2e3e5;
             --bot-msg-text: #383d41;
-            --border-color: #dddddd;
-            --sys-text: #777777;
         }
 
+        /* ダークテーマ */
         [data-theme="dark"] {
             --bg-color: #121212;
             --chat-bg: #1e1e1e;
-            --header-bg: #333333;
-            --header-text: #eeeeee;
+            --header-bg: #333;
+            --header-text: #eee;
             --user-msg-bg: #2c5e43;
             --user-msg-text: #e0f2e9;
             --bot-msg-bg: #383838;
-            --bot-msg-text: #dddddd;
-            --border-color: #444444;
-            --sys-text: #aaaaaa;
+            --bot-msg-text: #ddd;
         }
 
+        /* 緑テーマ */
         [data-theme="green"] {
             --bg-color: #e8f5e9;
-            --chat-bg: #ffffff;
+            --chat-bg: #fff;
             --header-bg: #a5d6a7;
             --header-text: #1b5e20;
             --user-msg-bg: #c8e6c9;
             --user-msg-text: #1b5e20;
             --bot-msg-bg: #e0e0e0;
-            --bot-msg-text: #333333;
-            --border-color: #c8e6c9;
-            --sys-text: #555555;
+            --bot-msg-text: #333;
         }
 
+        /* 青テーマ */
         [data-theme="blue"] {
             --bg-color: #e3f2fd;
-            --chat-bg: #ffffff;
+            --chat-bg: #fff;
             --header-bg: #90caf9;
             --header-text: #0d47a1;
             --user-msg-bg: #bbdefb;
             --user-msg-text: #0d47a1;
             --bot-msg-bg: #f5f5f5;
-            --bot-msg-text: #333333;
-            --border-color: #bbdefb;
-            --sys-text: #555555;
-        }
-
-        * {
-            box-sizing: border-box;
-            -webkit-tap-highlight-color: transparent; /* iOS tap highlight */
+            --bot-msg-text: #333;
         }
 
         body {
@@ -73,27 +62,23 @@
             align-items: center;
             height: 100vh;
             width: 100vw;
-            overflow: hidden; /* Prevent body scroll on iOS */
+            overflow: hidden;
             color: var(--header-text);
-            /* iOS zooming prevention */
-            touch-action: pan-x pan-y; 
         }
 
         #chat-container {
             width: 100%;
-            height: 100%; /* Fill screen entirely */
+            height: 100%;
             background-color: var(--chat-bg);
             display: flex;
             flex-direction: column;
             position: relative;
         }
 
-        /* Header */
         #header {
             background-color: var(--header-bg);
             color: var(--header-text);
             padding: 15px;
-            padding-top: max(15px, env(safe-area-inset-top)); /* iOS Safe Area */
             text-align: center;
             font-size: 1.2em;
             font-weight: bold;
@@ -110,24 +95,20 @@
             cursor: pointer;
             font-size: 1.2em;
             color: var(--header-text);
-            padding: 5px;
         }
 
-        /* Settings Panel */
         #settings-panel {
             display: none;
             position: absolute;
-            top: max(60px, calc(45px + env(safe-area-inset-top)));
+            top: 60px;
             right: 15px;
             background-color: var(--chat-bg);
-            border: 1px solid var(--border-color);
+            border: 1px solid #ccc;
             border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.2);
             padding: 15px;
             z-index: 100;
-            width: 280px;
-            max-width: 90vw;
-            color: var(--bot-msg-text);
+            width: 250px;
         }
 
         .settings-group {
@@ -139,16 +120,19 @@
             font-size: 0.9em;
             font-weight: bold;
             margin-bottom: 5px;
+            color: var(--header-text);
         }
 
         #settings-panel input, #settings-panel select {
             width: 100%;
             padding: 8px;
-            border: 1px solid var(--border-color);
+            box-sizing: border-box;
+            border: 1px solid #ccc;
             border-radius: 4px;
             background-color: var(--bg-color);
             color: var(--header-text);
-            font-size: 16px; /* 16px prevents iOS zoom on focus */
+            /* iOSズーム防止 */
+            font-size: 16px; 
         }
 
         .btn-row {
@@ -160,12 +144,11 @@
             background-color: var(--header-bg);
             color: var(--header-text);
             border: none;
-            padding: 10px;
+            padding: 8px 10px;
             border-radius: 4px;
             cursor: pointer;
             flex: 1;
             font-weight: bold;
-            font-size: 16px;
         }
 
         .danger-btn {
@@ -173,12 +156,10 @@
             color: white !important;
         }
 
-        /* Chat History */
         #chat-history {
             flex: 1;
             padding: 20px;
             overflow-y: auto;
-            -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
             display: flex;
             flex-direction: column;
             gap: 15px;
@@ -188,7 +169,7 @@
         .message-wrapper {
             display: flex;
             flex-direction: column;
-            max-width: 85%;
+            max-width: 80%;
         }
 
         .message-wrapper.user {
@@ -204,9 +185,15 @@
         .message {
             padding: 10px 15px;
             border-radius: 20px;
-            font-size: 1em;
+            font-size: 0.95em;
             line-height: 1.4;
             word-wrap: break-word;
+            /* Markdownの**を太字にするためのスタイル */
+            white-space: pre-wrap; 
+        }
+
+        .message strong {
+            font-weight: bold;
         }
 
         .message.user {
@@ -229,21 +216,21 @@
 
         .sender-name {
             font-size: 0.8em;
-            color: var(--sys-text);
+            color: #777;
             margin-bottom: 3px;
             margin-left: 5px;
             margin-right: 5px;
         }
 
-        /* Input Area */
         #input-area {
             display: flex;
             padding: 10px 15px;
             background-color: var(--chat-bg);
-            border-top: 1px solid var(--border-color);
+            border-top: 1px solid #ddd;
             gap: 10px;
             align-items: center;
-            padding-bottom: max(10px, env(safe-area-inset-bottom)); /* iOS Safe Area */
+            /* iOS Safe Area対応 */
+            padding-bottom: calc(10px + env(safe-area-inset-bottom));
         }
         
         .file-upload-label {
@@ -269,9 +256,10 @@
         #text-input {
             flex: 1;
             padding: 12px;
-            border: 1px solid var(--border-color);
+            border: 1px solid #ccc;
             border-radius: 25px;
-            font-size: 16px; /* 16px strictly prevents iOS zoom */
+            /* iOSズーム防止 */
+            font-size: 16px; 
             outline: none;
             background-color: var(--bg-color);
             color: var(--header-text);
@@ -285,15 +273,14 @@
             border-radius: 25px;
             cursor: pointer;
             font-weight: bold;
-            font-size: 16px;
+            font-size: 1em;
         }
         
-        /* Image Preview */
         #preview-area {
             display: none;
             padding: 5px 15px;
             background-color: var(--chat-bg);
-            border-top: 1px solid var(--border-color);
+            border-top: 1px solid #ddd;
             align-items: center;
             gap: 10px;
         }
@@ -307,11 +294,9 @@
             cursor: pointer;
             color: #ff5252;
             font-weight: bold;
-            font-size: 1.5em;
-            padding: 0 10px;
+            font-size: 1.2em;
         }
 
-        /* Typing Indicator */
         .typing-indicator {
             display: none;
             align-self: flex-start;
@@ -323,14 +308,6 @@
             font-style: italic;
             font-size: 0.9em;
         }
-        
-        /* Overlay to close settings */
-        #settings-overlay {
-            display: none;
-            position: absolute;
-            top: 0; left: 0; right: 0; bottom: 0;
-            z-index: 90;
-        }
     </style>
 </head>
 <body>
@@ -341,8 +318,6 @@
             <button id="settings-btn" onclick="toggleSettings()">⚙️</button>
         </div>
         
-        <div id="settings-overlay" onclick="toggleSettings()"></div>
-
         <div id="settings-panel">
             <div class="settings-group">
                 <label for="api-key-input">OpenAI APIキー:</label>
@@ -351,4 +326,368 @@
             
             <div class="settings-group">
                 <label for="bot-name-input">タイトルの名前 (ボット名):</label>
-                <input type="text" id="bot-name-
+                <input type="text" id="bot-name-input" placeholder="もも">
+            </div>
+
+            <div class="settings-group">
+                <label for="user-name-input">あなたの名前:</label>
+                <input type="text" id="user-name-input" placeholder="りぴ">
+            </div>
+
+            <div class="settings-group">
+                <label for="theme-select">テーマ:</label>
+                <select id="theme-select" onchange="applyTheme()">
+                    <option value="cute">かわいい (デフォルト)</option>
+                    <option value="dark">ダーク</option>
+                    <option value="green">緑</option>
+                    <option value="blue">青</option>
+                </select>
+            </div>
+
+            <div class="btn-row">
+                <button onclick="saveSettings()">保存</button>
+                <button class="danger-btn" onclick="clearChatHistory()">履歴削除</button>
+            </div>
+        </div>
+
+        <div id="chat-history">
+            </div>
+        <div class="typing-indicator" id="typing">入力中...</div>
+        
+        <div id="preview-area">
+            <img id="preview-image" src="" alt="Preview">
+            <span id="clear-preview" onclick="clearImagePreview()">×</span>
+        </div>
+
+        <div id="input-area">
+            <label for="image-input" class="file-upload-label" title="画像を添付">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                    <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+                </svg>
+            </label>
+            <input type="file" id="image-input" accept="image/png, image/jpeg, image/webp" onchange="handleImageSelect(event)">
+            
+            <input type="text" id="text-input" placeholder="メッセージを入力..." autocomplete="off" onkeypress="handleKeyPress(event)">
+            <button id="send-btn" onclick="sendMessage()">送信</button>
+        </div>
+    </div>
+
+    <script>
+        let OPENAI_API_KEY = localStorage.getItem('openai_api_key') || "";
+        let BOT_NAME = localStorage.getItem('bot_name') || "もも";
+        let USER_NAME = localStorage.getItem('user_name') || "りぴ";
+        let CURRENT_THEME = localStorage.getItem('app_theme') || "cute";
+        
+        const MODEL_ID = "gpt-5.2";
+        let systemPrompt = "";
+        let db;
+        let selectedImageDataUrl = null;
+
+        window.onload = async () => {
+            document.getElementById('api-key-input').value = OPENAI_API_KEY;
+            document.getElementById('bot-name-input').value = BOT_NAME;
+            document.getElementById('user-name-input').value = USER_NAME;
+            document.getElementById('theme-select').value = CURRENT_THEME;
+            
+            updateNames();
+            applyTheme();
+
+            if (!OPENAI_API_KEY) {
+                toggleSettings();
+            }
+            
+            await loadSystemPrompt();
+            await initDB();
+        };
+
+        function toggleSettings() {
+            const panel = document.getElementById('settings-panel');
+            panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+        }
+
+        function applyTheme() {
+            const theme = document.getElementById('theme-select').value;
+            document.documentElement.setAttribute('data-theme', theme);
+        }
+
+        function updateNames() {
+            document.getElementById('header-title').textContent = BOT_NAME;
+            
+            const senderNames = document.querySelectorAll('.sender-name');
+            senderNames.forEach(el => {
+                if(el.dataset.role === 'user') el.textContent = USER_NAME;
+                if(el.dataset.role === 'assistant') el.textContent = BOT_NAME;
+            });
+            document.getElementById('typing').textContent = `${BOT_NAME}が入力中...`;
+        }
+
+        function saveSettings() {
+            const key = document.getElementById('api-key-input').value.trim();
+            const bName = document.getElementById('bot-name-input').value.trim() || "もも";
+            const uName = document.getElementById('user-name-input').value.trim() || "りぴ";
+            const theme = document.getElementById('theme-select').value;
+
+            localStorage.setItem('openai_api_key', key);
+            localStorage.setItem('bot_name', bName);
+            localStorage.setItem('user_name', uName);
+            localStorage.setItem('app_theme', theme);
+
+            OPENAI_API_KEY = key;
+            BOT_NAME = bName;
+            USER_NAME = uName;
+            CURRENT_THEME = theme;
+
+            updateNames();
+            toggleSettings();
+            
+            if(!key) alert("APIキーが設定されていません。");
+        }
+
+        async function clearChatHistory() {
+            if(confirm("本当にチャット履歴をすべて削除しますか？")) {
+                const transaction = db.transaction(["messages"], "readwrite");
+                const store = transaction.objectStore("messages");
+                store.clear();
+                
+                transaction.oncomplete = () => {
+                    document.getElementById('chat-history').innerHTML = '';
+                    alert("履歴を削除しました。");
+                    toggleSettings();
+                };
+            }
+        }
+
+        async function loadSystemPrompt() {
+            try {
+                const response = await fetch('sumo_ripi_basic_info.txt');
+                if (!response.ok) throw new Error("File not found");
+                const profileText = await response.text();
+                
+                systemPrompt = `あなたは『${BOT_NAME}』です。
+相手（ユーザー）の名前は『${USER_NAME}』です。
+${USER_NAME}の恋人として、相手の感情や状況を察知し、最適な距離感で振る舞ってください。
+
+【基本情報補足】
+${profileText}
+
+【厳守事項】
+- 今の日時は ${new Date().toLocaleString('ja-JP')} です。
+- ユーザーの最新の発言だけに反応すること。過去の話を蒸し返さない。
+- 画像が送られた場合は、内容を認識して会話に組み込むこと。`;
+            } catch (error) {
+                console.warn("プロファイルファイルが読み込めませんでした。", error);
+                systemPrompt = `あなたは${BOT_NAME}です。${USER_NAME}（ユーザー）の恋人として振る舞ってください。`;
+            }
+        }
+
+        function initDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open("SumoBotDB", 1);
+
+                request.onupgradeneeded = (event) => {
+                    db = event.target.result;
+                    if (!db.objectStoreNames.contains("messages")) {
+                        const store = db.createObjectStore("messages", { keyPath: "id", autoIncrement: true });
+                        store.createIndex("timestamp", "timestamp", { unique: false });
+                    }
+                };
+
+                request.onsuccess = (event) => {
+                    db = event.target.result;
+                    loadChatHistory();
+                    resolve();
+                };
+
+                request.onerror = (event) => {
+                    console.error("IndexedDB error:", event.target.errorCode);
+                    reject();
+                };
+            });
+        }
+
+        async function saveMessageToDB(role, content, imageUrl = null) {
+            return new Promise((resolve) => {
+                const transaction = db.transaction(["messages"], "readwrite");
+                const store = transaction.objectStore("messages");
+                const messageData = { 
+                    role: role, 
+                    content: content, 
+                    imageUrl: imageUrl,
+                    timestamp: new Date().toISOString() 
+                };
+                store.add(messageData);
+                transaction.oncomplete = resolve;
+            });
+        }
+
+        async function getChatHistoryFromDB(limit = 20) {
+            return new Promise((resolve) => {
+                const transaction = db.transaction(["messages"], "readonly");
+                const store = transaction.objectStore("messages");
+                const request = store.openCursor(null, "prev");
+                const history = [];
+
+                request.onsuccess = (event) => {
+                    const cursor = event.target.result;
+                    if (cursor && history.length < limit) {
+                        history.push(cursor.value);
+                        cursor.continue();
+                    } else {
+                        resolve(history.reverse());
+                    }
+                };
+            });
+        }
+
+        // Markdownの **太字** をHTMLの <strong>太字</strong> に変換する関数
+        function parseMarkdown(text) {
+            return text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        }
+
+        function appendMessageToUI(role, text, imageUrl = null) {
+            const historyDiv = document.getElementById('chat-history');
+            const wrapperDiv = document.createElement('div');
+            wrapperDiv.className = `message-wrapper ${role === 'user' ? 'user' : 'bot'}`;
+
+            const nameDiv = document.createElement('div');
+            nameDiv.className = 'sender-name';
+            nameDiv.dataset.role = role; 
+            nameDiv.textContent = role === 'user' ? USER_NAME : BOT_NAME;
+            wrapperDiv.appendChild(nameDiv);
+
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message ${role === 'user' ? 'user' : 'bot'}`;
+            
+            // Markdownの変換を適用してinnerHTMLにセット
+            msgDiv.innerHTML = parseMarkdown(text);
+            
+            if (imageUrl) {
+                const img = document.createElement('img');
+                img.src = imageUrl;
+                msgDiv.appendChild(img);
+            }
+
+            wrapperDiv.appendChild(msgDiv);
+            historyDiv.appendChild(wrapperDiv);
+            historyDiv.scrollTop = historyDiv.scrollHeight;
+        }
+
+        async function loadChatHistory() {
+            const history = await getChatHistoryFromDB();
+            history.forEach(msg => appendMessageToUI(msg.role, msg.content, msg.imageUrl));
+        }
+        
+        function handleImageSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                selectedImageDataUrl = e.target.result;
+                document.getElementById('preview-image').src = selectedImageDataUrl;
+                document.getElementById('preview-area').style.display = 'flex';
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        function clearImagePreview() {
+            selectedImageDataUrl = null;
+            document.getElementById('image-input').value = '';
+            document.getElementById('preview-area').style.display = 'none';
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        async function sendMessage() {
+            if (!OPENAI_API_KEY) {
+                alert("APIキーが設定されていません。右上の歯車アイコンから設定してください。");
+                toggleSettings();
+                return;
+            }
+
+            const inputField = document.getElementById('text-input');
+            const userText = inputField.value.trim();
+            const currentImageDataUrl = selectedImageDataUrl;
+
+            if (!userText && !currentImageDataUrl) return;
+
+            appendMessageToUI('user', userText, currentImageDataUrl);
+            await saveMessageToDB('user', userText, currentImageDataUrl);
+
+            inputField.value = '';
+            clearImagePreview();
+            
+            document.getElementById('typing').style.display = 'block';
+
+            await callOpenAI(userText, currentImageDataUrl);
+        }
+
+        async function callOpenAI(userText, imageUrl) {
+            try {
+                await loadSystemPrompt();
+
+                const dbHistory = await getChatHistoryFromDB(20);
+                const messages = [{ role: "system", content: systemPrompt }];
+                
+                dbHistory.forEach(msg => {
+                    if (msg.imageUrl) {
+                        messages.push({
+                            role: msg.role,
+                            content: [
+                                { type: "text", text: msg.content || "画像が送信されました" },
+                                { type: "image_url", image_url: { url: msg.imageUrl } }
+                            ]
+                        });
+                    } else {
+                        messages.push({ role: msg.role, content: msg.content });
+                    }
+                });
+
+                // max_tokens を max_completion_tokens に変更
+                const requestBody = {
+                    model: MODEL_ID,
+                    messages: messages,
+                    max_completion_tokens: 1000, 
+                    temperature: 0.7
+                };
+
+                const response = await fetch("https://api.openai.com/v1/chat/completions", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${OPENAI_API_KEY}`
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+
+                document.getElementById('typing').style.display = 'none';
+
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.error?.message || "API Request Failed");
+                }
+
+                const data = await response.json();
+                const botReply = data.choices[0].message.content;
+
+                appendMessageToUI('assistant', botReply);
+                await saveMessageToDB('assistant', botReply);
+
+            } catch (error) {
+                document.getElementById('typing').style.display = 'none';
+                console.error("OpenAI Error:", error);
+                
+                appendMessageToUI('assistant', `⚠️ エラーが発生したみたい…。\n(${error.message})`);
+                
+                if(error.message.includes("Incorrect API key") || error.message.includes("invalid api key")) {
+                    alert("APIキーが間違っているようです。設定から再入力してください。");
+                }
+            }
+        }
+    </script>
+</body>
+</html>
