@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>private_sumo_bot</title>
     <style>
         body {
@@ -61,25 +61,51 @@
             box-shadow: 0 4px 8px rgba(0,0,0,0.1);
             padding: 15px;
             z-index: 100;
+            width: 250px;
+        }
+
+        #settings-panel label {
+            font-size: 0.85em;
+            font-weight: bold;
+            color: #555;
+            display: block;
+            margin-top: 10px;
         }
         
-        #settings-panel input {
+        /* font-size: 16px は iOS Safari でのズーム防止に必須 */
+        #settings-panel input, #text-input {
             width: 100%;
             padding: 8px;
             margin-top: 5px;
-            margin-bottom: 10px;
             box-sizing: border-box;
             border: 1px solid #ccc;
             border-radius: 4px;
+            font-size: 16px; 
         }
 
-        #settings-panel button {
-            background-color: #ffb6c1;
+        .settings-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .settings-actions button {
             border: none;
-            padding: 8px 15px;
+            padding: 10px;
             border-radius: 4px;
             cursor: pointer;
-            width: 100%;
+            font-weight: bold;
+        }
+
+        #save-btn {
+            background-color: #ffb6c1;
+            color: #333;
+        }
+
+        #clear-btn {
+            background-color: #dc3545;
+            color: white;
         }
 
         #chat-history {
@@ -112,8 +138,9 @@
             padding: 10px 15px;
             border-radius: 20px;
             font-size: 0.95em;
-            line-height: 1.4;
+            line-height: 1.5;
             word-wrap: break-word;
+            white-space: pre-wrap; /* 改行を反映 */
         }
 
         .message.user {
@@ -134,12 +161,25 @@
             margin-top: 5px;
         }
 
+        /* 強い強調（太字）のスタイル */
+        .message strong {
+            font-weight: 800;
+        }
+
         .sender-name {
             font-size: 0.8em;
             color: #777;
             margin-bottom: 3px;
             margin-left: 5px;
             margin-right: 5px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .timestamp {
+            font-size: 0.85em;
+            color: #aaa;
         }
 
         #input-area {
@@ -179,9 +219,7 @@
         #text-input {
             flex: 1;
             padding: 12px;
-            border: 1px solid #ccc;
             border-radius: 25px;
-            font-size: 1em;
             outline: none;
         }
 
@@ -199,6 +237,7 @@
             font-weight: bold;
             font-size: 1em;
             transition: background-color 0.2s;
+            white-space: nowrap;
         }
 
         #send-btn:hover {
@@ -243,19 +282,29 @@
 
     <div id="chat-container">
         <div id="header">
-            <span>もも (sumo)</span>
+            <span id="header-title">もも (sumo)</span>
             <button id="settings-btn" onclick="toggleSettings()">⚙️</button>
         </div>
         
         <div id="settings-panel">
-            <label for="api-key-input" style="font-size: 0.9em; font-weight: bold;">OpenAI APIキー:</label>
+            <label for="api-key-input">OpenAI APIキー:</label>
             <input type="password" id="api-key-input" placeholder="sk-...">
-            <button onclick="saveApiKey()">保存</button>
+
+            <label for="bot-name-input">相手の名前 (タイトル):</label>
+            <input type="text" id="bot-name-input" placeholder="もも (sumo)">
+
+            <label for="user-name-input">自分の名前:</label>
+            <input type="text" id="user-name-input" placeholder="りぴ">
+
+            <div class="settings-actions">
+                <button id="save-btn" onclick="saveSettings()">保存して適用</button>
+                <button id="clear-btn" onclick="clearHistory()">履歴をすべて消去</button>
+            </div>
         </div>
 
         <div id="chat-history">
             </div>
-        <div class="typing-indicator" id="typing">ももが入力中...</div>
+        <div class="typing-indicator" id="typing">入力中...</div>
         
         <div id="preview-area">
             <img id="preview-image" src="" alt="Preview">
@@ -276,7 +325,9 @@
     </div>
 
     <script>
-        let OPENAI_API_KEY = localStorage.getItem('openai_api_key');
+        let OPENAI_API_KEY = localStorage.getItem('openai_api_key') || "";
+        let BOT_NAME = localStorage.getItem('bot_name') || "もも (sumo)";
+        let USER_NAME = localStorage.getItem('user_name') || "りぴ";
         const MODEL_ID = "gpt-5.2";
         
         let systemPrompt = "";
@@ -284,9 +335,13 @@
         let selectedImageDataUrl = null;
 
         window.onload = async () => {
-            if (OPENAI_API_KEY) {
-                document.getElementById('api-key-input').value = OPENAI_API_KEY;
-            } else {
+            // 設定の復元
+            document.getElementById('api-key-input').value = OPENAI_API_KEY;
+            document.getElementById('bot-name-input').value = BOT_NAME;
+            document.getElementById('user-name-input').value = USER_NAME;
+            updateHeaderTitle();
+
+            if (!OPENAI_API_KEY) {
                 toggleSettings(); // 初回は設定画面を開く
             }
             await loadSystemPrompt();
@@ -298,15 +353,53 @@
             panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
         }
 
-        function saveApiKey() {
+        function updateHeaderTitle() {
+            document.getElementById('header-title').textContent = BOT_NAME;
+            document.title = BOT_NAME + " - チャット";
+        }
+
+        function saveSettings() {
             const key = document.getElementById('api-key-input').value.trim();
+            const bName = document.getElementById('bot-name-input').value.trim() || "もも (sumo)";
+            const uName = document.getElementById('user-name-input').value.trim() || "りぴ";
+
             if (key) {
                 localStorage.setItem('openai_api_key', key);
                 OPENAI_API_KEY = key;
-                toggleSettings();
-            } else {
+            } else if (!OPENAI_API_KEY) {
                 alert("APIキーを入力してください。");
+                return;
             }
+
+            localStorage.setItem('bot_name', bName);
+            localStorage.setItem('user_name', uName);
+            BOT_NAME = bName;
+            USER_NAME = uName;
+
+            updateHeaderTitle();
+            toggleSettings();
+
+            // 名前の変更を過去の履歴にも反映させるために再描画
+            document.getElementById('chat-history').innerHTML = '';
+            loadChatHistory();
+        }
+
+        async function clearHistory() {
+            if (!confirm("本当にチャットの履歴をすべて消去しますか？\n（この操作は元に戻せません）")) {
+                return;
+            }
+
+            return new Promise((resolve) => {
+                const transaction = db.transaction(["messages"], "readwrite");
+                const store = transaction.objectStore("messages");
+                const request = store.clear();
+                
+                request.onsuccess = () => {
+                    document.getElementById('chat-history').innerHTML = '';
+                    toggleSettings();
+                    resolve();
+                };
+            });
         }
 
         async function loadSystemPrompt() {
@@ -356,7 +449,7 @@ ${profileText}
             });
         }
 
-        async function saveMessageToDB(role, content, imageUrl = null) {
+        async function saveMessageToDB(role, content, imageUrl = null, timestamp = null) {
             return new Promise((resolve) => {
                 const transaction = db.transaction(["messages"], "readwrite");
                 const store = transaction.objectStore("messages");
@@ -364,7 +457,7 @@ ${profileText}
                     role: role, 
                     content: content, 
                     imageUrl: imageUrl,
-                    timestamp: new Date().toISOString() 
+                    timestamp: timestamp || new Date().toISOString() 
                 };
                 store.add(messageData);
                 transaction.oncomplete = resolve;
@@ -390,19 +483,49 @@ ${profileText}
             });
         }
 
-        function appendMessageToUI(role, text, imageUrl = null) {
+        // HTMLエスケープ処理（XSS対策）
+        function escapeHTML(str) {
+            if (!str) return "";
+            return str.replace(/[&<>'"]/g, tag => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                "'": '&#39;',
+                '"': '&quot;'
+            }[tag] || tag));
+        }
+
+        // 時間フォーマット (HH:MM)
+        function formatTime(isoString) {
+            if (!isoString) return "";
+            const d = new Date(isoString);
+            const hh = String(d.getHours()).padStart(2, '0');
+            const mm = String(d.getMinutes()).padStart(2, '0');
+            return `${hh}:${mm}`;
+        }
+
+        function appendMessageToUI(role, text, imageUrl = null, timestamp = null) {
             const historyDiv = document.getElementById('chat-history');
             const wrapperDiv = document.createElement('div');
             wrapperDiv.className = `message-wrapper ${role === 'user' ? 'user' : 'bot'}`;
 
+            // 名前と時間の表示エリア
             const nameDiv = document.createElement('div');
             nameDiv.className = 'sender-name';
-            nameDiv.textContent = role === 'user' ? 'りぴ' : 'もも';
+            const displayName = role === 'user' ? USER_NAME : BOT_NAME;
+            const timeStr = formatTime(timestamp || new Date().toISOString());
+            
+            nameDiv.innerHTML = `<span>${displayName}</span> <span class="timestamp">${timeStr}</span>`;
             wrapperDiv.appendChild(nameDiv);
 
+            // メッセージ本文
             const msgDiv = document.createElement('div');
             msgDiv.className = `message ${role === 'user' ? 'user' : 'bot'}`;
-            msgDiv.textContent = text;
+            
+            // XSS対策をしてから、**太字** のマークダウンを <strong> に変換
+            const escapedText = escapeHTML(text);
+            const formattedText = escapedText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            msgDiv.innerHTML = formattedText;
             
             if (imageUrl) {
                 const img = document.createElement('img');
@@ -417,7 +540,7 @@ ${profileText}
 
         async function loadChatHistory() {
             const history = await getChatHistoryFromDB();
-            history.forEach(msg => appendMessageToUI(msg.role, msg.content, msg.imageUrl));
+            history.forEach(msg => appendMessageToUI(msg.role, msg.content, msg.imageUrl, msg.timestamp));
         }
         
         function handleImageSelect(event) {
@@ -458,8 +581,11 @@ ${profileText}
 
             if (!userText && !currentImageDataUrl) return;
 
-            appendMessageToUI('user', userText, currentImageDataUrl);
-            await saveMessageToDB('user', userText, currentImageDataUrl);
+            const currentTimestamp = new Date().toISOString();
+
+            // UIとDBに反映
+            appendMessageToUI('user', userText, currentImageDataUrl, currentTimestamp);
+            await saveMessageToDB('user', userText, currentImageDataUrl, currentTimestamp);
 
             inputField.value = '';
             clearImagePreview();
@@ -491,7 +617,7 @@ ${profileText}
                 const requestBody = {
                     model: MODEL_ID,
                     messages: messages,
-                    max_completion_tokens: 1000, // ★ ここを max_tokens から変更しました
+                    max_completion_tokens: 1000,
                     temperature: 0.7
                 };
 
@@ -513,15 +639,16 @@ ${profileText}
 
                 const data = await response.json();
                 const botReply = data.choices[0].message.content;
+                const botTimestamp = new Date().toISOString();
 
-                appendMessageToUI('assistant', botReply);
-                await saveMessageToDB('assistant', botReply);
+                appendMessageToUI('assistant', botReply, null, botTimestamp);
+                await saveMessageToDB('assistant', botReply, null, botTimestamp);
 
             } catch (error) {
                 document.getElementById('typing').style.display = 'none';
                 console.error("OpenAI Error:", error);
                 
-                appendMessageToUI('assistant', `⚠️ エラーが発生したみたい…。\n(${error.message})`);
+                appendMessageToUI('assistant', `⚠️ エラーが発生したみたい…。\n(${error.message})`, null, new Date().toISOString());
                 
                 if(error.message.includes("Incorrect API key") || error.message.includes("invalid api key")) {
                     alert("APIキーが間違っているようです。設定から再入力してください。");
