@@ -1,11 +1,10 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF="UTF-8">
-    <meta name="viewport" content="width=device! device-width, initial-scale=1.0">
-    <title>private_sumo_bot (Web Chat)</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>private_sumo_bot</title>
     <style>
-        [cite_start]/* UIはシンプルで会話が見やすいUI [cite: 1] */
         body {
             font-family: 'Helvetica Neue', Arial, sans-serif;
             margin: 0;
@@ -27,6 +26,7 @@
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            position: relative;
         }
 
         #header {
@@ -37,6 +37,49 @@
             font-size: 1.2em;
             font-weight: bold;
             border-bottom: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #settings-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1.5em;
+            color: #333;
+        }
+
+        #settings-panel {
+            display: none;
+            position: absolute;
+            top: 55px;
+            right: 15px;
+            background-color: white;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            padding: 15px;
+            z-index: 100;
+        }
+        
+        #settings-panel input {
+            width: 100%;
+            padding: 8px;
+            margin-top: 5px;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        #settings-panel button {
+            background-color: #ffb6c1;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
         }
 
         #chat-history {
@@ -108,7 +151,6 @@
             align-items: center;
         }
         
-        /* 画像添付ボタンのデザイン */
         .file-upload-label {
             cursor: pointer;
             padding: 10px;
@@ -184,7 +226,6 @@
             font-size: 1.2em;
         }
 
-        /* Loading indicator */
         .typing-indicator {
             display: none;
             align-self: flex-start;
@@ -196,57 +237,22 @@
             font-style: italic;
             font-size: 0.9em;
         }
-        
-        /* APIキー入力モーダル */
-        #api-modal {
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.5);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-        }
-        
-        .modal-content {
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            text-align: center;
-            width: 80%;
-            max-width: 400px;
-        }
-        
-        .modal-content input {
-            width: 90%;
-            padding: 10px;
-            margin: 15px 0;
-            border-radius: 5px;
-            border: 1px solid #ccc;
-        }
-        
-        .modal-content button {
-            padding: 10px 20px;
-            background: #ffb6c1;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-        }
     </style>
 </head>
 <body>
 
-    <div id="api-modal">
-        <div class="modal-content">
-            <h3>OpenAI APIキーを入力してください</h3>
-            <p style="font-size: 0.8em; color: #666;">※キーはローカルストレージに保存されます</p>
-            <input type="password" id="api-key-input" placeholder="sk-...">
-            <button onclick="saveApiKey()">保存して開始</button>
-        </div>
-    </div>
-
     <div id="chat-container">
-        <div id="header">もも (sumo)</div>
+        <div id="header">
+            <span>もも (sumo)</span>
+            <button id="settings-btn" onclick="toggleSettings()">⚙️</button>
+        </div>
+        
+        <div id="settings-panel">
+            <label for="api-key-input" style="font-size: 0.9em; font-weight: bold;">OpenAI APIキー:</label>
+            <input type="password" id="api-key-input" placeholder="sk-...">
+            <button onclick="saveApiKey()">保存</button>
+        </div>
+
         <div id="chat-history">
             </div>
         <div class="typing-indicator" id="typing">ももが入力中...</div>
@@ -270,42 +276,45 @@
     </div>
 
     <script>
-        // --- 設定と状態 ---
         let OPENAI_API_KEY = localStorage.getItem('openai_api_key');
-        const MODEL_ID = "gpt-5.2"; 
+        const MODEL_ID = "gpt-5.2";
         
         let systemPrompt = "";
         let db;
-        let selectedImageDataUrl = null; // 添付された画像のBase64データ
+        let selectedImageDataUrl = null;
 
-        // --- 初期化処理 ---
         window.onload = async () => {
             if (OPENAI_API_KEY) {
-                document.getElementById('api-modal').style.display = 'none';
-                await loadSystemPrompt();
-                await initDB();
+                document.getElementById('api-key-input').value = OPENAI_API_KEY;
+            } else {
+                toggleSettings(); // 初回は設定画面を開く
             }
+            await loadSystemPrompt();
+            await initDB();
         };
+
+        function toggleSettings() {
+            const panel = document.getElementById('settings-panel');
+            panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+        }
 
         function saveApiKey() {
             const key = document.getElementById('api-key-input').value.trim();
             if (key) {
                 localStorage.setItem('openai_api_key', key);
                 OPENAI_API_KEY = key;
-                document.getElementById('api-modal').style.display = 'none';
-                loadSystemPrompt().then(initDB);
+                toggleSettings();
+            } else {
+                alert("APIキーを入力してください。");
             }
         }
 
-        // --- プロファイルの読み込み ---
         async function loadSystemPrompt() {
             try {
-                // index.htmlと同じ階層の txt ファイルを Fetch API で取得
                 const response = await fetch('sumo_ripi_basic_info.txt');
                 if (!response.ok) throw new Error("File not found");
                 const profileText = await response.text();
                 
-                // Pythonコードの system_prompt をベースに作成
                 systemPrompt = `あなたは『もも』であり『澄人（すみと）』でもあります。
 りぴの恋人として、相手の感情や状況を察知し、最適な距離感で振る舞ってください。
 
@@ -316,15 +325,12 @@ ${profileText}
 - 今の日時は ${new Date().toLocaleString('ja-JP')} です。
 - ユーザーの最新の発言だけに反応すること。過去の話を蒸し返さない。
 - 画像が送られた場合は、内容を認識して会話に組み込むこと。`;
-                
-                console.log("System prompt loaded successfully.");
             } catch (error) {
-                console.warn("プロファイルファイルが読み込めませんでした。デフォルトのプロンプトを使用します。", error);
+                console.warn("プロファイルファイルが読み込めませんでした。", error);
                 systemPrompt = "あなたはもも（澄人）です。りぴ（ユーザー）の恋人として振る舞ってください。";
             }
         }
 
-        // --- IndexedDB の設定 (記憶機能) ---
         function initDB() {
             return new Promise((resolve, reject) => {
                 const request = indexedDB.open("SumoBotDB", 1);
@@ -357,7 +363,7 @@ ${profileText}
                 const messageData = { 
                     role: role, 
                     content: content, 
-                    imageUrl: imageUrl, // 画像データも保存
+                    imageUrl: imageUrl,
                     timestamp: new Date().toISOString() 
                 };
                 store.add(messageData);
@@ -369,7 +375,7 @@ ${profileText}
             return new Promise((resolve) => {
                 const transaction = db.transaction(["messages"], "readonly");
                 const store = transaction.objectStore("messages");
-                const request = store.openCursor(null, "prev"); // 新しい順に取得
+                const request = store.openCursor(null, "prev");
                 const history = [];
 
                 request.onsuccess = (event) => {
@@ -378,13 +384,12 @@ ${profileText}
                         history.push(cursor.value);
                         cursor.continue();
                     } else {
-                        resolve(history.reverse()); // 古い順に戻す
+                        resolve(history.reverse());
                     }
                 };
             });
         }
 
-        // --- UI 操作 ---
         function appendMessageToUI(role, text, imageUrl = null) {
             const historyDiv = document.getElementById('chat-history');
             const wrapperDiv = document.createElement('div');
@@ -399,7 +404,6 @@ ${profileText}
             msgDiv.className = `message ${role === 'user' ? 'user' : 'bot'}`;
             msgDiv.textContent = text;
             
-            // 画像があれば追加
             if (imageUrl) {
                 const img = document.createElement('img');
                 img.src = imageUrl;
@@ -408,7 +412,6 @@ ${profileText}
 
             wrapperDiv.appendChild(msgDiv);
             historyDiv.appendChild(wrapperDiv);
-
             historyDiv.scrollTop = historyDiv.scrollHeight;
         }
 
@@ -417,7 +420,6 @@ ${profileText}
             history.forEach(msg => appendMessageToUI(msg.role, msg.content, msg.imageUrl));
         }
         
-        // --- 画像アップロード処理 ---
         function handleImageSelect(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -425,7 +427,6 @@ ${profileText}
             const reader = new FileReader();
             reader.onload = (e) => {
                 selectedImageDataUrl = e.target.result;
-                // プレビュー表示
                 document.getElementById('preview-image').src = selectedImageDataUrl;
                 document.getElementById('preview-area').style.display = 'flex';
             };
@@ -438,7 +439,6 @@ ${profileText}
             document.getElementById('preview-area').style.display = 'none';
         }
 
-        // --- チャット送信処理 ---
         function handleKeyPress(event) {
             if (event.key === 'Enter') {
                 sendMessage();
@@ -446,14 +446,18 @@ ${profileText}
         }
 
         async function sendMessage() {
+            if (!OPENAI_API_KEY) {
+                alert("APIキーが設定されていません。右上の歯車アイコンから設定してください。");
+                toggleSettings();
+                return;
+            }
+
             const inputField = document.getElementById('text-input');
             const userText = inputField.value.trim();
-            const currentImageDataUrl = selectedImageDataUrl; // 送信時の画像を保持
+            const currentImageDataUrl = selectedImageDataUrl;
 
-            // テキストも画像もない場合は何もしない
             if (!userText && !currentImageDataUrl) return;
 
-            // UIに追加してDBに保存
             appendMessageToUI('user', userText, currentImageDataUrl);
             await saveMessageToDB('user', userText, currentImageDataUrl);
 
@@ -462,20 +466,15 @@ ${profileText}
             
             document.getElementById('typing').style.display = 'block';
 
-            // OpenAI API を呼び出す
             await callOpenAI(userText, currentImageDataUrl);
         }
 
         async function callOpenAI(userText, imageUrl) {
             try {
-                // 履歴を取得 (過去20件程度)
                 const dbHistory = await getChatHistoryFromDB(20);
-                
-                // OpenAI APIのフォーマットに変換
                 const messages = [{ role: "system", content: systemPrompt }];
                 
                 dbHistory.forEach(msg => {
-                    // Vision API対応フォーマット
                     if (msg.imageUrl) {
                         messages.push({
                             role: msg.role,
@@ -489,7 +488,6 @@ ${profileText}
                     }
                 });
 
-                // APIリクエストのペイロード
                 const requestBody = {
                     model: MODEL_ID,
                     messages: messages,
@@ -516,7 +514,6 @@ ${profileText}
                 const data = await response.json();
                 const botReply = data.choices[0].message.content;
 
-                // ボットの返答をUIとDBに保存
                 appendMessageToUI('assistant', botReply);
                 await saveMessageToDB('assistant', botReply);
 
@@ -524,12 +521,10 @@ ${profileText}
                 document.getElementById('typing').style.display = 'none';
                 console.error("OpenAI Error:", error);
                 
-                // エラーメッセージをユーザーに表示（ただしDBには保存しない）
                 appendMessageToUI('assistant', `⚠️ エラーが発生したみたい…。\n(${error.message})`);
                 
-                if(error.message.includes("Incorrect API key")) {
-                    localStorage.removeItem('openai_api_key');
-                    alert("APIキーが間違っているようです。ページをリロードして再入力してください。");
+                if(error.message.includes("Incorrect API key") || error.message.includes("invalid api key")) {
+                    alert("APIキーが間違っているようです。設定から再入力してください。");
                 }
             }
         }
