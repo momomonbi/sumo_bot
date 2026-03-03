@@ -491,7 +491,7 @@ ${profileText}
                 const requestBody = {
                     model: MODEL_ID,
                     messages: messages,
-                    max_tokens: 1000,
+                    max_completion_tokens: 1000, // ★ ここを max_tokens から変更しました
                     temperature: 0.7
                 };
 
