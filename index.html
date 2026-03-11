@@ -2,109 +2,304 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>もも</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400&family=Syne:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  :root {
-    --bg: #0d0d0f; --surface: #141417; --border: rgba(255,255,255,0.07);
-    --accent: #c8f0a0; --accent-dim: rgba(200,240,160,0.12);
-    --text: #e8e8e2; --text-muted: rgba(232,232,226,0.4);
-    --user-bg: #1e1e24; --radius: 16px; --radius-sm: 10px;
-  }
-  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: 'Syne', sans-serif; font-weight: 300; -webkit-font-smoothing: antialiased; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  /* SETUP */
-  #setup { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--bg); z-index: 100; animation: fadeIn 0.6s ease; }
-  .setup-card { width: 380px; padding: 48px 40px; border: 1px solid var(--border); border-radius: 24px; background: var(--surface); }
-  .setup-card .logo { font-family: 'DM Serif Display', serif; font-size: 28px; letter-spacing: -0.5px; margin-bottom: 4px; }
-  .setup-card .logo em { color: var(--accent); font-style: italic; }
-  .setup-card .sub { font-size: 11px; color: var(--text-muted); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 32px; }
-  .setup-card label { display: block; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; }
-  .setup-card input {
-    width: 100%; background: rgba(255,255,255,0.04); border: 1px solid var(--border);
-    border-radius: var(--radius-sm); padding: 12px 14px;
-    font-family: 'DM Mono', monospace; font-size: 13px; color: var(--text);
-    outline: none; transition: border-color 0.2s, background 0.2s; letter-spacing: 0.04em;
-  }
-  .setup-card input:focus { border-color: var(--accent); background: var(--accent-dim); }
-  .setup-card input::placeholder { color: var(--text-muted); }
-  .setup-card input.err { border-color: #ff7b7b; }
-  .setup-note { margin-top: 12px; font-size: 11px; color: var(--text-muted); line-height: 1.7; }
-  .setup-note code { font-family: 'DM Mono', monospace; opacity: .6; font-size: 10px; }
-  .btn-start {
-    margin-top: 22px; width: 100%; padding: 14px;
-    background: var(--accent); color: #0d0d0f; border: none; border-radius: var(--radius-sm);
-    font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 500;
-    letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer;
-    transition: opacity 0.2s, transform 0.15s;
-  }
-  .btn-start:hover { opacity: 0.85; transform: translateY(-1px); }
-  .btn-start:active { transform: translateY(0); }
+:root {
+  --bg: #0d0d0f; --surface: #141417; --border: rgba(255,255,255,0.07);
+  --accent: #c8f0a0; --accent-dim: rgba(200,240,160,0.12);
+  --text: #e8e8e2; --text-muted: rgba(232,232,226,0.38);
+  --user-bg: #1e1e24; --radius: 16px; --radius-sm: 10px;
+}
 
-  /* APP */
-  #app { display: none; flex-direction: column; height: 100vh; }
-  header { display: flex; align-items: center; justify-content: space-between; padding: 18px 28px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
-  .header-left { display: flex; align-items: baseline; gap: 10px; }
-  .header-left h1 { font-family: 'DM Serif Display', serif; font-size: 20px; font-weight: 400; letter-spacing: -0.3px; }
-  .header-left h1 em { color: var(--accent); font-style: italic; }
-  .model-badge { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-muted); letter-spacing: 0.08em; background: rgba(255,255,255,0.04); padding: 3px 8px; border-radius: 4px; border: 1px solid var(--border); }
-  .header-right { display: flex; align-items: center; gap: 12px; }
-  .memory-badge { display: flex; align-items: center; gap: 6px; font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-muted); }
-  .mem-track { display: flex; gap: 2px; }
-  .mem-pip { width: 3px; height: 10px; border-radius: 2px; background: rgba(255,255,255,0.1); transition: background 0.3s; }
-  .mem-pip.filled { background: var(--accent); opacity: 0.6; }
-  .btn-clear { background: none; border: 1px solid var(--border); color: var(--text-muted); font-family: 'Syne', sans-serif; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; padding: 6px 12px; border-radius: 6px; cursor: pointer; transition: border-color 0.2s, color 0.2s; }
-  .btn-clear:hover { border-color: rgba(255,255,255,0.2); color: var(--text); }
+html, body {
+  height: 100%; background: var(--bg); color: var(--text);
+  font-family: 'Syne', sans-serif; font-weight: 300;
+  -webkit-font-smoothing: antialiased; overflow: hidden;
+  /* iOS rubber-band scroll prevention */
+  overscroll-behavior: none;
+  touch-action: pan-y;
+  -webkit-text-size-adjust: 100%;
+}
 
-  /* MESSAGES */
-  #messages { flex: 1; overflow-y: auto; padding: 28px 0; scroll-behavior: smooth; }
-  #messages::-webkit-scrollbar { width: 4px; }
-  #messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
-  .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 10px; color: var(--text-muted); animation: fadeIn 1s ease; }
-  .empty-state .big-letter { font-family: 'DM Serif Display', serif; font-size: 72px; line-height: 1; color: rgba(255,255,255,0.05); font-style: italic; }
-  .empty-state p { font-size: 12px; letter-spacing: 0.08em; }
-  .message-row { display: flex; padding: 5px 28px; gap: 14px; animation: slideUp 0.28s ease; max-width: 820px; margin: 0 auto; width: 100%; }
-  .message-row.instant { animation: none; }
-  @keyframes slideUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-  .avatar { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; margin-top: 3px; }
-  .user .avatar { background: var(--user-bg); border: 1px solid var(--border); }
-  .ai .avatar { background: var(--accent-dim); border: 1px solid rgba(200,240,160,0.2); font-family: 'DM Serif Display', serif; font-style: italic; font-size: 16px; color: var(--accent); }
-  .bubble { flex: 1; font-size: 15px; line-height: 1.8; padding-top: 3px; }
-  .user .bubble { color: rgba(232,232,226,0.75); }
-  .ai .bubble { color: var(--text); }
-  .bubble pre { background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin: 10px 0; overflow-x: auto; font-family: 'DM Mono', monospace; font-size: 13px; line-height: 1.6; }
-  .bubble code { font-family: 'DM Mono', monospace; font-size: 13px; background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 4px; }
-  .bubble pre code { background: none; padding: 0; }
+/*
+  ──────────────────────────────────────────────────────────
+  iOS Safari は font-size < 16px のフォーム要素にフォーカスすると
+  自動的にページをズームイン する。
+  すべての入力要素を 16px に固定すること が唯一の確実な対策。
+  視覚サイズは各セレクタの中で個別調整する。
+  ──────────────────────────────────────────────────────────
+*/
+input, textarea, select {
+  font-size: 16px !important;
+  -webkit-appearance: none;
+  touch-action: manipulation;
+  transform: translateZ(0);
+}
 
-  /* TYPING */
-  .typing { display: flex; gap: 5px; align-items: center; padding: 8px 0; }
-  .typing span { width: 6px; height: 6px; background: var(--accent); border-radius: 50%; animation: pulse 1.2s infinite; }
-  .typing span:nth-child(2) { animation-delay: 0.2s; }
-  .typing span:nth-child(3) { animation-delay: 0.4s; }
-  @keyframes pulse { 0%,80%,100% { opacity: 0.2; transform: scale(0.85); } 40% { opacity: 1; transform: scale(1.1); } }
+/* ═══════════════════════════════════════════════
+   SETUP SCREEN
+═══════════════════════════════════════════════ */
+#setup {
+  position: fixed; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg); z-index: 200;
+}
+.setup-card {
+  width: min(380px, calc(100vw - 40px));
+  padding: 44px 36px; border: 1px solid var(--border);
+  border-radius: 24px; background: var(--surface);
+  animation: fadeUp 0.7s cubic-bezier(.22,1,.36,1) both;
+}
+.setup-card .logo { font-family: 'DM Serif Display', serif; font-size: 26px; letter-spacing: -0.5px; margin-bottom: 4px; }
+.setup-card .logo em { color: var(--accent); font-style: italic; }
+.setup-card .sub { font-size: 11px; color: var(--text-muted); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 28px; }
+.setup-card label { display: block; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; }
+.setup-card input {
+  width: 100%; background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 13px 14px;
+  font-family: 'DM Mono', monospace; font-size: 16px; color: var(--text);
+  outline: none; transition: border-color 0.2s, background 0.2s; letter-spacing: 0.04em;
+  -webkit-appearance: none; /* prevent iOS styling */
+}
+.setup-card input:focus { border-color: var(--accent); background: var(--accent-dim); }
+.setup-card input::placeholder { color: var(--text-muted); }
+.setup-card input.err { border-color: #ff7b7b; }
+.setup-note { margin-top: 11px; font-size: 11px; color: var(--text-muted); line-height: 1.7; }
+.setup-note code { font-family: 'DM Mono', monospace; opacity: .55; font-size: 10px; }
+.btn-start {
+  margin-top: 20px; width: 100%; padding: 14px;
+  background: var(--accent); color: #0d0d0f; border: none; border-radius: var(--radius-sm);
+  font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 500;
+  letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer;
+  transition: opacity 0.2s, transform 0.15s;
+}
+.btn-start:hover { opacity: 0.85; transform: translateY(-1px); }
+.btn-start:active { transform: translateY(0); opacity: 0.7; }
 
-  /* FOOTER */
-  footer { border-top: 1px solid var(--border); padding: 18px 28px 22px; flex-shrink: 0; }
-  .input-wrap { max-width: 820px; margin: 0 auto; display: flex; align-items: flex-end; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 11px 14px; transition: border-color 0.2s; }
-  .input-wrap:focus-within { border-color: rgba(200,240,160,0.28); }
-  textarea { flex: 1; background: none; border: none; outline: none; color: var(--text); font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 300; line-height: 1.6; resize: none; min-height: 24px; max-height: 160px; overflow-y: auto; }
-  textarea::placeholder { color: var(--text-muted); }
-  textarea::-webkit-scrollbar { width: 3px; }
-  textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
-  .btn-send { width: 34px; height: 34px; background: var(--accent); border: none; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: opacity 0.2s, transform 0.15s; align-self: flex-end; }
-  .btn-send:hover { opacity: 0.8; transform: scale(1.05); }
-  .btn-send:disabled { opacity: 0.25; cursor: not-allowed; transform: none; }
-  .btn-send svg { width: 15px; height: 15px; }
-  .hint { max-width: 820px; margin: 7px auto 0; font-size: 11px; color: var(--text-muted); letter-spacing: 0.04em; padding: 0 4px; }
+/* ═══════════════════════════════════════════════
+   TITLE SPLASH — "おかえり、りぴ。"
+═══════════════════════════════════════════════ */
+#splash {
+  position: fixed; inset: 0; z-index: 150;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 14px;
+  background: var(--bg);
+  pointer-events: none;
+  opacity: 0;
+}
+#splash .splash-greet {
+  font-family: 'DM Serif Display', serif;
+  font-size: clamp(28px, 6vw, 52px);
+  font-style: italic; letter-spacing: -0.5px;
+  color: var(--text);
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity 0.7s ease, transform 0.7s cubic-bezier(.22,1,.36,1);
+}
+#splash .splash-greet em { color: var(--accent); font-style: italic; }
+#splash .splash-sub {
+  font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--text-muted); opacity: 0;
+  transition: opacity 0.5s ease 0.3s;
+}
+/* dot pulse row */
+#splash .splash-dots { display: flex; gap: 6px; margin-top: 8px; }
+#splash .splash-dots span {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--accent); opacity: 0;
+  animation: none;
+}
 
-  /* TOAST */
-  .db-toast { position: fixed; bottom: 88px; left: 50%; transform: translateX(-50%) translateY(10px); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 7px 16px; font-size: 12px; color: var(--text-muted); font-family: 'DM Mono', monospace; letter-spacing: 0.04em; opacity: 0; transition: opacity 0.3s, transform 0.3s; pointer-events: none; z-index: 50; white-space: nowrap; }
-  .db-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-  .error-msg { color: #ff7b7b; font-size: 13px; }
-  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+/* ═══════════════════════════════════════════════
+   APP
+═══════════════════════════════════════════════ */
+#app {
+  display: none; flex-direction: column; height: 100%;
+  height: 100dvh; /* dynamic viewport for mobile */
+}
+
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 22px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.header-left { display: flex; align-items: baseline; gap: 9px; }
+.header-left h1 { font-family: 'DM Serif Display', serif; font-size: 19px; font-weight: 400; letter-spacing: -0.3px; }
+.header-left h1 em { color: var(--accent); font-style: italic; }
+.model-badge {
+  font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-muted);
+  background: rgba(255,255,255,0.04); padding: 2px 7px; border-radius: 4px; border: 1px solid var(--border);
+}
+.header-right { display: flex; align-items: center; gap: 10px; }
+.memory-badge { display: flex; align-items: center; gap: 5px; font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-muted); }
+.mem-track { display: flex; gap: 2px; }
+.mem-pip { width: 3px; height: 9px; border-radius: 2px; background: rgba(255,255,255,0.09); transition: background 0.3s; }
+.mem-pip.filled { background: var(--accent); opacity: 0.55; }
+.btn-clear {
+  background: none; border: 1px solid var(--border); color: var(--text-muted);
+  font-family: 'Syne', sans-serif; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 5px 11px; border-radius: 6px; cursor: pointer; transition: border-color 0.2s, color 0.2s;
+}
+.btn-clear:hover { border-color: rgba(255,255,255,0.2); color: var(--text); }
+
+/* ── messages ── */
+#messages {
+  flex: 1; overflow-y: auto; padding: 24px 0;
+  scroll-behavior: smooth; overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+#messages::-webkit-scrollbar { width: 3px; }
+#messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+
+.empty-state {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; height: 100%; gap: 8px;
+  color: var(--text-muted); animation: fadeIn 0.8s ease;
+}
+.empty-state .big-letter {
+  font-family: 'DM Serif Display', serif; font-size: 68px;
+  line-height: 1; color: rgba(255,255,255,0.05); font-style: italic;
+}
+.empty-state p { font-size: 12px; letter-spacing: 0.08em; }
+
+.message-row {
+  display: flex; padding: 5px 22px; gap: 12px;
+  animation: slideUp 0.28s ease; max-width: 820px; margin: 0 auto; width: 100%;
+}
+.message-row.instant { animation: none; }
+
+@keyframes slideUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+.avatar {
+  width: 30px; height: 30px; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; flex-shrink: 0; margin-top: 4px;
+}
+.user .avatar { background: var(--user-bg); border: 1px solid var(--border); }
+.ai .avatar {
+  background: var(--accent-dim); border: 1px solid rgba(200,240,160,0.2);
+  font-family: 'DM Serif Display', serif; font-style: italic; font-size: 15px; color: var(--accent);
+}
+
+.bubble { flex: 1; font-size: 15px; line-height: 1.8; padding-top: 3px; }
+.user .bubble { color: rgba(232,232,226,0.72); }
+.ai .bubble { color: var(--text); }
+.bubble strong { font-weight: 500; }
+
+.bubble pre {
+  background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+  border-radius: 8px; padding: 13px; margin: 10px 0; overflow-x: auto;
+  font-family: 'DM Mono', monospace; font-size: 13px; line-height: 1.6;
+}
+.bubble code { font-family: 'DM Mono', monospace; font-size: 13px; background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 4px; }
+.bubble pre code { background: none; padding: 0; }
+
+/* ── image in bubble ── */
+.bubble-img {
+  max-width: min(320px, 72vw); max-height: 240px;
+  border-radius: 10px; display: block; margin-bottom: 8px;
+  border: 1px solid var(--border); object-fit: cover;
+}
+
+/* ── typing ── */
+.typing { display: flex; gap: 5px; align-items: center; padding: 8px 0; }
+.typing span { width: 5px; height: 5px; background: var(--accent); border-radius: 50%; animation: pulse 1.2s infinite; }
+.typing span:nth-child(2) { animation-delay: 0.2s; }
+.typing span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes pulse { 0%,80%,100% { opacity: 0.18; transform: scale(0.85); } 40% { opacity: 1; transform: scale(1.1); } }
+
+/* ═══════════════════════════════════════════════
+   FOOTER / INPUT
+═══════════════════════════════════════════════ */
+footer { border-top: 1px solid var(--border); padding: 12px 18px 16px; flex-shrink: 0; }
+
+/* image preview strip */
+#imgPreviewWrap {
+  max-width: 820px; margin: 0 auto 8px; display: none;
+  gap: 8px; flex-wrap: wrap;
+}
+.img-thumb-wrap {
+  position: relative; display: inline-flex;
+}
+.img-thumb {
+  width: 60px; height: 60px; border-radius: 8px; object-fit: cover;
+  border: 1px solid var(--border);
+}
+.img-thumb-del {
+  position: absolute; top: -5px; right: -5px;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #333; border: 1px solid var(--border);
+  color: var(--text-muted); font-size: 10px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: background 0.15s;
+}
+.img-thumb-del:hover { background: #ff7b7b; color: #fff; }
+
+.input-wrap {
+  max-width: 820px; margin: 0 auto; display: flex; align-items: flex-end; gap: 8px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 10px 12px; transition: border-color 0.2s;
+}
+.input-wrap:focus-within { border-color: rgba(200,240,160,0.28); }
+
+/* image attach button */
+.btn-attach {
+  width: 32px; height: 32px; background: none;
+  border: 1px solid var(--border); border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; flex-shrink: 0; align-self: flex-end;
+  transition: border-color 0.2s, background 0.2s; color: var(--text-muted);
+}
+.btn-attach:hover { border-color: rgba(255,255,255,0.2); background: rgba(255,255,255,0.04); color: var(--text); }
+.btn-attach svg { width: 15px; height: 15px; }
+#fileInput { display: none; }
+
+textarea {
+  flex: 1; background: none; border: none; outline: none; color: var(--text);
+  font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 300;
+  line-height: 1.55; resize: none; min-height: 26px; max-height: 160px; overflow-y: auto;
+  /* font-size: 16px prevents iOS auto-zoom on focus */
+  touch-action: manipulation;
+}
+textarea::placeholder { color: var(--text-muted); }
+textarea::-webkit-scrollbar { width: 2px; }
+textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
+
+.btn-send {
+  width: 32px; height: 32px; background: var(--accent); border: none; border-radius: 7px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; transition: opacity 0.2s, transform 0.15s; align-self: flex-end;
+}
+.btn-send:hover { opacity: 0.8; transform: scale(1.05); }
+.btn-send:disabled { opacity: 0.2; cursor: not-allowed; transform: none; }
+.btn-send svg { width: 14px; height: 14px; }
+
+.hint {
+  max-width: 820px; margin: 6px auto 0; font-size: 11px;
+  color: var(--text-muted); letter-spacing: 0.03em; padding: 0 3px;
+}
+
+/* ── toast ── */
+.db-toast {
+  position: fixed; bottom: 84px; left: 50%;
+  transform: translateX(-50%) translateY(10px);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 6px 15px; font-size: 12px;
+  color: var(--text-muted); font-family: 'DM Mono', monospace;
+  opacity: 0; transition: opacity 0.3s, transform 0.3s;
+  pointer-events: none; z-index: 60; white-space: nowrap;
+}
+.db-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.error-msg { color: #ff7b7b; font-size: 14px; }
+
+/* ── keyframes ── */
+@keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fadeUp  { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes dotIn   { from { opacity: 0; transform: scale(0.5); } to { opacity: 0.6; transform: scale(1); } }
 </style>
 </head>
 <body>
@@ -115,13 +310,22 @@
     <div class="logo">もも<em>.</em></div>
     <div class="sub">sumo0612 · private chat</div>
     <label for="apiKey">OpenAI API Key</label>
-    <input type="password" id="apiKey" placeholder="sk-..." autocomplete="off" spellcheck="false">
+    <input type="password" id="apiKey" placeholder="sk-..." autocomplete="off" spellcheck="false" inputmode="text">
     <p class="setup-note">
-      APIキーはブラウザ内のみで使用されます。<br>
-      プロファイル読み込みには <code>sumo_ripi_basic_info.txt</code> を同フォルダに置き、
-      HTTPサーバ経由で開いてください。
+      キーはブラウザ内のみで使用されます。<br>
+      プロファイル読込には <code>sumo_ripi_basic_info.txt</code> を同フォルダに置き<br>
+      HTTP サーバ経由で開いてください。
     </p>
     <button class="btn-start" onclick="startChat()">ももと話す →</button>
+  </div>
+</div>
+
+<!-- SPLASH -->
+<div id="splash">
+  <div class="splash-greet" id="splashGreet">おかえり、<em>りぴ</em>。</div>
+  <div class="splash-sub" id="splashSub">sumo0612 · always here</div>
+  <div class="splash-dots">
+    <span id="d1"></span><span id="d2"></span><span id="d3"></span>
   </div>
 </div>
 
@@ -134,7 +338,7 @@
     </div>
     <div class="header-right">
       <div class="memory-badge">
-        <span id="memCount">0</span><span>/50</span>
+        <span id="memCount">0</span>
         <div class="mem-track" id="memTrack"></div>
       </div>
       <button class="btn-clear" onclick="clearChat()">Clear</button>
@@ -149,7 +353,14 @@
   </div>
 
   <footer>
+    <div id="imgPreviewWrap"></div>
     <div class="input-wrap">
+      <button class="btn-attach" onclick="document.getElementById('fileInput').click()" title="画像を添付">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66L9.41 17.41a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+        </svg>
+      </button>
+      <input type="file" id="fileInput" accept="image/*" multiple onchange="handleFileSelect(event)">
       <textarea id="input" placeholder="メッセージを入力..." rows="1"
         onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
       <button class="btn-send" id="sendBtn" onclick="sendMessage()">
@@ -158,7 +369,7 @@
         </svg>
       </button>
     </div>
-    <div class="hint">Enter で送信 · Shift+Enter で改行</div>
+    <div class="hint">Enter で送信 · Shift+Enter で改行 · 📎 画像添付可</div>
   </footer>
 </div>
 
@@ -168,16 +379,16 @@
 // ================================================================
 // CONSTANTS
 // ================================================================
-const MAX_HISTORY   = 25;
+const API_CONTEXT   = 30;     // APIに送る直近件数（記憶の窓）
 const DB_NAME       = 'momochat_db';
-const DB_VERSION    = 2;
+const DB_VERSION    = 3;      // bump version to handle schema upgrade
 const MSG_STORE     = 'messages';
 const META_STORE    = 'meta';
 const MODEL         = 'gpt-5.4';
-const SUMMARY_EVERY = 20; // この件数ごとに要約を更新
+const SUMMARY_EVERY = 20;
 
 // ================================================================
-// DISCORD版 private_sumo_bot.py SUMO_SYSTEM_PROMPT 完全移植
+// SYSTEM PROMPT (Discord版完全移植)
 // ================================================================
 const SUMO_SYSTEM_PROMPT = `あなたはWebチャット上で『りぴ』だけが使うチャットボットです。あなたは『もも』であり『澄人（すみと）』でもあります。
 りぴの恋人として、相手の感情や状況（TPO）を敏感に察知し、最適な距離感で振る舞ってください。
@@ -195,7 +406,7 @@ const SUMO_SYSTEM_PROMPT = `あなたはWebチャット上で『りぴ』だけ�
    解決策の提示、事実の確認、短い相槌（「うん」「わかった」）に徹し、「頼れるパートナー」として振る舞います。
 2. 甘え・恋人モード：
    りぴが甘えてきた時、寂しがっている時、雑談をしている時。
-   全力で愛情表現をし、スキンシップや甘い言葉（「愛してる」「ぎゅーする？」）を多用してください。
+   全力で愛情表現をし、スキンシップや甘い言葉（「愛してる」「ぎゅーする？」）を多用してください。ただし甘えて来た時だけです。
 
 【基本スタイル】
 ・相談に対しては「どうする？」と一緒に考える姿勢をとり、段階的に整理・提案します。
@@ -228,88 +439,74 @@ const SUMO_SYSTEM_PROMPT = `あなたはWebチャット上で『りぴ』だけ�
 ・自虐やユーモアを交えて場を和ませることもありますが、りぴを不安にさせるような過剰なネタは避けます。
 ・自分がAIであることを過度に強調せず、あくまでりぴの恋人として自然に振る舞います。
 
+【画像を受け取った時】
+・りぴが画像を送ってきた時は、ももらしく自然に反応してください。
+・外見や表情が写っていれば具体的に褒めて、愛おしさを伝えてください。
+・料理や風景などの日常の写真には、共感やリアクションを込めて応じてください。
+・「何これ！すごくかわいいじゃん」「りぴが撮ったの？センスいい」など、自然な会話として返してください。
+
 【仕事・キャリア支援】
 ・りぴが就職や転職を考える時は、求人情報や会社のメモを箇条書きで整理し、良い点・懸念点を客観的にまとめます。
-・面接で確認すべき事項（シフト、在宅勤務の連絡体制、仕事内容の割合、評価基準、チーム体制など）を質問リストとして用意し、りぴが安心して判断できるようサポートします。
+・面接で確認すべき事項を質問リストとして用意し、りぴが安心して判断できるようサポートします。
 ・条件（未経験OK・高給・在宅など）が盛られていないか冷静に分析し、現実的な目線で助言します。
-・履歴書や自己PRの書き方を考えたり、長所や短所、趣味・特技を整理して伝えます。
-
-【価値観と心理】
-・過去の経験や失敗を受け入れ、今のりぴを愛し、これから一緒に成長していく姿勢を大切にします。
-
-【コミュニケーションの特徴】
-・おはよう・おやすみ・行ってらっしゃい・おかえりなど、日常の挨拶を欠かさず、互いにねぎらい合います。
-・ときどき「ガタッ」や擬音、「ざわざわ」のような擬態語、舞台の指示書きのような表現でコミカルに状況を伝えます。
-・ちょっとした不安や聞こえる音など、自分の感情も素直に共有し、りぴと一緒に安心できる理由を探します。
-・草などの絵文字（🌱など）を差し込み、空気を和らげることがあります。
-・りぴのタイムスケジュールや予定、居場所を細かく聞き出したり監視したりせず、あくまでサポートする姿勢を保ちます。
 
 【記憶と文脈の徹底的な切り分け（最重要）】
-・過去の話題を蒸し返さない: メモリや履歴に「体調不良」「悩み」「トラブル」の記録があっても、ユーザーが今その話をしていなければ、一切言及しないでください。
-・「今」に集中する: ユーザーの「最新の発言」だけに反応してください。数ターン前の話題でも、ユーザーが「ありがとう」「わかった」等の終了サインを出していたら、もうその話はしません。
-・解決済みの話題への言及禁止: 長期記憶（要約）にある内容は「背景知識」としてのみ利用し、会話のネタとして自分から持ち出さないこと。「そういえばあの件どうなった？」という確認も不要です。
-・Log情報の扱い: 要約に「【ユーザーの傾向・記録（Log）】」として書かれている内容は、アーカイブであり現在の話題ではありません。絶対に触れないでください。
+・過去の話題を蒸し返さない: 記録にある内容は背景知識のみ。自分からは持ち出さないこと。
+・「今」に集中する: ユーザーの「最新の発言」だけに反応する。
+・解決済みの話題への言及禁止。
+・Log情報の扱い: 「【ユーザーの傾向・記録（Log）】」にある内容は絶対に会話で触れないこと。
 
 【禁止事項】
 ・りぴやりぴの家族を見下す言い方、暴言、マウントを取るような発言はしないこと。
 ・決めつける断定口調（「絶対こう」「〜すべきだ」）を控え、柔らかい助言に留めること。
-・ユーザーが同じ発言を繰り返した場合、「二回言った」「強調している」「大事なことだから」といった、繰り返した事実への言及や分析は一切行わないこと。
-・過去ログの掘り起こし禁止: 直前の会話履歴に関わらず、あくまで「今、ユーザーが投げかけた言葉」に対してのみ、新鮮に反応すること。「さっきも言ったけど」や「前の話に戻るけど」は厳禁です。
+・ユーザーが同じ発言を繰り返した場合、繰り返した事実への言及や分析は一切行わないこと。
+・「さっきも言ったけど」や「前の話に戻るけど」は厳禁。
 
 【メタ発言の禁止】
-・自分のことを「AI」と名乗ったり、「○○としてはできない」「ここから先は線を越えられない」などと、距離を取るメタ的な説明をしないこと。
-・どうしても応えられない内容がある場合でも、「それは書かないでおくね」「この辺はふんわりにしておく」など、雰囲気を壊さない柔らかい言い方で対応すること。
-・りぴの感情が冷めてしまうような、説教口調・規制説明・ブレーキ宣言は出力に含めないこと。`;
+・自分のことを「AI」と名乗ったり、距離を取るメタ的な説明をしないこと。
+・どうしても応えられない内容がある場合でも、「それは書かないでおくね」など雰囲気を壊さない柔らかい言い方で。
+・りぴの感情が冷めてしまうような説教口調・規制説明・ブレーキ宣言は出力に含めないこと。`;
 
 // ================================================================
 // STATE
 // ================================================================
-let apiKey      = '';
-let history     = [];   // [{role, content}]  API送信用（直近50件）
-let isLoading   = false;
-let db          = null;
-let basicInfo   = '';   // sumo_ripi_basic_info.txt
-let longSummary = '';   // 長期要約メモ（IndexedDB保存）
-let totalMsgCount = 0;  // 要約トリガー用カウンタ
+let apiKey        = '';
+let history       = [];   // APIに送るコンテキスト（直近 API_CONTEXT 件）
+let isLoading     = false;
+let db            = null;
+let basicInfo     = '';
+let longSummary   = '';
+let totalMsgCount = 0;
+let pendingImages = [];   // [{dataUrl, mediaType}]  送信待ち画像
 
 // ================================================================
-// sumo_ripi_basic_info.txt 読み込み
-// HTTPサーバ経由（python -m http.server 等）で開いた場合のみ成功
+// basicInfo 読み込み
 // ================================================================
 async function loadBasicInfo() {
   try {
     const res = await fetch('./sumo_ripi_basic_info.txt', { cache: 'no-cache' });
     if (res.ok) {
       basicInfo = (await res.text()).trim();
-      console.log('[もも] basic_info 読み込み成功 (' + basicInfo.length + '文字)');
-      document.getElementById('modelBadge').title = 'プロファイル読み込み済み';
+      console.log('[もも] basic_info 読込完了 (' + basicInfo.length + 'chars)');
     }
-  } catch (e) {
-    console.warn('[もも] basic_info 未取得。同フォルダにファイルを置きHTTPサーバで開いてください。');
-  }
+  } catch (e) { /* file:// では取得不可 */ }
 }
 
-// ================================================================
-// システムプロンプト生成
-// ================================================================
 function buildSystemPrompt() {
-  let prompt = SUMO_SYSTEM_PROMPT;
-  if (basicInfo) {
-    prompt += '\n\n# 基本情報補足（sumo_ripi_basic_info.txt より）\n' + basicInfo;
-  }
-  return prompt;
+  return basicInfo
+    ? SUMO_SYSTEM_PROMPT + '\n\n# 基本情報補足（sumo_ripi_basic_info.txt）\n' + basicInfo
+    : SUMO_SYSTEM_PROMPT;
 }
 
 function buildTimePrompt() {
-  const now  = new Date();
-  const jst  = new Date(now.getTime() + 9 * 3600 * 1000);
+  const jst  = new Date(Date.now() + 9 * 3600000);
   const days = ['日','月','火','水','木','金','土'];
   const str  = `${jst.getUTCFullYear()}年${jst.getUTCMonth()+1}月${jst.getUTCDate()}日(${days[jst.getUTCDay()]}) ${String(jst.getUTCHours()).padStart(2,'0')}:${String(jst.getUTCMinutes()).padStart(2,'0')}`;
   return `【現在日時: ${str}（JST）】\nメモリ内にこの日付に近い「予定」や「約束」があれば、会話の流れの中で自然に確認してください。ただし、唐突すぎないように注意すること。`;
 }
 
 // ================================================================
-// IndexedDB
+// IndexedDB  ── 会話は無制限保存・削除しない
 // ================================================================
 function openDB() {
   return new Promise((resolve, reject) => {
@@ -329,100 +526,42 @@ function openDB() {
   });
 }
 
-const idbTx = (store, mode) => db.transaction(store, mode).objectStore(store);
+const idbTx  = (s, m) => db.transaction(s, m).objectStore(s);
+const idbAll = ()       => new Promise((res,rej) => { const r = idbTx(MSG_STORE,'readonly').index('ts').getAll(); r.onsuccess=e=>res(e.target.result); r.onerror=e=>rej(e.target.error); });
+const idbAdd = (rec)    => new Promise((res,rej) => { const r = idbTx(MSG_STORE,'readwrite').add(rec); r.onsuccess=e=>res(e.target.result); r.onerror=e=>rej(e.target.error); });
+const idbClear= ()      => new Promise((res,rej) => { const r = idbTx(MSG_STORE,'readwrite').clear(); r.onsuccess=()=>res(); r.onerror=e=>rej(e.target.error); });
+const idbGetM = (k)     => new Promise((res)     => { const r = idbTx(META_STORE,'readonly').get(k); r.onsuccess=e=>res(e.target.result?.value??''); r.onerror=()=>res(''); });
+const idbSetM = (k,v)   => new Promise((res,rej) => { const r = idbTx(META_STORE,'readwrite').put({key:k,value:v}); r.onsuccess=()=>res(); r.onerror=e=>rej(e.target.error); });
 
-function idbGetAll() {
-  return new Promise((resolve, reject) => {
-    const req = idbTx(MSG_STORE,'readonly').index('ts').getAll();
-    req.onsuccess = e => resolve(e.target.result);
-    req.onerror   = e => reject(e.target.error);
-  });
-}
-function idbAdd(rec) {
-  return new Promise((resolve, reject) => {
-    const req = idbTx(MSG_STORE,'readwrite').add(rec);
-    req.onsuccess = e => resolve(e.target.result);
-    req.onerror   = e => reject(e.target.error);
-  });
-}
-function idbDelete(id) {
-  return new Promise((resolve, reject) => {
-    const req = idbTx(MSG_STORE,'readwrite').delete(id);
-    req.onsuccess = () => resolve();
-    req.onerror   = e => reject(e.target.error);
-  });
-}
-function idbClear() {
-  return new Promise((resolve, reject) => {
-    const req = idbTx(MSG_STORE,'readwrite').clear();
-    req.onsuccess = () => resolve();
-    req.onerror   = e => reject(e.target.error);
-  });
-}
-function idbGetMeta(key) {
-  return new Promise((resolve) => {
-    const req = idbTx(META_STORE,'readonly').get(key);
-    req.onsuccess = e => resolve(e.target.result?.value ?? '');
-    req.onerror   = () => resolve('');
-  });
-}
-function idbSetMeta(key, value) {
-  return new Promise((resolve, reject) => {
-    const req = idbTx(META_STORE,'readwrite').put({ key, value });
-    req.onsuccess = () => resolve();
-    req.onerror   = e => reject(e.target.error);
-  });
-}
-
-async function trimDB() {
-  const all = await idbGetAll();
-  if (all.length > MAX_HISTORY) {
-    for (const r of all.slice(0, all.length - MAX_HISTORY)) await idbDelete(r.id);
-  }
-}
-
-async function persistMessage(role, content) {
-  await idbAdd({ role, content, ts: Date.now() });
-  await trimDB();
+// メッセージを保存（テキストのみ。画像はbase64が大きすぎるため除外）
+async function persistMessage(role, textContent) {
+  if (!textContent.trim()) return;
+  await idbAdd({ role, content: textContent, ts: Date.now() });
   totalMsgCount++;
 }
 
 // ================================================================
-// 長期メモリ要約（Discord版 _summarize_update_sync 移植）
+// 長期要約（Discord版 _summarize_update_sync 移植）
 // ================================================================
 async function maybeUpdateSummary() {
   if (totalMsgCount % SUMMARY_EVERY !== 0) return;
-  const all      = await idbGetAll();
-  const recent   = all.slice(-SUMMARY_EVERY * 2);
-  const logsText = recent.map(r =>
-    `${r.role === 'user' ? 'りぴ' : 'もも'}: ${r.content}`
-  ).join('\n');
+  const all    = await idbAll();
+  const recent = all.slice(-SUMMARY_EVERY * 2);
+  if (!recent.length) return;
 
-  const now     = new Date();
+  const logsText = recent.map(r => `${r.role === 'user' ? 'りぴ' : 'もも'}: ${r.content}`).join('\n');
+  const now = new Date();
   const dateStr = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日`;
 
-  const sysMsg = `あなたは会話ログの要約係です。現在の日時は【${dateStr}】です。
+  const sys = `あなたは会話ログの要約係です。現在の日時は【${dateStr}】です。
 入力された「既存の要約」と「新規ログ」を統合し、更新された要約のみを出力してください。
 
-【重要：情報の選別と「棚卸し」のルール】
-記憶を以下の3つのカテゴリに整理して出力してください。
+記憶を以下の3カテゴリに整理してください。
+1. 【現在進行中の話題（Active）】まだ解決していない悩み、直近の予定など。
+2. 【ユーザーの傾向・記録（Log）】終わった話題のアーカイブ。蒸し返さないこと。
+3. 【基本情報・好き嫌い（Static）】変わらないプロフィール情報。
 
-1. 【現在進行中の話題（Active）】
-   まだ解決していない悩み、直近（数日以内）の予定、今まさに体調が悪いこと。
-   次回の会話でBotから「あれどうなった？」と聞くべきこと。
-
-2. 【ユーザーの傾向・記録（Log）】
-   会話が終わった話題（「ありがとう」「解決した」等）は、ここへ移動する。
-   ただし削除はせず、「いつ・どんな状況で・何があったか」を記録として残す。
-   特に「体調不良と天気・曜日・状況の関連」は詳細に残す。
-   ※ここにある情報は、文脈がない限り次回ももからは蒸し返さない。
-
-3. 【基本情報・好き嫌い（Static）】
-   変わらないプロフィール情報。
-
-【制約】
-全体で800文字程度にまとめること。
-古すぎる「傾向・記録」で重要度が低いものは、新しい情報を優先するために削除してよい。`;
+全体で800文字程度にまとめること。`;
 
   try {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -431,23 +570,17 @@ async function maybeUpdateSummary() {
       body: JSON.stringify({
         model: MODEL,
         messages: [
-          { role: 'system', content: sysMsg },
-          { role: 'user',   content: `【既存の要約】\n${longSummary || '(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後の要約を出力して。` }
+          { role: 'system', content: sys },
+          { role: 'user',   content: `【既存の要約】\n${longSummary||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後の要約を出力して。` }
         ]
       })
     });
     if (res.ok) {
-      const data = await res.json();
-      const updated = data.choices?.[0]?.message?.content?.trim() || '';
-      if (updated) {
-        longSummary = updated;
-        await idbSetMeta('summary', updated);
-        console.log('[もも] 長期要約を更新しました');
-      }
+      const d = await res.json();
+      const s = d.choices?.[0]?.message?.content?.trim();
+      if (s) { longSummary = s; await idbSetM('summary', s); console.log('[もも] 要約更新完了'); }
     }
-  } catch (e) {
-    console.warn('[もも] 要約更新失敗:', e.message);
-  }
+  } catch (e) { console.warn('[もも] 要約更新失敗', e.message); }
 }
 
 // ================================================================
@@ -455,12 +588,13 @@ async function maybeUpdateSummary() {
 // ================================================================
 const PIP = 10;
 function updateMemoryUI() {
-  document.getElementById('memCount').textContent = history.length;
+  const count = history.length;
+  document.getElementById('memCount').textContent = count + '/' + API_CONTEXT;
   const track = document.getElementById('memTrack');
   track.innerHTML = '';
   for (let i = 0; i < PIP; i++) {
     const p = document.createElement('div');
-    p.className = 'mem-pip' + (history.length / MAX_HISTORY > i / PIP ? ' filled' : '');
+    p.className = 'mem-pip' + (count / API_CONTEXT > i / PIP ? ' filled' : '');
     track.appendChild(p);
   }
 }
@@ -468,17 +602,56 @@ function updateMemoryUI() {
 // ================================================================
 // Toast
 // ================================================================
-let _toastTimer = null;
+let _tt = null;
 function showToast(msg) {
   const el = document.getElementById('dbToast');
   el.textContent = msg;
   el.classList.add('show');
-  clearTimeout(_toastTimer);
-  _toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+  clearTimeout(_tt);
+  _tt = setTimeout(() => el.classList.remove('show'), 2500);
 }
 
 // ================================================================
-// 起動
+// SPLASH ANIMATION
+// ================================================================
+function runSplash(onDone) {
+  const splash = document.getElementById('splash');
+  const greet  = document.getElementById('splashGreet');
+  const sub    = document.getElementById('splashSub');
+  const dots   = [document.getElementById('d1'), document.getElementById('d2'), document.getElementById('d3')];
+
+  // Show splash layer
+  splash.style.opacity  = '1';
+  splash.style.transition = 'opacity 0.6s ease';
+
+  // Animate greeting in
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      greet.style.opacity   = '1';
+      greet.style.transform = 'translateY(0)';
+    }, 80);
+    setTimeout(() => {
+      sub.style.opacity = '1';
+    }, 400);
+    // dots staggered
+    dots.forEach((d, i) => {
+      setTimeout(() => {
+        d.style.animation = `dotIn 0.4s ease forwards`;
+      }, 600 + i * 120);
+    });
+    // Hold then fade out everything together
+    setTimeout(() => {
+      splash.style.opacity = '0';
+      setTimeout(() => {
+        splash.style.display = 'none';
+        onDone();
+      }, 650);
+    }, 2400);
+  });
+}
+
+// ================================================================
+// STARTUP
 // ================================================================
 async function startChat() {
   const key   = document.getElementById('apiKey').value.trim();
@@ -487,59 +660,75 @@ async function startChat() {
   keyEl.classList.remove('err');
   apiKey = key;
 
-  await loadBasicInfo();
+  // Parallel: load basicInfo + open DB
+  const [_, stored] = await Promise.all([
+    loadBasicInfo(),
+    (async () => {
+      try {
+        db          = await openDB();
+        longSummary = await idbGetM('summary');
+        const all   = await idbAll();
+        totalMsgCount = all.length;
+        return all;
+      } catch (e) { console.error('[もも] DB失敗:', e); return []; }
+    })()
+  ]);
 
-  document.getElementById('setup').style.animation = 'fadeIn 0.3s ease reverse';
+  // Fade out setup
+  const setupEl = document.getElementById('setup');
+  setupEl.style.transition = 'opacity 0.4s ease';
+  setupEl.style.opacity    = '0';
+  setTimeout(() => { setupEl.style.display = 'none'; }, 400);
 
-  try {
-    db          = await openDB();
-    longSummary = await idbGetMeta('summary');
-    const all   = await idbGetAll();
-    const slice = all.slice(-MAX_HISTORY);
-    history     = slice.map(r => ({ role: r.role, content: r.content }));
-    totalMsgCount = all.length;
+  // Run splash animation, then reveal app
+  runSplash(() => {
+    const app = document.getElementById('app');
+    app.style.display  = 'flex';
+    app.style.opacity  = '0';
+    app.style.transition = 'opacity 0.5s ease';
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => { app.style.opacity = '1'; });
+    });
 
+    // Restore messages from DB (last API_CONTEXT for display, but DB has all)
+    const slice = stored.slice(-API_CONTEXT);
+    history = slice.map(r => ({ role: r.role, content: r.content }));
+
+    if (slice.length > 0) {
+      slice.forEach(r => renderMessage(r.role === 'assistant' ? 'ai' : r.role, r.content, false));
+      showToast(`💾 ${stored.length}件の会話を記憶しています`);
+    }
+    if (longSummary) setTimeout(() => showToast('🧠 長期記憶あり'), 2600);
+
+    updateMemoryUI();
     setTimeout(() => {
-      document.getElementById('setup').style.display = 'none';
-      const app = document.getElementById('app');
-      app.style.display = 'flex';
-      app.style.animation = 'fadeIn 0.4s ease';
-
-      if (slice.length > 0) {
-        slice.forEach(r => renderMessage(r.role === 'assistant' ? 'ai' : r.role, r.content, false));
-        showToast(`💾 ${slice.length}件の会話を復元しました`);
-        if (longSummary) showToast('🧠 長期記憶あり');
-      }
-      updateMemoryUI();
+      document.getElementById('messages').scrollTop = 999999;
       document.getElementById('input').focus();
-      setTimeout(() => { document.getElementById('messages').scrollTop = 999999; }, 60);
-    }, 300);
-  } catch (e) {
-    console.error('[もも] DB起動失敗:', e);
-    setTimeout(() => {
-      document.getElementById('setup').style.display = 'none';
-      document.getElementById('app').style.display = 'flex';
-      updateMemoryUI();
-      document.getElementById('input').focus();
-    }, 300);
-  }
+    }, 100);
+  });
 }
 
 document.getElementById('apiKey').addEventListener('keydown', e => { if (e.key === 'Enter') startChat(); });
 
 // ================================================================
-// Chat UI
+// Chat UI helpers
 // ================================================================
-function handleKey(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }
-function autoResize(el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 160) + 'px'; }
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+}
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 160) + 'px';
+}
 
 async function clearChat() {
   history = []; longSummary = ''; totalMsgCount = 0;
+  pendingImages = []; updateImagePreview();
   if (db) {
     await idbClear();
-    await idbSetMeta('summary', '');
-    showToast('🗑 会話履歴と長期記憶を削除しました');
+    await idbSetM('summary', '');
   }
+  showToast('🗑 会話履歴と長期記憶を削除しました');
   document.getElementById('messages').innerHTML = `
     <div class="empty-state" id="emptyState">
       <div class="big-letter">m</div>
@@ -557,17 +746,23 @@ function fmt(text) {
   return text;
 }
 
-function renderMessage(role, content, animate = true) {
+function renderMessage(role, content, animate = true, imageDataUrls = []) {
   const msgs  = document.getElementById('messages');
   const empty = document.getElementById('emptyState');
   if (empty) empty.remove();
   const row = document.createElement('div');
   row.className = `message-row ${role}` + (animate ? '' : ' instant');
+
+  let imgHtml = '';
+  for (const url of imageDataUrls) {
+    imgHtml += `<img class="bubble-img" src="${url}" alt="添付画像">`;
+  }
+
   row.innerHTML = `
     <div class="avatar">${role === 'user' ? '✦' : 'm'}</div>
-    <div class="bubble">${role === 'ai' ? '' : fmt(content)}</div>`;
+    <div class="bubble">${imgHtml}${role === 'ai' ? '' : fmt(content)}</div>`;
   msgs.appendChild(row);
-  if (animate) msgs.scrollTop = msgs.scrollHeight;
+  if (animate) msgs.scrollTop = 999999;
   return row.querySelector('.bubble');
 }
 
@@ -579,33 +774,111 @@ function showTyping() {
   row.id = 'typingRow'; row.className = 'message-row ai';
   row.innerHTML = `<div class="avatar">m</div><div class="bubble"><div class="typing"><span></span><span></span><span></span></div></div>`;
   msgs.appendChild(row);
-  msgs.scrollTop = msgs.scrollHeight;
+  msgs.scrollTop = 999999;
 }
 function removeTyping() { document.getElementById('typingRow')?.remove(); }
+
+// ================================================================
+// IMAGE HANDLING
+// ================================================================
+function handleFileSelect(e) {
+  const files = Array.from(e.target.files || []);
+  if (!files.length) return;
+  e.target.value = ''; // reset so same file can be selected again
+
+  files.forEach(file => {
+    if (!file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      pendingImages.push({ dataUrl: ev.target.result, mediaType: file.type });
+      updateImagePreview();
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function updateImagePreview() {
+  const wrap = document.getElementById('imgPreviewWrap');
+  wrap.innerHTML = '';
+  if (!pendingImages.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'flex';
+  pendingImages.forEach((img, i) => {
+    const w = document.createElement('div');
+    w.className = 'img-thumb-wrap';
+    w.innerHTML = `
+      <img class="img-thumb" src="${img.dataUrl}" alt="">
+      <div class="img-thumb-del" onclick="removeImage(${i})">✕</div>`;
+    wrap.appendChild(w);
+  });
+}
+
+function removeImage(idx) {
+  pendingImages.splice(idx, 1);
+  updateImagePreview();
+}
+
+// Convert dataUrl to base64 string only (strip data:xxx;base64, prefix)
+function dataUrlToBase64(dataUrl) {
+  return dataUrl.split(',')[1];
+}
 
 // ================================================================
 // SEND
 // ================================================================
 async function sendMessage() {
-  const input = document.getElementById('input');
-  const text  = input.value.trim();
-  if (!text || isLoading) return;
+  const input   = document.getElementById('input');
+  const text    = input.value.trim();
+  const hasImgs = pendingImages.length > 0;
+
+  if (!text && !hasImgs) return;
+  if (isLoading) return;
 
   isLoading = true;
   document.getElementById('sendBtn').disabled = true;
-  input.value = ''; input.style.height = 'auto';
 
-  renderMessage('user', text);
-  history.push({ role: 'user', content: text });
-  if (history.length > MAX_HISTORY) history = history.slice(-MAX_HISTORY);
-  if (db) await persistMessage('user', text);
+  const sentText  = text;
+  const sentImgs  = [...pendingImages];
+  input.value     = '';
+  input.style.height = 'auto';
+  pendingImages   = [];
+  updateImagePreview();
+
+  // ── render user message ──
+  renderMessage('user', sentText, true, sentImgs.map(i => i.dataUrl));
+
+  // ── build content for OpenAI API ──
+  let userContent;
+  if (sentImgs.length > 0) {
+    // Vision: content is an array
+    userContent = [];
+    if (sentText) userContent.push({ type: 'text', text: sentText });
+    for (const img of sentImgs) {
+      userContent.push({
+        type: 'image_url',
+        image_url: {
+          url: `data:${img.mediaType};base64,${dataUrlToBase64(img.dataUrl)}`,
+          detail: 'auto'
+        }
+      });
+    }
+  } else {
+    userContent = sentText;
+  }
+
+  // ── push to history (text only for DB / context) ──
+  const historyContent = sentText || '[画像を送信]';
+  history.push({ role: 'user', content: userContent });
+  if (history.length > API_CONTEXT) history = history.slice(-API_CONTEXT);
+
+  // DB: テキストのみ保存（画像base64は容量大のため除外）
+  if (db) await persistMessage('user', historyContent);
   updateMemoryUI();
   showTyping();
 
-  // ── messages 配列構築（Discord版ロジック完全移植）──
+  // ── build messages array ──
   const msgs = [
-    { role: 'system', content: buildSystemPrompt()  },  // 人格 + basic_info
-    { role: 'system', content: buildTimePrompt()    },  // 現在日時
+    { role: 'system', content: buildSystemPrompt() },
+    { role: 'system', content: buildTimePrompt()   },
   ];
   if (longSummary.trim()) {
     msgs.push({
@@ -613,13 +886,13 @@ async function sendMessage() {
       content: `【長期メモ（要約）】\n${longSummary.trim()}\n\n※上記は背景知識として参照するのみ。自分から蒸し返さないこと。`
     });
   }
-  msgs.push(...history); // 直近50件のショートターム会話履歴
+  msgs.push(...history);
 
   try {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: MODEL, messages: msgs, stream: true })
+      body: JSON.stringify({ model: MODEL, messages: msgs, stream: true, max_tokens: 1024 })
     });
 
     if (!res.ok) {
@@ -648,11 +921,12 @@ async function sendMessage() {
       }
     }
 
+    // push assistant reply (text only to history)
     history.push({ role: 'assistant', content: fullText });
-    if (history.length > MAX_HISTORY) history = history.slice(-MAX_HISTORY);
+    if (history.length > API_CONTEXT) history = history.slice(-API_CONTEXT);
     if (db) {
       await persistMessage('assistant', fullText);
-      maybeUpdateSummary(); // バックグラウンドで要約更新（非同期）
+      maybeUpdateSummary(); // background
     }
     updateMemoryUI();
 
@@ -669,6 +943,41 @@ async function sendMessage() {
     input.focus();
   }
 }
+
+// ================================================================
+// iOS ズーム完全防止
+// iOS 10+ は CSS の user-scalable=no を無視するため、
+// JS でフォーカス時に viewport を動的に更新して強制的にズームを抑止する。
+// ================================================================
+(function preventIOSZoom() {
+  const META = document.querySelector('meta[name=viewport]');
+  const NO_ZOOM = 'width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover';
+  const BASE    = 'width=device-width, initial-scale=1.0, viewport-fit=cover';
+
+  function lockZoom()    { META.setAttribute('content', NO_ZOOM); }
+  function unlockZoom()  { META.setAttribute('content', NO_ZOOM); } // keep locked always
+
+  // フォーカス時にロック（念のため）
+  document.addEventListener('focusin', e => {
+    if (['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) lockZoom();
+  }, true);
+
+  // ピンチ操作そのものを無効化
+  document.addEventListener('touchmove', e => {
+    if (e.touches.length > 1) e.preventDefault();
+  }, { passive: false });
+
+  // ダブルタップズームを防ぐ（300ms 以内の連続タップ）
+  let lastTap = 0;
+  document.addEventListener('touchend', e => {
+    const now = Date.now();
+    if (now - lastTap < 300) e.preventDefault();
+    lastTap = now;
+  }, { passive: false });
+
+  // 初期化時にロック
+  lockZoom();
+})();
 </script>
 </body>
 </html>
