@@ -905,9 +905,33 @@ async function clearChat() {
 
 function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function fmt(text) {
+  // コードブロック
   text = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_,l,c) => `<pre><code>${esc(c.trim())}</code></pre>`);
+  // インラインコード
   text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
+  // 見出し（## → h3, ### → h4 等）
+  text = text.replace(/^#{3,}\s+(.+)$/gm, '<strong style="display:block;margin:8px 0 4px;font-size:13px;">$1</strong>');
+  text = text.replace(/^##\s+(.+)$/gm, '<strong style="display:block;margin:10px 0 4px;font-size:14px;">$1</strong>');
+  text = text.replace(/^#\s+(.+)$/gm, '<strong style="display:block;margin:12px 0 6px;font-size:16px;">$1</strong>');
+  // 太字
   text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  // リスト（- item）
+  text = text.replace(/^[-*]\s+(.+)$/gm, '<span style="display:block;padding-left:1em;text-indent:-0.7em;">・$1</span>');
+  // 番号付きリスト（1. item）
+  text = text.replace(/^(\d+)\.\s+(.+)$/gm, '<span style="display:block;padding-left:1.2em;text-indent:-1.2em;">$1. $2</span>');
+  // 改行
+  text = text.replace(/\n/g, '<br>');
+  return text;
+}
+
+// ウィジェット用の軽量フォーマッタ（小さいフォント向け）
+function fmtWidget(text) {
+  text = esc(text);
+  text = text.replace(/^#{1,}\s+(.+)$/gm, '<strong style="display:block;margin:6px 0 2px;color:var(--text);opacity:0.85;">$1</strong>');
+  text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  text = text.replace(/^[-*]\s+(.+)$/gm, '<span style="display:block;padding-left:0.8em;text-indent:-0.6em;margin:1px 0;">・$1</span>');
+  text = text.replace(/^(\d+)\.\s+(.+)$/gm, '<span style="display:block;padding-left:1em;text-indent:-1em;margin:1px 0;">$1. $2</span>');
+  text = text.replace(/`([^`]+)`/g, '<code style="font-size:10px;padding:1px 3px;">$1</code>');
   text = text.replace(/\n/g, '<br>');
   return text;
 }
@@ -1275,15 +1299,15 @@ async function updateMiniSummary() {
     let html = '';
     if (miniSummary) {
       html += '<div style="color:var(--accent);opacity:0.8;font-size:10px;letter-spacing:0.08em;margin-bottom:4px;">NOW</div>';
-      html += '<div style="margin-bottom:10px;color:var(--text);opacity:0.8;">' + esc(miniSummary).replace(/\n/g, '<br>') + '</div>';
+      html += '<div style="margin-bottom:10px;color:var(--text);opacity:0.8;">' + fmtWidget(miniSummary) + '</div>';
     }
     if (importantText) {
       html += '<div style="color:var(--accent);opacity:0.5;font-size:10px;letter-spacing:0.08em;margin-bottom:4px;">IMPORTANT</div>';
-      html += '<div style="margin-bottom:10px;">' + esc(importantText).replace(/\n/g, '<br>') + '</div>';
+      html += '<div style="margin-bottom:10px;">' + fmtWidget(importantText) + '</div>';
     }
     if (summaryText) {
       html += '<div style="color:var(--accent);opacity:0.5;font-size:10px;letter-spacing:0.08em;margin-bottom:4px;">SUMMARY</div>';
-      html += '<div>' + esc(summaryText).replace(/\n/g, '<br>') + '</div>';
+      html += '<div>' + fmtWidget(summaryText) + '</div>';
     }
     body.innerHTML = html;
   };
