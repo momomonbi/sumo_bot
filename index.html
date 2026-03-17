@@ -296,6 +296,90 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
 .db-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 .error-msg { color: #ff7b7b; font-size: 14px; }
 
+/* ═══════════════════════════════════════════════
+   SUMMARY WIDGET — draggable, collapsible
+═══════════════════════════════════════════════ */
+#summaryWidget {
+  position: fixed; top: 70px; right: 18px; z-index: 100;
+  width: 260px; max-width: calc(100vw - 36px);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.4s ease, transform 0.4s cubic-bezier(.22,1,.36,1);
+  transform: translateY(-8px) scale(0.97);
+  display: flex; flex-direction: column;
+}
+#summaryWidget.visible {
+  opacity: 1; pointer-events: auto;
+  transform: translateY(0) scale(1);
+}
+#summaryWidget.dragging {
+  transition: none; box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+}
+
+.sw-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; cursor: grab;
+  background: rgba(200,240,160,0.06);
+  border-bottom: 1px solid var(--border);
+  user-select: none; -webkit-user-select: none;
+}
+.sw-header:active { cursor: grabbing; }
+.sw-title {
+  font-family: 'DM Mono', monospace; font-size: 10px;
+  color: var(--accent); letter-spacing: 0.1em; text-transform: uppercase;
+}
+.sw-toggle {
+  background: none; border: none; color: var(--text-muted);
+  font-size: 14px; cursor: pointer; padding: 0 2px;
+  transition: transform 0.3s ease, color 0.2s;
+  line-height: 1;
+}
+.sw-toggle:hover { color: var(--text); }
+#summaryWidget.collapsed .sw-toggle { transform: rotate(180deg); }
+
+.sw-body {
+  padding: 12px 14px; max-height: 200px; overflow-y: auto;
+  transition: max-height 0.35s cubic-bezier(.22,1,.36,1), padding 0.35s ease, opacity 0.25s ease;
+  opacity: 1;
+}
+#summaryWidget.collapsed .sw-body {
+  max-height: 0; padding-top: 0; padding-bottom: 0; opacity: 0;
+  overflow: hidden;
+}
+.sw-body::-webkit-scrollbar { width: 2px; }
+.sw-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+
+.sw-content {
+  font-size: 11px; line-height: 1.7; color: var(--text-muted);
+  white-space: pre-wrap; word-break: break-word;
+}
+.sw-content .sw-label {
+  display: block; font-family: 'DM Mono', monospace; font-size: 9px;
+  color: var(--accent); opacity: 0.6; letter-spacing: 0.08em;
+  text-transform: uppercase; margin-bottom: 4px; margin-top: 8px;
+}
+.sw-content .sw-label:first-child { margin-top: 0; }
+.sw-empty {
+  font-size: 11px; color: var(--text-muted); opacity: 0.5;
+  font-style: italic; text-align: center; padding: 8px 0;
+}
+
+/* ═══════════════════════════════════════════════
+   AI TEXT ANIMATION — smooth character reveal
+═══════════════════════════════════════════════ */
+.ai .bubble .char-animate {
+  display: inline;
+  opacity: 0;
+  animation: charReveal 0.4s ease forwards;
+}
+@keyframes charReveal {
+  0%   { opacity: 0; filter: blur(4px); transform: translateY(4px); }
+  60%  { opacity: 0.7; filter: blur(1px); transform: translateY(1px); }
+  100% { opacity: 1; filter: blur(0); transform: translateY(0); }
+}
+
 /* ── keyframes ── */
 @keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
 @keyframes fadeUp  { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
@@ -372,6 +456,19 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
     </div>
     <div class="hint">Enter で送信 · Shift+Enter で改行 · 📎 画像添付可</div>
   </footer>
+</div>
+
+<!-- SUMMARY WIDGET -->
+<div id="summaryWidget">
+  <div class="sw-header" id="swHeader">
+    <span class="sw-title">Summary</span>
+    <button class="sw-toggle" id="swToggle" title="折りたたみ">▾</button>
+  </div>
+  <div class="sw-body">
+    <div class="sw-content" id="swContent">
+      <div class="sw-empty">会話を始めると要約が表示されます</div>
+    </div>
+  </div>
 </div>
 
 <div class="db-toast" id="dbToast"></div>
@@ -756,6 +853,13 @@ async function startChat() {
     if (importantMemories) setTimeout(() => showToast('💎 重要記憶あり'), 3200);
 
     updateMemoryUI();
+
+    // サマリーウィジェットの初期表示
+    setTimeout(() => {
+      updateSummaryWidget();
+      showSummaryWidget();
+    }, 800);
+
     setTimeout(() => {
       document.getElementById('messages').scrollTop = 999999;
       document.getElementById('input').focus();
@@ -804,6 +908,7 @@ async function clearChat() {
       <p>おかえり、りぴ。</p>
     </div>`;
   updateMemoryUI();
+  updateSummaryWidget();
 }
 
 function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -1017,6 +1122,7 @@ async function sendMessage() {
     removeTyping();
     const bubble  = renderMessage('ai', '');
     let fullText  = '';
+    animCharIndex = 0; // アニメーション文字カウンタをリセット
     const reader  = res.body.getReader();
     const decoder = new TextDecoder();
 
@@ -1029,11 +1135,13 @@ async function sendMessage() {
         try {
           const delta = JSON.parse(d).choices?.[0]?.delta?.content || '';
           fullText += delta;
-          bubble.innerHTML = fmt(fullText);
+          renderAnimatedText(bubble, fullText);
           document.getElementById('messages').scrollTop = 999999;
         } catch {}
       }
     }
+    // ストリーミング完了後、アニメーションクラスを除去して安定化
+    bubble.innerHTML = fmt(fullText);
 
     // push assistant reply (text only to history)
     history.push({ role: 'assistant', content: fullText });
@@ -1043,6 +1151,7 @@ async function sendMessage() {
       maybeUpdateSummary(); // background
     }
     updateMemoryUI();
+    updateSummaryWidget();
 
   } catch (err) {
     removeTyping();
@@ -1092,6 +1201,183 @@ async function sendMessage() {
   // 初期化時にロック
   lockZoom();
 })();
+
+// ================================================================
+// SUMMARY WIDGET — ドラッグ・折りたたみ・要約表示
+// ================================================================
+(function initSummaryWidget() {
+  const widget = document.getElementById('summaryWidget');
+  const header = document.getElementById('swHeader');
+  const toggle = document.getElementById('swToggle');
+
+  // ── 折りたたみ ──
+  toggle.addEventListener('click', e => {
+    e.stopPropagation();
+    widget.classList.toggle('collapsed');
+  });
+
+  // ── ドラッグ（mouse + touch） ──
+  let isDragging = false, offsetX = 0, offsetY = 0;
+
+  function startDrag(clientX, clientY) {
+    const rect = widget.getBoundingClientRect();
+    offsetX = clientX - rect.left;
+    offsetY = clientY - rect.top;
+    isDragging = true;
+    widget.classList.add('dragging');
+  }
+  function moveDrag(clientX, clientY) {
+    if (!isDragging) return;
+    let x = clientX - offsetX;
+    let y = clientY - offsetY;
+    // 画面外に出ないよう制限
+    x = Math.max(0, Math.min(window.innerWidth - widget.offsetWidth, x));
+    y = Math.max(0, Math.min(window.innerHeight - 40, y));
+    widget.style.left = x + 'px';
+    widget.style.top  = y + 'px';
+    widget.style.right = 'auto';
+  }
+  function endDrag() {
+    isDragging = false;
+    widget.classList.remove('dragging');
+  }
+
+  header.addEventListener('mousedown', e => {
+    if (e.target === toggle) return;
+    e.preventDefault();
+    startDrag(e.clientX, e.clientY);
+  });
+  document.addEventListener('mousemove', e => moveDrag(e.clientX, e.clientY));
+  document.addEventListener('mouseup', endDrag);
+
+  header.addEventListener('touchstart', e => {
+    if (e.target === toggle) return;
+    const t = e.touches[0];
+    startDrag(t.clientX, t.clientY);
+  }, { passive: true });
+  document.addEventListener('touchmove', e => {
+    if (!isDragging) return;
+    const t = e.touches[0];
+    moveDrag(t.clientX, t.clientY);
+  }, { passive: true });
+  document.addEventListener('touchend', () => { if (isDragging) endDrag(); });
+})();
+
+// サマリーウィジェットの表示/更新
+function showSummaryWidget() {
+  document.getElementById('summaryWidget').classList.add('visible');
+}
+function hideSummaryWidget() {
+  document.getElementById('summaryWidget').classList.remove('visible');
+}
+
+function updateSummaryWidget() {
+  const el = document.getElementById('swContent');
+  const hasSummary = longSummary && longSummary.trim();
+  const hasMemory  = importantMemories && importantMemories.trim();
+
+  if (!hasSummary && !hasMemory && history.length < 2) {
+    el.innerHTML = '<div class="sw-empty">会話を始めると要約が表示されます</div>';
+    return;
+  }
+
+  let html = '';
+
+  // 直近の会話から短い要約を自動生成（APIを使わずローカルで）
+  if (history.length >= 2) {
+    const recentMsgs = history.slice(-6);
+    const topics = recentMsgs
+      .filter(m => m.role === 'user')
+      .map(m => typeof m.content === 'string' ? m.content : '[画像]')
+      .map(t => t.length > 30 ? t.slice(0, 30) + '…' : t);
+    if (topics.length > 0) {
+      html += '<span class="sw-label">直近の話題</span>';
+      html += esc(topics.join(' → '));
+    }
+  }
+
+  if (hasSummary) {
+    html += '<span class="sw-label">会話の要約</span>';
+    // 要約を短縮表示（最初の200文字）
+    const short = longSummary.trim().length > 200
+      ? longSummary.trim().slice(0, 200) + '…'
+      : longSummary.trim();
+    html += esc(short);
+  }
+
+  if (hasMemory) {
+    html += '<span class="sw-label">重要記憶</span>';
+    const short = importantMemories.trim().length > 150
+      ? importantMemories.trim().slice(0, 150) + '…'
+      : importantMemories.trim();
+    html += esc(short);
+  }
+
+  el.innerHTML = html || '<div class="sw-empty">会話を始めると要約が表示されます</div>';
+}
+
+// ================================================================
+// AI TEXT ANIMATION — 滑らかな文字出現エフェクト
+// ================================================================
+// ストリーミング中にチャンクごとにアニメーションを付与する
+let animCharIndex = 0; // 現在のアニメーション対象文字位置
+
+function renderAnimatedText(bubble, fullText) {
+  // パース済みHTMLをそのまま入れるが、新しく追加された部分にアニメーション付与
+  const parsed = fmt(fullText);
+  bubble.innerHTML = parsed;
+
+  // テキストノードの文字にアニメーションを付与
+  // パフォーマンスのため、最後の数文字のみアニメーション
+  applyCharAnimation(bubble);
+}
+
+function applyCharAnimation(bubble) {
+  const walker = document.createTreeWalker(bubble, NodeFilter.SHOW_TEXT);
+  let totalChars = 0;
+  const textNodes = [];
+
+  while (walker.nextNode()) {
+    textNodes.push({ node: walker.currentNode, start: totalChars });
+    totalChars += walker.currentNode.textContent.length;
+  }
+
+  // 新しく追加された文字（最後の数文字）にのみアニメーション付与
+  const animateFrom = Math.max(0, animCharIndex);
+  const newChars = totalChars - animateFrom;
+
+  if (newChars <= 0) return;
+
+  // 最大30文字分のアニメーションを同時実行（パフォーマンス対策）
+  const animStart = Math.max(animateFrom, totalChars - 30);
+
+  for (const { node, start } of textNodes) {
+    const end = start + node.textContent.length;
+    if (end <= animStart) continue; // このノードはアニメーション対象外
+
+    const text = node.textContent;
+    const frag = document.createDocumentFragment();
+
+    for (let i = 0; i < text.length; i++) {
+      const globalIdx = start + i;
+      if (globalIdx >= animStart && globalIdx >= animateFrom) {
+        const span = document.createElement('span');
+        span.className = 'char-animate';
+        span.textContent = text[i];
+        // ずらしたディレイで波のようなエフェクト
+        const delay = (globalIdx - animStart) * 18;
+        span.style.animationDelay = delay + 'ms';
+        frag.appendChild(span);
+      } else {
+        frag.appendChild(document.createTextNode(text[i]));
+      }
+    }
+
+    node.parentNode.replaceChild(frag, node);
+  }
+
+  animCharIndex = totalChars;
+}
 </script>
 </body>
 </html>
