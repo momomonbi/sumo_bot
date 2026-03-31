@@ -1898,10 +1898,15 @@ function selectChoice(btn, text) {
 // COPY BUTTON
 // ================================================================
 function copyText(btn, text) {
-  // HTMLエンティティを元に戻す
+  // HTMLエンティティを元に戻し、Markdown記号を除去
   const tmp = document.createElement('textarea');
   tmp.innerHTML = text;
-  const decoded = tmp.value;
+  const decoded = tmp.value
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/^#{1,4}\s+/gm, '')
+    .trim();
   const onCopied = () => {
     btn.textContent = '✓';
     btn.classList.add('copied');
