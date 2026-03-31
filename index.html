@@ -1967,14 +1967,13 @@ async function sendMessage() {
     const reader  = res.body.getReader();
     const decoder = new TextDecoder();
     let sseBuffer = '';  // SSEパース用バッファ
+    let rafPending = false; // レンダリング間引きフラグ
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      // stream: true でマルチバイト文字の分割を防ぐ
       sseBuffer += decoder.decode(value, { stream: true });
       const lines = sseBuffer.split('\n');
-      // 最後の行は不完全な可能性があるのでバッファに残す
       sseBuffer = lines.pop() || '';
       for (const line of lines) {
         const trimmed = line.trim();
@@ -1984,11 +1983,20 @@ async function sendMessage() {
         try {
           const delta = JSON.parse(d).choices?.[0]?.delta?.content || '';
           fullText += delta;
-          bubble.innerHTML = fmt(fullText);
-          document.getElementById('messages').scrollTop = 999999;
+          // ── ストリーミング中はプレーンテキスト表示 + rAF間引き ──
+          if (!rafPending) {
+            rafPending = true;
+            requestAnimationFrame(() => {
+              bubble.textContent = fullText;
+              document.getElementById('messages').scrollTop = 999999;
+              rafPending = false;
+            });
+          }
         } catch {}
       }
     }
+    // ── 完了後にMarkdown整形を1回だけ適用 ──
+    bubble.innerHTML = fmt(fullText);
 
     // push assistant reply (text only to history)
     history.push({ role: 'assistant', content: fullText });
