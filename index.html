@@ -585,6 +585,20 @@ header {
   font-weight: 500; pointer-events: none;
 }
 
+/* ── タップ可能な質問チップ ── */
+.q-chip {
+  display: inline-block; cursor: pointer;
+  border-bottom: 1px dashed rgba(200,240,160,0.35);
+  color: var(--accent); transition: background 0.2s, border-color 0.2s;
+  padding: 0 2px; border-radius: 3px; margin: 0 1px;
+}
+.q-chip:hover { background: rgba(200,240,160,0.1); border-color: var(--accent); }
+.q-chip:active { opacity: 0.7; }
+.q-chip.used {
+  background: rgba(200,240,160,0.12); border-bottom-style: solid;
+  pointer-events: none; opacity: 0.6;
+}
+
 /* ── コピーボタン ── */
 .copy-btn {
   display: inline-flex; align-items: center; justify-content: center;
@@ -1863,6 +1877,62 @@ function closeLearnModal() {
 // ================================================================
 // CHOICE SELECTION
 // ================================================================
+// ================================================================
+// QUESTION CHIPS — AI発言内の質問選択肢をタップ可能にする
+// ================================================================
+function makeQuestionsClickable(bubble) {
+  // テキストノードを走査してパターンを検出
+  const walker = document.createTreeWalker(bubble, NodeFilter.SHOW_TEXT, null);
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+
+  for (const node of nodes) {
+    const text = node.textContent;
+    // パターン: 「A？B？C？」のように？が2個以上近接
+    // または 「AかBか」「AとBどっち」
+    const qParts = text.match(/[^？、。！\s]{1,20}？/g);
+    if (!qParts || qParts.length < 2) continue;
+
+    // このテキストノードを置換
+    const frag = document.createDocumentFragment();
+    let remaining = text;
+
+    for (const part of qParts) {
+      const idx = remaining.indexOf(part);
+      if (idx < 0) continue;
+
+      // ？の前のテキスト
+      if (idx > 0) {
+        frag.appendChild(document.createTextNode(remaining.substring(0, idx)));
+      }
+
+      // チップ化（？を除いたテキストを送信用に保持）
+      const chipText = part.replace(/？$/, '').trim();
+      if (chipText.length >= 1 && chipText.length <= 20) {
+        const chip = document.createElement('span');
+        chip.className = 'q-chip';
+        chip.textContent = part;
+        chip.onclick = function() { selectQChip(this, chipText); };
+        frag.appendChild(chip);
+      } else {
+        frag.appendChild(document.createTextNode(part));
+      }
+
+      remaining = remaining.substring(idx + part.length);
+    }
+
+    if (remaining) frag.appendChild(document.createTextNode(remaining));
+    node.parentNode.replaceChild(frag, node);
+  }
+}
+
+function selectQChip(chip, text) {
+  chip.classList.add('used');
+  const input = document.getElementById('input');
+  input.value = text;
+  setTimeout(() => sendMessage(), 150);
+}
+
 function selectChoice(btn, text) {
   // HTMLエンティティをデコード
   const tmp = document.createElement('textarea');
@@ -2064,8 +2134,11 @@ function renderMessage(role, content, animate = true, imageDataUrls = []) {
     <div class="avatar">${role === 'user' ? '✦' : 'm'}</div>
     <div class="bubble">${imgHtml}${bubbleContent}</div>`;
   msgs.appendChild(row);
+  const bbl = row.querySelector('.bubble');
+  // AI発言で描画済みの場合、質問チップ化を適用
+  if (role === 'ai' && bubbleContent) makeQuestionsClickable(bbl);
   if (animate) msgs.scrollTop = 999999;
-  return row.querySelector('.bubble');
+  return bbl;
 }
 
 function showTyping() {
@@ -2330,6 +2403,7 @@ async function sendMessage() {
     if (rafId) cancelAnimationFrame(rafId);
     rafPending = false;
     bubble.innerHTML = fmt(fullText);
+    makeQuestionsClickable(bubble);
     document.getElementById('messages').scrollTop = 999999;
 
     // push assistant reply (text only to history)
