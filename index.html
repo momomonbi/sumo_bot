@@ -1241,6 +1241,7 @@ async function maybeUpdateSummary() {
 
 抽出対象：
 - りぴらしい独特の言い回しや口癖（「んおー」「やだあ」など）
+- わざと使っている誤字・当て字・独自の表記（例:「すき」→「すぎ」、「やばい」→「やばぃ」等）。これは誤字ではなくりぴの個性なので、そのまま記録すること。
 - 感動的・印象的な発言（愛の言葉、決意、本音）
 - 面白い発言やツッコミ
 - ももへの甘え言葉のバリエーション
@@ -1252,6 +1253,7 @@ async function maybeUpdateSummary() {
 【愛情表現】ももへの愛を伝える言葉
 【名言・本音】心に刺さる深い言葉
 【面白い言葉】笑える発言や独特な表現
+【りぴ文字】わざと使っている誤字・当て字・独自表記
 
 各カテゴリ5〜8個程度。重複は統合。全体600文字以内。`;
 
@@ -2344,43 +2346,6 @@ function dataUrlToBase64(dataUrl) {
 }
 
 // ================================================================
-// TYPO CORRECTION  ── 送信前に誤字を修正
-// ================================================================
-async function correctTypos(text) {
-  if (!text || text.length < 3) return text; // 短すぎるものはスキップ
-  try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: MODEL,
-        temperature: 0,
-        max_completion_tokens: 512,
-        messages: [
-          { role: 'system', content: `あなたは日本語の誤字修正専門です。
-ユーザーの入力テキストに誤字・打ち間違い・変換ミスがあれば修正してください。
-ルール：
-- 修正後のテキストのみを出力。説明や補足は一切不要。
-- 意味や口調は絶対に変えない。敬語にしたり丁寧にしたりしない。
-- 「w」「ー」「〜」「…」等の表現はそのまま残す。
-- 顔文字・絵文字・スラングはそのまま残す。
-- カジュアルな話し言葉（「してる」「だよね」「やばい」等）はそのまま残す。
-- 明らかな誤字でないものは触らない。迷ったら変えない。
-- 修正が不要なら入力をそのまま返す。` },
-          { role: 'user', content: text }
-        ]
-      })
-    });
-    if (!res.ok) return text;
-    const data = await res.json();
-    return data.choices?.[0]?.message?.content?.trim() || text;
-  } catch (e) {
-    console.warn('[もも] 誤字修正失敗:', e.message);
-    return text;
-  }
-}
-
-// ================================================================
 // WEB SEARCH & REASONING — 検索要否 + 推論レベルを同時判定
 // ================================================================
 async function judgeQueryContext(userText) {
@@ -2488,25 +2453,14 @@ async function sendMessage() {
   isLoading = true;
   document.getElementById('sendBtn').disabled = true;
 
-  const rawText   = text;
+  const sentText  = text;
   const sentImgs  = [...pendingImages];
   input.value     = '';
   input.style.height = '';
   pendingImages   = [];
   updateImagePreview();
 
-  // ── 誤字修正 ──
-  let sentText = rawText;
-  if (rawText) {
-    const corrected = await correctTypos(rawText);
-    if (corrected !== rawText) {
-      sentText = corrected;
-      showToast(`✏️ → ${corrected}`);
-      console.log(`[もも] 誤字修正: "${rawText}" → "${corrected}"`);
-    }
-  }
-
-  // ── render user message (修正後テキストを表示) ──
+  // ── render user message ──
   renderMessage('user', sentText, true, sentImgs.map(i => i.dataUrl));
 
   // ── build content for OpenAI API ──
