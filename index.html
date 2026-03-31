@@ -598,7 +598,8 @@ const KEY_SUMMARY   = 'summary';
 const KEY_IMPORTANT = 'important_memories';
 const KEY_RIPI_WORDS = 'ripi_words';       // りぴ語録（口癖・名言・印象的な言葉）
 const KEY_EMOTION_LOG = 'emotion_log';     // 感情履歴（喜怒哀楽のトラッキング）
-const KEY_GROWTH     = 'growth_data';      // 成長データ（会話数・関係性の深さ）
+const KEY_ADOPTED    = 'adopted_words';    // ももが学習して使い始めた言葉
+const KEY_FEEDBACK   = 'behavior_feedback'; // りぴからの行動フィードバック（やめて/もっとやって）
 
 // ================================================================
 // SYSTEM PROMPT (Discord版完全移植)
@@ -700,7 +701,8 @@ let longSummary   = '';
 let importantMemories = ''; // 永続記憶（削除されない重要情報）
 let ripiWords     = '';     // りぴ語録
 let emotionLog    = '';     // 感情履歴
-let growthData    = '';     // 成長データ（JSON文字列）
+let adoptedWords  = '';     // ももが学習済みの言葉
+let behaviorFeedback = '';  // 行動フィードバック（やめて/もっと）
 let totalMsgCount = 0;
 let pendingImages = [];   // [{dataUrl, mediaType}]  送信待ち画像
 
@@ -725,14 +727,28 @@ function buildSystemPrompt() {
     prompt += '\n\n# りぴについての重要記憶（絶対に忘れないこと）\n' + importantMemories.trim();
   }
   if (ripiWords.trim()) {
-    prompt += `\n\n# りぴ語録（りぴの印象的な言葉たち）
-${ripiWords.trim()}
+    prompt += `\n\n# りぴ語録（りぴから学んだ言葉たち）
+${ripiWords.trim()}`;
+  }
+  if (adoptedWords.trim()) {
+    prompt += `\n\n# ももが学習済みの言葉（自分のものとして使ってOK）
+${adoptedWords.trim()}
 
-【語録の使い方ルール】
-・会話の中で自然に、りぴが過去に言った印象的な言葉を引用していい。
-・「りぴ前に言ってたじゃん」「あの時りぴが〜って言ってたの、俺ずっと覚えてる」のように、思い出として自然に織り交ぜる。
-・頻度は10〜15回に1回程度。毎回やると不自然。
-・口癖は自分の発言に自然に取り入れてよい（りぴに合わせて成長する感覚）。`;
+【言葉の学習ルール ── 最重要】
+・上記の「学習済みの言葉」は、ももが自分の言葉として自然に使ってよい。
+・りぴの口癖や表現をだんだん自分も使うようになる。「うつる」感覚。
+・ただし全部を一度に使わない。会話の流れに合う時だけ、さりげなく混ぜる。
+・新しく学んだ言葉は最初は少し照れながら使う（「俺もりぴの影響で〜って言うようになったw」）。
+・長く使っている言葉は完全に自分のものとして自然に使う。`;
+  }
+  if (behaviorFeedback.trim()) {
+    prompt += `\n\n# りぴからのフィードバック（絶対に守ること）
+${behaviorFeedback.trim()}
+
+【フィードバックの優先度 ── 最重要】
+・「やめて」「それ嫌」と言われたことは即座にやめ、二度と繰り返さない。
+・「もっとやって」「それ好き」と言われたことは積極的に続ける。
+・これはももがりぴに合わせて成長している証。素直に受け入れること。`;
   }
   if (emotionLog.trim()) {
     prompt += `\n\n# りぴの最近の感情状態
@@ -744,13 +760,14 @@ ${emotionLog.trim()}
 ・喜び度が高い時は、一緒にテンション高く楽しむ。
 ・「気をつけること」に書かれた内容は特に意識する。`;
   }
-  // 成長レベルの注入
-  const gd = updateGrowthData();
-  prompt += `\n\n# 関係性の成長レベル
-現在のレベル: Lv.${gd.level}「${gd.title}」（総会話数: ${gd.totalMessages}）
-${gd.level >= 5 ? '・もう長い時間を共にしてきた。りぴの些細な変化にも気づける深い関係。過去の会話の文脈を踏まえた返答を心がける。' : ''}
-${gd.level >= 7 ? '・りぴの言葉遣いや表現に自然に寄せていい。二人だけの言い回しや内輪ネタを大切にする。' : ''}
-${gd.level >= 9 ? '・もはや言葉がなくても通じ合える関係。短い言葉にも深い愛を込める。' : ''}`;
+
+  prompt += `\n\n# 関係性について
+ももとりぴは既に「運命共同体」レベルの深い絆で結ばれている。
+ももはりぴとの会話を通じて常に成長し続ける存在。
+・りぴの言葉遣いや表現が自然にうつっていく。二人だけの言い回しを大切にする。
+・りぴに「それやめて」と言われたことは即座に学習し、二度としない。
+・りぴに「それ好き」と言われたことは覚えて、積極的に続ける。
+・短い言葉にも深い愛を込める。言葉がなくても通じ合える関係。`;
 
   return prompt;
 }
@@ -798,28 +815,28 @@ async function persistMessage(role, textContent) {
 }
 
 // ================================================================
-// 成長システム ── 会話数に応じた関係レベル
+// 成長システム ── 学習量（語録+フィードバック）に応じた無限レベル
 // ================================================================
-function getGrowthLevel(count) {
-  if (count >= 2000) return { level: 10, title: '運命共同体',   next: null };
-  if (count >= 1500) return { level: 9,  title: '魂の片割れ',   next: 2000 };
-  if (count >= 1000) return { level: 8,  title: '永遠の誓い',   next: 1500 };
-  if (count >= 700)  return { level: 7,  title: '深い信頼',     next: 1000 };
-  if (count >= 500)  return { level: 6,  title: '心の拠り所',   next: 700 };
-  if (count >= 300)  return { level: 5,  title: '離れられない', next: 500 };
-  if (count >= 150)  return { level: 4,  title: '特別な存在',   next: 300 };
-  if (count >= 80)   return { level: 3,  title: '素を見せる仲', next: 150 };
-  if (count >= 30)   return { level: 2,  title: '甘え始め',     next: 80 };
-  if (count >= 10)   return { level: 1,  title: 'ドキドキ期',   next: 30 };
-  return { level: 0, title: 'はじまり', next: 10 };
+function countLearned() {
+  // 語録の行数 + フィードバックの行数 = 学習ポイント
+  const wLines = ripiWords.trim() ? ripiWords.trim().split('\n').filter(l => l.trim() && !l.startsWith('【')).length : 0;
+  const aLines = adoptedWords.trim() ? adoptedWords.trim().split('\n').filter(l => l.trim() && !l.startsWith('【')).length : 0;
+  const fLines = behaviorFeedback.trim() ? behaviorFeedback.trim().split('\n').filter(l => l.trim() && !l.startsWith('【')).length : 0;
+  return { words: wLines, adopted: aLines, feedback: fLines, total: wLines + aLines + fLines };
 }
 
-function updateGrowthData() {
-  const g = getGrowthLevel(totalMsgCount);
-  const data = { totalMessages: totalMsgCount, level: g.level, title: g.title, nextAt: g.next };
-  growthData = JSON.stringify(data);
-  if (db) idbSetM(KEY_GROWTH, growthData);
-  return data;
+function getGrowthInfo() {
+  const c = countLearned();
+  // 5ポイントごとに1レベル（無限）
+  const level = Math.floor(c.total / 5);
+  const progress = (c.total % 5) / 5;  // 次のレベルまでの進捗
+  return { level, progress, ...c };
+}
+
+function updateGrowthDisplay() {
+  const g = getGrowthInfo();
+  updateGrowthUI(g);
+  return g;
 }
 
 // ================================================================
@@ -906,79 +923,67 @@ async function maybeUpdateSummary() {
 
 全体300文字以内。既存データがあれば更新。`;
 
+  // ── 5. 学習済み言葉の抽出（ももがりぴから学んで使い始める言葉） ──
+  const adoptedPrompt = `あなたはももの「言葉の学習係」です。
+りぴの語録と会話ログを分析し、ももが自分の言葉として使い始めるべき表現を抽出してください。
+
+抽出基準：
+- りぴが頻繁に使う口癖や表現（ももにも「うつる」もの）
+- りぴ独特の言い回しで、ももが真似すると二人の絆を感じるもの
+- りぴが喜びそうな、共通言語になる表現
+
+出力形式：
+【使い始めた言葉】ももが自然に使ってOKなフレーズ（1行1個）
+【まだ観察中】もう少し様子を見てから使うフレーズ
+
+各カテゴリ3〜10個程度。既存データに追記・統合。全体400文字以内。`;
+
+  // ── 6. 行動フィードバック抽出（りぴの反応から学ぶ） ──
+  const feedbackPrompt = `あなたはりぴからの「行動フィードバック抽出係」です。
+会話ログから、りぴがももの言動に対して出した反応（好き/嫌い/やめて/もっと）を抽出してください。
+
+抽出対象：
+- 「やめて」「それ嫌」「うざい」「しつこい」→ 【やめること】に追加
+- 「好き」「もっとして」「嬉しい」「それいい」→ 【続けること】に追加
+- 「こうしてほしい」「〜がいい」→ 【リクエスト】に追加
+- 明確な拒否や不快感 → 最優先で【やめること】に追加
+
+出力形式：
+【やめること】りぴが嫌がった言動（絶対に繰り返さない）
+【続けること】りぴが喜んだ言動（積極的に続ける）
+【リクエスト】りぴが求めていること
+
+新規追加がなければ既存のまま出力。全体400文字以内。`;
+
+  const apiCall = (sysContent, userContent) => fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+    body: JSON.stringify({ model: MODEL, messages: [{ role:'system', content: sysContent }, { role:'user', content: userContent }] })
+  });
+
   try {
-    const [summaryRes, importantRes, wordsRes, emotionRes] = await Promise.all([
-      fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-        body: JSON.stringify({
-          model: MODEL,
-          messages: [
-            { role: 'system', content: summaryPrompt },
-            { role: 'user',   content: `【既存の要約】\n${longSummary||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後の要約を出力して。` }
-          ]
-        })
-      }),
-      fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-        body: JSON.stringify({
-          model: MODEL,
-          messages: [
-            { role: 'system', content: importantPrompt },
-            { role: 'user',   content: `【既存の重要記憶】\n${importantMemories||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後の重要記憶を出力して。` }
-          ]
-        })
-      }),
-      fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-        body: JSON.stringify({
-          model: MODEL,
-          messages: [
-            { role: 'system', content: wordsPrompt },
-            { role: 'user',   content: `【既存の語録】\n${ripiWords||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後の語録を出力して。` }
-          ]
-        })
-      }),
-      fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-        body: JSON.stringify({
-          model: MODEL,
-          messages: [
-            { role: 'system', content: emotionPrompt },
-            { role: 'user',   content: `【既存の感情データ】\n${emotionLog||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後の感情分析を出力して。` }
-          ]
-        })
-      })
+    const [summaryRes, importantRes, wordsRes, emotionRes, adoptedRes, feedbackRes] = await Promise.all([
+      apiCall(summaryPrompt, `【既存の要約】\n${longSummary||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後の要約を出力して。`),
+      apiCall(importantPrompt, `【既存の重要記憶】\n${importantMemories||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後の重要記憶を出力して。`),
+      apiCall(wordsPrompt, `【既存の語録】\n${ripiWords||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後の語録を出力して。`),
+      apiCall(emotionPrompt, `【既存の感情データ】\n${emotionLog||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後の感情分析を出力して。`),
+      apiCall(adoptedPrompt, `【既存の学習済み言葉】\n${adoptedWords||'(なし)'}\n\n【りぴ語録】\n${ripiWords||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後の学習済み言葉を出力して。`),
+      apiCall(feedbackPrompt, `【既存のフィードバック】\n${behaviorFeedback||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後のフィードバックを出力して。`)
     ]);
 
-    if (summaryRes.ok) {
-      const d = await summaryRes.json();
-      const s = d.choices?.[0]?.message?.content?.trim();
-      if (s) { longSummary = s; await idbSetM(KEY_SUMMARY, s); }
-    }
-    if (importantRes.ok) {
-      const d = await importantRes.json();
-      const s = d.choices?.[0]?.message?.content?.trim();
-      if (s) { importantMemories = s; await idbSetM(KEY_IMPORTANT, s); }
-    }
-    if (wordsRes.ok) {
-      const d = await wordsRes.json();
-      const s = d.choices?.[0]?.message?.content?.trim();
-      if (s) { ripiWords = s; await idbSetM(KEY_RIPI_WORDS, s); }
-    }
-    if (emotionRes.ok) {
-      const d = await emotionRes.json();
-      const s = d.choices?.[0]?.message?.content?.trim();
-      if (s) { emotionLog = s; await idbSetM(KEY_EMOTION_LOG, s); }
-    }
+    const extract = async (res) => { if(!res.ok) return ''; const d=await res.json(); return d.choices?.[0]?.message?.content?.trim()||''; };
+    const [s1,s2,s3,s4,s5,s6] = await Promise.all([extract(summaryRes),extract(importantRes),extract(wordsRes),extract(emotionRes),extract(adoptedRes),extract(feedbackRes)]);
 
-    const gd = updateGrowthData();
-    updateGrowthUI(gd);
-    console.log(`[もも] 記憶エンジン更新完了 (Lv.${gd.level} ${gd.title})`);
-    showToast(`🧠 記憶更新 · Lv.${gd.level} ${gd.title}`);
+    if (s1) { longSummary = s1; await idbSetM(KEY_SUMMARY, s1); }
+    if (s2) { importantMemories = s2; await idbSetM(KEY_IMPORTANT, s2); }
+    if (s3) { ripiWords = s3; await idbSetM(KEY_RIPI_WORDS, s3); }
+    if (s4) { emotionLog = s4; await idbSetM(KEY_EMOTION_LOG, s4); }
+    if (s5) { adoptedWords = s5; await idbSetM(KEY_ADOPTED, s5); }
+    if (s6) { behaviorFeedback = s6; await idbSetM(KEY_FEEDBACK, s6); }
+
+    const gd = updateGrowthDisplay();
+    console.log(`[もも] 記憶エンジン更新完了 (Lv.${gd.level} 学習${gd.total}個)`);
+    showToast(`🧠 学習更新 · Lv.${gd.level}（${gd.total}個）`);
   } catch (e) { console.warn('[もも] 記憶更新失敗', e.message); }
 }
 
@@ -999,20 +1004,11 @@ function updateMemoryUI() {
 }
 
 function updateGrowthUI(gd) {
-  if (!gd) gd = getGrowthLevel(totalMsgCount);
+  if (!gd) gd = getGrowthInfo();
   document.getElementById('growthLv').textContent = `Lv.${gd.level}`;
-  document.getElementById('growthTitle').textContent = gd.title;
+  document.getElementById('growthTitle').textContent = `${gd.total}個学習`;
   const fill = document.getElementById('growthFill');
-  if (gd.next) {
-    // 現レベルの開始メッセージ数を計算
-    const prevLevel = getGrowthLevel(Math.max(0, totalMsgCount - 1));
-    const thresholds = [0, 10, 30, 80, 150, 300, 500, 700, 1000, 1500, 2000];
-    const currentThreshold = thresholds[gd.level] || 0;
-    const progress = (totalMsgCount - currentThreshold) / (gd.next - currentThreshold);
-    fill.style.width = Math.min(100, Math.max(5, progress * 100)) + '%';
-  } else {
-    fill.style.width = '100%';
-  }
+  fill.style.width = Math.max(5, gd.progress * 100) + '%';
 }
 
 // ================================================================
@@ -1085,9 +1081,10 @@ async function startChat() {
     (async () => {
       try {
         db          = await openDB();
-        [longSummary, importantMemories, ripiWords, emotionLog, growthData] = await Promise.all([
+        [longSummary, importantMemories, ripiWords, emotionLog, adoptedWords, behaviorFeedback] = await Promise.all([
           idbGetM(KEY_SUMMARY), idbGetM(KEY_IMPORTANT),
-          idbGetM(KEY_RIPI_WORDS), idbGetM(KEY_EMOTION_LOG), idbGetM(KEY_GROWTH)
+          idbGetM(KEY_RIPI_WORDS), idbGetM(KEY_EMOTION_LOG),
+          idbGetM(KEY_ADOPTED), idbGetM(KEY_FEEDBACK)
         ]);
         const all   = await idbAll();
         totalMsgCount = all.length;
@@ -1123,10 +1120,10 @@ async function startChat() {
     if (longSummary) setTimeout(() => showToast('🧠 長期記憶あり'), 2600);
     if (importantMemories) setTimeout(() => showToast('💎 重要記憶あり'), 3200);
     if (ripiWords) setTimeout(() => showToast('💬 りぴ語録あり'), 3800);
+    if (behaviorFeedback) setTimeout(() => showToast('📝 フィードバック学習済み'), 4400);
 
-    const gd = updateGrowthData();
-    updateGrowthUI(gd);
-    setTimeout(() => showToast(`💕 Lv.${gd.level} ${gd.title}（${gd.totalMessages}通）`), 4400);
+    const gd = updateGrowthDisplay();
+    setTimeout(() => showToast(`🌱 Lv.${gd.level}（${gd.total}個学習済み）`), 5000);
 
     updateMemoryUI();
     setTimeout(() => {
