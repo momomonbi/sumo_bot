@@ -1162,7 +1162,7 @@ async function sendMessage() {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: MODEL, messages: msgs, stream: true, max_completion_tokens: 1024 })
+      body: JSON.stringify({ model: MODEL, messages: msgs, stream: true, max_completion_tokens: 4096 })
     });
 
     if (!res.ok) {
@@ -1175,12 +1175,20 @@ async function sendMessage() {
     let fullText  = '';
     const reader  = res.body.getReader();
     const decoder = new TextDecoder();
+    let sseBuffer = '';  // SSEパース用バッファ
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      for (const line of decoder.decode(value).split('\n').filter(l => l.startsWith('data: '))) {
-        const d = line.slice(6);
+      // stream: true でマルチバイト文字の分割を防ぐ
+      sseBuffer += decoder.decode(value, { stream: true });
+      const lines = sseBuffer.split('\n');
+      // 最後の行は不完全な可能性があるのでバッファに残す
+      sseBuffer = lines.pop() || '';
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data: ')) continue;
+        const d = trimmed.slice(6);
         if (d === '[DONE]') continue;
         try {
           const delta = JSON.parse(d).choices?.[0]?.delta?.content || '';
