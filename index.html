@@ -156,12 +156,100 @@ header {
 .mem-track { display: flex; gap: 2px; }
 .mem-pip { width: 3px; height: 9px; border-radius: 2px; background: rgba(255,255,255,0.09); transition: background 0.3s; }
 .mem-pip.filled { background: var(--accent); opacity: 0.55; }
-.btn-clear {
+/* ── header buttons ── */
+.btn-header {
   background: none; border: 1px solid var(--border); color: var(--text-muted);
   font-family: 'Syne', sans-serif; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
-  padding: 5px 11px; border-radius: 6px; cursor: pointer; transition: border-color 0.2s, color 0.2s;
+  padding: 5px 11px; border-radius: 6px; cursor: pointer; transition: border-color 0.2s, color 0.2s, background 0.2s;
 }
-.btn-clear:hover { border-color: rgba(255,255,255,0.2); color: var(--text); }
+.btn-header:hover { border-color: rgba(255,255,255,0.2); color: var(--text); }
+.btn-header.accent { border-color: rgba(200,240,160,0.25); color: var(--accent); }
+.btn-header.accent:hover { background: rgba(200,240,160,0.08); }
+
+/* ═══════════════════════════════════════
+   HISTORY PANEL (slide-over)
+═══════════════════════════════════════ */
+.history-overlay {
+  position: fixed; inset: 0; z-index: 300;
+  background: rgba(0,0,0,0.5); backdrop-filter: blur(4px);
+  opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
+}
+.history-overlay.open { opacity: 1; pointer-events: auto; }
+
+.history-panel {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 301;
+  width: min(380px, 88vw); background: var(--surface);
+  border-left: 1px solid var(--border);
+  transform: translateX(100%); transition: transform 0.35s cubic-bezier(.22,1,.36,1);
+  display: flex; flex-direction: column;
+}
+.history-overlay.open + .history-panel,
+.history-panel.open { transform: translateX(0); }
+
+.history-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.history-header h2 {
+  font-family: 'DM Serif Display', serif; font-size: 17px; font-weight: 400;
+  color: var(--text); letter-spacing: -0.3px;
+}
+.history-header h2 em { color: var(--accent); font-style: italic; }
+.btn-close-hist {
+  background: none; border: 1px solid var(--border); color: var(--text-muted);
+  width: 28px; height: 28px; border-radius: 6px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; font-size: 14px;
+  transition: border-color 0.2s, color 0.2s;
+}
+.btn-close-hist:hover { border-color: rgba(255,255,255,0.2); color: var(--text); }
+
+.history-list {
+  flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px;
+}
+.history-list::-webkit-scrollbar { width: 3px; }
+.history-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+
+.history-empty {
+  display: flex; align-items: center; justify-content: center;
+  height: 100%; color: var(--text-muted); font-size: 13px;
+}
+
+.hist-card {
+  background: rgba(255,255,255,0.025); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px 14px; cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, transform 0.15s;
+  animation: elemFadeIn 0.3s ease both;
+}
+.hist-card:hover { background: rgba(200,240,160,0.04); border-color: rgba(200,240,160,0.15); transform: translateX(-2px); }
+.hist-card-title {
+  font-size: 14px; color: var(--text); font-weight: 400; margin-bottom: 4px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.hist-card-meta {
+  display: flex; justify-content: space-between; align-items: center;
+  font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-muted);
+}
+.hist-card-count { color: var(--accent); opacity: 0.6; }
+.hist-card-del {
+  background: none; border: none; color: var(--text-muted); cursor: pointer;
+  font-size: 11px; padding: 2px 6px; border-radius: 4px; transition: color 0.2s, background 0.2s;
+}
+.hist-card-del:hover { color: #ff7b7b; background: rgba(255,123,123,0.1); }
+
+/* ── history view mode (read-only messages) ── */
+.history-viewing-bar {
+  display: none; align-items: center; justify-content: space-between;
+  padding: 8px 22px; background: rgba(200,240,160,0.06);
+  border-bottom: 1px solid rgba(200,240,160,0.12); flex-shrink: 0;
+}
+.history-viewing-bar.show { display: flex; }
+.history-viewing-bar span { font-size: 12px; color: var(--accent); font-family: 'DM Mono', monospace; }
+.btn-back-chat {
+  background: var(--accent); color: #0d0d0f; border: none; border-radius: 6px;
+  font-family: 'Syne', sans-serif; font-size: 11px; font-weight: 500;
+  letter-spacing: 0.06em; padding: 5px 12px; cursor: pointer; transition: opacity 0.2s;
+}
+.btn-back-chat:hover { opacity: 0.8; }
 
 /* ── messages ── */
 #messages {
@@ -548,9 +636,15 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
         <span id="memCount">0</span>
         <div class="mem-track" id="memTrack"></div>
       </div>
-      <button class="btn-clear" onclick="clearChat()">Clear</button>
+      <button class="btn-header accent" onclick="openHistory()">履歴</button>
+      <button class="btn-header" onclick="newChat()">New</button>
     </div>
   </header>
+
+  <div class="history-viewing-bar" id="viewingBar">
+    <span id="viewingTitle">📖 閲覧中</span>
+    <button class="btn-back-chat" onclick="backToChat()">← 会話に戻る</button>
+  </div>
 
   <div id="messages">
     <div class="empty-state" id="emptyState">
@@ -582,15 +676,28 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
 
 <div class="db-toast" id="dbToast"></div>
 
+<!-- HISTORY PANEL -->
+<div class="history-overlay" id="histOverlay" onclick="closeHistory()"></div>
+<div class="history-panel" id="histPanel">
+  <div class="history-header">
+    <h2>会話履歴<em>.</em></h2>
+    <button class="btn-close-hist" onclick="closeHistory()">✕</button>
+  </div>
+  <div class="history-list" id="histList">
+    <div class="history-empty">まだ履歴がありません</div>
+  </div>
+</div>
+
 <script>
 // ================================================================
 // CONSTANTS
 // ================================================================
 const API_CONTEXT   = 30;     // APIに送る直近件数（記憶の窓）
 const DB_NAME       = 'momochat_db';
-const DB_VERSION    = 3;      // bump version to handle schema upgrade
+const DB_VERSION    = 4;      // bump version to handle schema upgrade
 const MSG_STORE     = 'messages';
 const META_STORE    = 'meta';
+const ARCHIVE_STORE = 'archives';  // 会話アーカイブ
 const MODEL         = 'gpt-5.4';
 const SUMMARY_EVERY = 20;
 // 重要記憶キー（削除されない永続情報）
@@ -794,6 +901,10 @@ function openDB() {
       if (!d.objectStoreNames.contains(META_STORE)) {
         d.createObjectStore(META_STORE, { keyPath: 'key' });
       }
+      if (!d.objectStoreNames.contains(ARCHIVE_STORE)) {
+        const a = d.createObjectStore(ARCHIVE_STORE, { keyPath: 'id', autoIncrement: true });
+        a.createIndex('ts', 'ts', { unique: false });
+      }
     };
     req.onsuccess = e => resolve(e.target.result);
     req.onerror   = e => reject(e.target.error);
@@ -806,6 +917,10 @@ const idbAdd = (rec)    => new Promise((res,rej) => { const r = idbTx(MSG_STORE,
 const idbClear= ()      => new Promise((res,rej) => { const r = idbTx(MSG_STORE,'readwrite').clear(); r.onsuccess=()=>res(); r.onerror=e=>rej(e.target.error); });
 const idbGetM = (k)     => new Promise((res)     => { const r = idbTx(META_STORE,'readonly').get(k); r.onsuccess=e=>res(e.target.result?.value??''); r.onerror=()=>res(''); });
 const idbSetM = (k,v)   => new Promise((res,rej) => { const r = idbTx(META_STORE,'readwrite').put({key:k,value:v}); r.onsuccess=()=>res(); r.onerror=e=>rej(e.target.error); });
+// Archive helpers
+const arcAdd  = (rec)   => new Promise((res,rej) => { const r = idbTx(ARCHIVE_STORE,'readwrite').add(rec); r.onsuccess=e=>res(e.target.result); r.onerror=e=>rej(e.target.error); });
+const arcAll  = ()       => new Promise((res,rej) => { const r = idbTx(ARCHIVE_STORE,'readonly').index('ts').getAll(); r.onsuccess=e=>res(e.target.result); r.onerror=e=>rej(e.target.error); });
+const arcDel  = (id)    => new Promise((res,rej) => { const r = idbTx(ARCHIVE_STORE,'readwrite').delete(id); r.onsuccess=()=>res(); r.onerror=e=>rej(e.target.error); });
 
 // メッセージを保存（テキストのみ。画像はbase64が大きすぎるため除外）
 async function persistMessage(role, textContent) {
@@ -1159,22 +1274,157 @@ function autoResize(el) {
   el.style.height = Math.min(el.scrollHeight, 160) + 'px';
 }
 
-async function clearChat() {
+// ================================================================
+// ARCHIVE & HISTORY SYSTEM
+// ================================================================
+let isViewingHistory = false;
+let savedHistory     = [];   // 閲覧中に現在の会話を一時退避
+let savedMsgsHTML    = '';
+
+// AIにタイトルを付けてもらう
+async function generateTitle(messages) {
+  const sample = messages.slice(-20).map(r => `${r.role==='user'?'りぴ':'もも'}: ${r.content}`).join('\n');
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: MODEL, temperature: 0.3, max_completion_tokens: 60,
+        messages: [
+          { role:'system', content:'以下の会話に短いタイトルを付けてください。15文字以内。タイトルのみ出力。括弧や記号は不要。' },
+          { role:'user', content: sample }
+        ]
+      })
+    });
+    if (!res.ok) return null;
+    const d = await res.json();
+    return d.choices?.[0]?.message?.content?.trim() || null;
+  } catch { return null; }
+}
+
+// 現在の会話をアーカイブして新しい会話を開始
+async function newChat() {
+  if (!db) return;
+  const all = await idbAll();
+  if (all.length === 0) { showToast('会話がありません'); return; }
+
+  showToast('📦 会話をアーカイブ中...');
+
+  // タイトル生成
+  const title = await generateTitle(all) || `会話 (${all.length}通)`;
+  const firstTs = all[0]?.ts || Date.now();
+  const lastTs  = all[all.length - 1]?.ts || Date.now();
+
+  // アーカイブに保存
+  await arcAdd({
+    title,
+    messages: all.map(r => ({ role: r.role, content: r.content, ts: r.ts })),
+    msgCount: all.length,
+    firstTs, lastTs,
+    ts: Date.now()
+  });
+
+  // 現在の会話をクリア
   history = []; longSummary = ''; totalMsgCount = 0;
   pendingImages = []; updateImagePreview();
-  if (db) {
-    await idbClear();
-    await idbSetM(KEY_SUMMARY, '');
-    // 永久記憶は Clear しても消さない:
-    // importantMemories, ripiWords, emotionLog, growthData
-  }
-  showToast('🗑 会話履歴を削除しました（永久記憶は保持）');
+  await idbClear();
+  await idbSetM(KEY_SUMMARY, '');
+
   document.getElementById('messages').innerHTML = `
     <div class="empty-state" id="emptyState">
       <div class="big-letter">m</div>
       <p>おかえり、りぴ。</p>
     </div>`;
   updateMemoryUI();
+  showToast(`📦 「${title}」を保存しました`);
+}
+
+// 履歴パネルを開く
+async function openHistory() {
+  if (!db) return;
+  const archives = await arcAll();
+  const list = document.getElementById('histList');
+
+  if (archives.length === 0) {
+    list.innerHTML = '<div class="history-empty">まだ履歴がありません</div>';
+  } else {
+    // 新しい順
+    list.innerHTML = archives.reverse().map(a => {
+      const d = new Date(a.lastTs);
+      const dateStr = `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+      return `<div class="hist-card" onclick="viewArchive(${a.id})">
+        <div class="hist-card-title">${esc(a.title)}</div>
+        <div class="hist-card-meta">
+          <span>${dateStr}</span>
+          <span class="hist-card-count">${a.msgCount}通</span>
+          <button class="hist-card-del" onclick="event.stopPropagation();deleteArchive(${a.id})">削除</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  document.getElementById('histOverlay').classList.add('open');
+  document.getElementById('histPanel').classList.add('open');
+}
+
+function closeHistory() {
+  document.getElementById('histOverlay').classList.remove('open');
+  document.getElementById('histPanel').classList.remove('open');
+}
+
+// アーカイブを閲覧
+async function viewArchive(id) {
+  if (!db) return;
+  closeHistory();
+
+  // 現在の会話を退避
+  if (!isViewingHistory) {
+    savedHistory = [...history];
+    savedMsgsHTML = document.getElementById('messages').innerHTML;
+  }
+  isViewingHistory = true;
+
+  // アーカイブ取得
+  const arc = await new Promise((res, rej) => {
+    const r = idbTx(ARCHIVE_STORE, 'readonly').get(id);
+    r.onsuccess = e => res(e.target.result);
+    r.onerror = e => rej(e.target.error);
+  });
+  if (!arc) { showToast('アーカイブが見つかりません'); return; }
+
+  // 閲覧バー表示
+  document.getElementById('viewingBar').classList.add('show');
+  document.getElementById('viewingTitle').textContent = `📖 ${arc.title}`;
+
+  // メッセージ描画
+  const msgs = document.getElementById('messages');
+  msgs.innerHTML = '';
+  arc.messages.forEach(r => renderMessage(r.role === 'assistant' ? 'ai' : r.role, r.content, false));
+  msgs.scrollTop = 0;
+
+  // 入力無効化
+  document.getElementById('input').disabled = true;
+  document.getElementById('sendBtn').disabled = true;
+}
+
+// 閲覧モードから戻る
+function backToChat() {
+  isViewingHistory = false;
+  document.getElementById('viewingBar').classList.remove('show');
+  document.getElementById('messages').innerHTML = savedMsgsHTML;
+  document.getElementById('input').disabled = false;
+  document.getElementById('sendBtn').disabled = false;
+  history = savedHistory;
+  savedHistory = []; savedMsgsHTML = '';
+  setTimeout(() => { document.getElementById('messages').scrollTop = 999999; }, 50);
+}
+
+// アーカイブ削除
+async function deleteArchive(id) {
+  if (!db) return;
+  await arcDel(id);
+  showToast('🗑 削除しました');
+  openHistory(); // リスト更新
 }
 
 function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
