@@ -563,6 +563,42 @@ header {
 }
 .bubble .kv-val { font-size: 14.5px; color: var(--text); }
 
+/* ── コピーボタン ── */
+.copy-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 5px;
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+  color: var(--text-muted); cursor: pointer; flex-shrink: 0;
+  opacity: 0; transition: opacity 0.2s, background 0.2s, color 0.2s, transform 0.15s;
+  font-size: 11px; line-height: 1; padding: 0;
+}
+.copy-btn:hover { background: rgba(200,240,160,0.12); color: var(--accent); border-color: rgba(200,240,160,0.2); }
+.copy-btn:active { transform: scale(0.9); }
+.copy-btn.copied { background: rgba(200,240,160,0.15); color: var(--accent); opacity: 1; }
+/* リスト項目ホバーでコピーボタン表示 */
+.bubble li:hover .copy-btn,
+.bubble .kv-row:hover .copy-btn,
+.bubble blockquote:hover .copy-btn,
+.bubble pre:hover .copy-btn,
+.bubble p:hover .copy-btn { opacity: 1; }
+/* リスト項目のレイアウト調整 */
+.bubble li { display: flex; align-items: flex-start; gap: 6px; }
+.bubble li .li-text { flex: 1; }
+.bubble .kv-row { position: relative; }
+.bubble .kv-row .copy-btn { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); }
+.bubble .kv-row:hover .copy-btn { opacity: 1; transform: translateY(-50%); }
+.bubble .kv-row .copy-btn:active { transform: translateY(-50%) scale(0.9); }
+/* コードブロックのコピー */
+.bubble pre { position: relative; }
+.bubble pre .copy-btn {
+  position: absolute; top: 8px; right: 8px; opacity: 0;
+  width: 26px; height: 26px; border-radius: 6px;
+}
+/* 段落のコピー */
+.bubble p { position: relative; display: flex; align-items: flex-start; gap: 6px; }
+.bubble p .p-text { flex: 1; }
+.bubble p .copy-btn { flex-shrink: 0; margin-top: 2px; }
+
 /* ── コードブロック ── */
 .bubble pre {
   background: rgba(255,255,255,0.03); border: 1px solid var(--border);
@@ -1772,6 +1808,31 @@ function closeLearnModal() {
   document.getElementById('learnOverlay').classList.remove('open');
 }
 
+// ================================================================
+// COPY BUTTON
+// ================================================================
+function copyText(btn, text) {
+  // HTMLエンティティを元に戻す
+  const tmp = document.createElement('textarea');
+  tmp.innerHTML = text;
+  const decoded = tmp.value;
+  navigator.clipboard.writeText(decoded).then(() => {
+    btn.textContent = '✓';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = '⧉'; btn.classList.remove('copied'); }, 1500);
+  }).catch(() => {
+    // fallback
+    tmp.value = decoded;
+    document.body.appendChild(tmp);
+    tmp.select();
+    document.execCommand('copy');
+    document.body.removeChild(tmp);
+    btn.textContent = '✓';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = '⧉'; btn.classList.remove('copied'); }, 1500);
+  });
+}
+
 function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 function fmtInline(s) {
@@ -1785,7 +1846,8 @@ function fmt(text) {
   // ── コードブロック退避 ──
   const codeBlocks = [];
   text = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, l, c) => {
-    codeBlocks.push(`<pre><code>${esc(c.trim())}</code></pre>`);
+    const escaped = esc(c.trim());
+    codeBlocks.push(`<pre><button class="copy-btn" onclick="copyText(this,this.parentElement.querySelector('code').textContent)">⧉</button><code>${escaped}</code></pre>`);
     return `\n%%CODEBLOCK_${codeBlocks.length - 1}%%\n`;
   });
 
@@ -1849,7 +1911,8 @@ function fmt(text) {
     if (olMatch) {
       flushPara(); closeBq();
       if (!inOl) { closeList(); html += '<ol>'; inOl = true; }
-      html += `<li>${fmtInline(olMatch[2])}</li>`;
+      const liText = olMatch[2];
+      html += `<li><span class="li-text">${fmtInline(liText)}</span><button class="copy-btn" onclick="copyText(this,'${esc(liText).replace(/'/g,'&#39;')}')">⧉</button></li>`;
       continue;
     }
 
@@ -1857,7 +1920,8 @@ function fmt(text) {
     if (/^[-*・✅⚠️❌▸►●◎◆]\s+/.test(trimmed) || /^[・]/.test(trimmed)) {
       flushPara(); closeBq();
       if (!inUl) { closeList(); html += '<ul>'; inUl = true; }
-      html += `<li>${fmtInline(trimmed.replace(/^[-*・✅⚠️❌▸►●◎◆]\s*/, ''))}</li>`;
+      const liText = trimmed.replace(/^[-*・✅⚠️❌▸►●◎◆]\s*/, '');
+      html += `<li><span class="li-text">${fmtInline(liText)}</span><button class="copy-btn" onclick="copyText(this,'${esc(liText).replace(/'/g,'&#39;')}')">⧉</button></li>`;
       continue;
     }
 
@@ -1865,7 +1929,8 @@ function fmt(text) {
     const kvMatch = trimmed.match(/^(.{1,15})[：:]\s*(.+)/);
     if (kvMatch && !inUl && !inOl) {
       flushPara(); closeBq();
-      html += `<div class="kv-row"><span class="kv-key">${fmtInline(kvMatch[1])}</span><span class="kv-val">${fmtInline(kvMatch[2])}</span></div>`;
+      const kvVal = kvMatch[2];
+      html += `<div class="kv-row"><span class="kv-key">${fmtInline(kvMatch[1])}</span><span class="kv-val">${fmtInline(kvVal)}</span><button class="copy-btn" onclick="copyText(this,'${esc(kvVal).replace(/'/g,'&#39;')}')">⧉</button></div>`;
       continue;
     }
 
