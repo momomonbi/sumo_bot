@@ -585,18 +585,11 @@ header {
   font-weight: 500; pointer-events: none;
 }
 
-/* ── タップコピー共通 ── */
-.ai .bubble p,
-.ai .bubble li .li-text,
-.ai .bubble blockquote,
-.ai .bubble .kv-val {
+/* ── タップコピー（引用のみ） ── */
+.ai .bubble blockquote {
   cursor: pointer; transition: background 0.15s;
-  border-radius: 4px;
 }
-.ai .bubble p:active,
-.ai .bubble li .li-text:active,
-.ai .bubble blockquote:active,
-.ai .bubble .kv-val:active {
+.ai .bubble blockquote:active {
   background: rgba(200,240,160,0.08);
 }
 /* コピーフラッシュ */
@@ -620,7 +613,7 @@ header {
   pointer-events: none; opacity: 0.6;
 }
 
-/* ── コピーボタン ── */
+/* ── コピーボタン（コードブロック・引用のみ） ── */
 .copy-btn {
   display: inline-flex; align-items: center; justify-content: center;
   width: 22px; height: 22px; border-radius: 5px;
@@ -632,27 +625,19 @@ header {
 .copy-btn:hover { background: rgba(200,240,160,0.12); color: var(--accent); border-color: rgba(200,240,160,0.2); }
 .copy-btn:active { transform: scale(0.9); }
 .copy-btn.copied { background: rgba(200,240,160,0.15); color: var(--accent); opacity: 1; }
-/* リスト項目ホバーでコピーボタン表示 */
-.bubble li:hover .copy-btn,
-.bubble .kv-row:hover .copy-btn,
 .bubble blockquote:hover .copy-btn,
-.bubble pre:hover .copy-btn,
-.bubble p:hover .copy-btn { opacity: 1; }
-/* リスト項目のレイアウト調整 */
-.bubble li { display: flex; align-items: flex-start; gap: 6px; }
-.bubble li .li-text { flex: 1; }
-.bubble .kv-row { position: relative; }
-.bubble .kv-row .copy-btn { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); }
-.bubble .kv-row:hover .copy-btn { opacity: 1; transform: translateY(-50%); }
-.bubble .kv-row .copy-btn:active { transform: translateY(-50%) scale(0.9); }
-/* コードブロックのコピー */
+.bubble pre:hover .copy-btn { opacity: 1; }
+/* コードブロック */
 .bubble pre { position: relative; }
 .bubble pre .copy-btn {
   position: absolute; top: 8px; right: 8px; opacity: 0;
   width: 26px; height: 26px; border-radius: 6px;
 }
-/* 段落 — flexは使わない（インライン要素が分断されるため） */
-.bubble p { position: relative; }
+/* 引用 */
+.bubble blockquote { position: relative; }
+.bubble blockquote .copy-btn {
+  position: absolute; top: 6px; right: 6px;
+}
 
 /* ── コードブロック ── */
 .bubble pre {
@@ -1944,8 +1929,8 @@ function makeQuestionsClickable(bubble) {
 // TAP-TO-COPY — AI発言のテキスト要素をタップでコピー
 // ================================================================
 function makeTapCopyable(bubble) {
-  // 対象: p, li .li-text, blockquote, kv-val
-  const targets = bubble.querySelectorAll('p, li .li-text, blockquote, .kv-val');
+  // 対象: 引用ブロックのみ（AIが提示した文書スタイル）
+  const targets = bubble.querySelectorAll('blockquote');
   targets.forEach(el => {
     el.addEventListener('click', (e) => {
       // コピーボタンや選択肢ボタンのクリックは除外
@@ -2132,7 +2117,7 @@ function fmt(text) {
       flushPara(); closeBq();
       if (!inOl) { closeList(); html += '<ol>'; inOl = true; }
       const liText = olMatch[2];
-      html += `<li><span class="li-text">${fmtInline(liText)}</span><button class="copy-btn" onclick="copyText(this,'${esc(liText).replace(/'/g,'&#39;')}')">⧉</button></li>`;
+      html += `<li><span class="li-text">${fmtInline(liText)}</span></li>`;
       continue;
     }
 
@@ -2141,7 +2126,7 @@ function fmt(text) {
       flushPara(); closeBq();
       if (!inUl) { closeList(); html += '<ul>'; inUl = true; }
       const liText = trimmed.replace(/^[-*・✅⚠️❌▸►●◎◆]\s*/, '');
-      html += `<li><span class="li-text">${fmtInline(liText)}</span><button class="copy-btn" onclick="copyText(this,'${esc(liText).replace(/'/g,'&#39;')}')">⧉</button></li>`;
+      html += `<li><span class="li-text">${fmtInline(liText)}</span></li>`;
       continue;
     }
 
@@ -2151,7 +2136,7 @@ function fmt(text) {
     if (kvMatch && !inUl && !inOl && trimmed.length < 60) {
       flushPara(); closeBq();
       const kvVal = kvMatch[2];
-      html += `<div class="kv-row"><span class="kv-key">${fmtInline(kvMatch[1])}</span><span class="kv-val">${fmtInline(kvVal)}</span><button class="copy-btn" onclick="copyText(this,'${esc(kvVal).replace(/'/g,'&#39;')}')">⧉</button></div>`;
+      html += `<div class="kv-row"><span class="kv-key">${fmtInline(kvMatch[1])}</span><span class="kv-val">${fmtInline(kvVal)}</span></div>`;
       continue;
     }
 
