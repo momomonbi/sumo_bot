@@ -1568,26 +1568,26 @@ async function newChat() {
 // REALTIME TOPIC DETECTION — 会話をリアルタイムで区切り・履歴化
 // ================================================================
 let currentTopicTitle = '';
-let currentTopicMsgs  = [];   // 現トピックのメッセージ [{role, content, ts}]
-let topicCount        = 0;    // 今セッションのトピック番号
+let currentTopicMsgs  = [];   // 現トピックのメッセージ
+let topicCount        = 0;
 let topicCheckPending = false;
+let lastTopicCheckAt  = 0;    // 前回チェック時のメッセージ数
+let topicSavedFlag    = false; // ページ離脱で二重保存防止
+const TOPIC_CHECK_INTERVAL = 4; // N通ごとにチェック（毎回ではなく間引く）
 
 function showTopicBar(title, num) {
-  const bar = document.getElementById('topicBar');
   document.getElementById('topicTitle').textContent = title;
   document.getElementById('topicNum').textContent = `#${num}`;
-  bar.classList.add('show');
+  document.getElementById('topicBar').classList.add('show');
 }
 
-// AIにトピック分析させる（軽量・高速）
 async function analyzeTopicShift(recentMessages) {
-  const sample = recentMessages.slice(-10).map(r =>
+  const sample = recentMessages.slice(-12).map(r =>
     `${r.role === 'user' ? 'りぴ' : 'もも'}: ${r.content}`
   ).join('\n');
 
   const currentInfo = currentTopicTitle
-    ? `現在のトピック:「${currentTopicTitle}」`
-    : '（まだトピックなし）';
+    ? `現在のトピック:「${currentTopicTitle}」` : '（まだトピックなし）';
 
   try {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -1597,76 +1597,74 @@ async function analyzeTopicShift(recentMessages) {
         model: MODEL, temperature: 0, max_completion_tokens: 80,
         messages: [{
           role: 'system',
-          content: `あなたは会話のトピック分析係です。以下のルールに従い、JSON形式のみで出力してください。
+          content: `あなたは恋人同士の会話のトピック分析係です。JSON形式のみで出力。
 
 ${currentInfo}
 
-【判定ルール】
-- 会話の話題が明確に変わった場合: {"changed":true,"title":"新しいトピック名"}
-- 同じ話題が続いている場合: {"changed":false,"title":"現在のトピック名"}
-- まだトピックが決まっていない場合: {"changed":false,"title":"トピック名"}
+【判定ルール — 慎重に判断すること】
+- changed:true は「完全に別の話題に移った」場合のみ。
+- 同じ話題の中で少し脱線した程度や、感情表現・相槌・甘え言葉はトピック変更ではない。
+- 「仕事の話→晩ご飯の話」は変更。「仕事の愚痴→仕事の相談」は変更ではない。
+- 迷ったら changed:false にすること。
 
-【タイトルのルール】
-- 12文字以内の日本語
-- 具体的な内容を反映（「雑談」は避ける）
-- 例: 「仕事の愚痴」「りぴの体調」「週末の予定」「甘えタイム」「イラストの相談」`
-        }, {
-          role: 'user', content: sample
-        }]
+出力: {"changed":true/false,"title":"12文字以内のトピック名"}`
+        }, { role: 'user', content: sample }]
       })
     });
     if (!res.ok) return null;
     const d = await res.json();
     const text = d.choices?.[0]?.message?.content?.trim() || '';
-    // JSON抽出
     const match = text.match(/\{[\s\S]*\}/);
     if (!match) return null;
     return JSON.parse(match[0]);
   } catch { return null; }
 }
 
-// メイン: 毎回のAI返答後に呼ぶ
 async function maybeUpdateTopic() {
   if (!db || topicCheckPending) return;
+  // 間引き: N通ごとにチェック
+  if (totalMsgCount - lastTopicCheckAt < TOPIC_CHECK_INTERVAL) return;
+  lastTopicCheckAt = totalMsgCount;
   topicCheckPending = true;
 
   try {
     const all = await idbAll();
-    if (all.length < 2) {
-      topicCheckPending = false;
-      return;
-    }
+    if (all.length < 4) { topicCheckPending = false; return; }
 
     const result = await analyzeTopicShift(all);
     if (!result) { topicCheckPending = false; return; }
 
-    if (result.changed && currentTopicTitle && currentTopicMsgs.length >= 2) {
-      // ── トピックが変わった → 前のトピックをアーカイブ ──
+    if (result.changed && currentTopicTitle && currentTopicMsgs.length >= 4) {
+      // ── トピック変更 → 前トピックをアーカイブ ──
       const firstTs = currentTopicMsgs[0]?.ts || Date.now();
       const lastTs  = currentTopicMsgs[currentTopicMsgs.length - 1]?.ts || Date.now();
       await arcAdd({
-        title: currentTopicTitle,
-        messages: currentTopicMsgs,
-        msgCount: currentTopicMsgs.length,
-        firstTs, lastTs,
-        ts: Date.now()
+        title: currentTopicTitle, messages: currentTopicMsgs,
+        msgCount: currentTopicMsgs.length, firstTs, lastTs, ts: Date.now()
       });
-      console.log(`[もも] トピック保存: 「${currentTopicTitle}」(${currentTopicMsgs.length}通)`);
       showToast(`📖 「${currentTopicTitle}」を履歴に保存`);
-
-      // 新トピック開始
+      topicSavedFlag = false;
+      // 新トピック開始（直近の数通を引き継ぐ）
       currentTopicMsgs = all.slice(-4).map(r => ({ role: r.role, content: r.content, ts: r.ts }));
     }
 
-    // トピック更新
-    if (result.title && result.title !== currentTopicTitle) {
-      currentTopicTitle = result.title;
-      topicCount++;
-      showTopicBar(currentTopicTitle, topicCount);
+    // タイトル更新（初回 or 変更時）
+    if (result.title) {
+      if (!currentTopicTitle) {
+        // 初回トピック確定
+        currentTopicTitle = result.title;
+        topicCount++;
+        showTopicBar(currentTopicTitle, topicCount);
+      } else if (result.changed) {
+        currentTopicTitle = result.title;
+        topicCount++;
+        showTopicBar(currentTopicTitle, topicCount);
+      }
+      // 同じトピック内でのタイトル微調整は無視（重複防止）
     }
 
-    // 現トピックにメッセージ追加（最新のものだけ）
-    const latest = all.slice(-2);
+    // 現トピックにメッセージ追加
+    const latest = all.slice(-TOPIC_CHECK_INTERVAL);
     for (const m of latest) {
       if (!currentTopicMsgs.find(x => x.ts === m.ts)) {
         currentTopicMsgs.push({ role: m.role, content: m.content, ts: m.ts });
@@ -1676,9 +1674,10 @@ async function maybeUpdateTopic() {
   topicCheckPending = false;
 }
 
-// ページ離脱時に現在のトピックを保存
+// ページ離脱時に現在のトピックを保存（二重保存防止付き）
 async function saveCurrentTopic() {
-  if (!db || !currentTopicTitle || currentTopicMsgs.length < 2) return;
+  if (!db || !currentTopicTitle || currentTopicMsgs.length < 4 || topicSavedFlag) return;
+  topicSavedFlag = true;
   try {
     const firstTs = currentTopicMsgs[0]?.ts || Date.now();
     const lastTs  = currentTopicMsgs[currentTopicMsgs.length - 1]?.ts || Date.now();
@@ -1686,7 +1685,7 @@ async function saveCurrentTopic() {
       title: currentTopicTitle, messages: currentTopicMsgs,
       msgCount: currentTopicMsgs.length, firstTs, lastTs, ts: Date.now()
     });
-  } catch {}
+  } catch { topicSavedFlag = false; }
 }
 window.addEventListener('beforeunload', () => { saveCurrentTopic(); });
 document.addEventListener('visibilitychange', () => {
