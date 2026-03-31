@@ -1109,9 +1109,12 @@ ${emotionLog.trim()}
 }
 
 function buildTimePrompt() {
-  const jst  = new Date(Date.now() + 9 * 3600000);
-  const days = ['日','月','火','水','木','金','土'];
-  const str  = `${jst.getUTCFullYear()}年${jst.getUTCMonth()+1}月${jst.getUTCDate()}日(${days[jst.getUTCDay()]}) ${String(jst.getUTCHours()).padStart(2,'0')}:${String(jst.getUTCMinutes()).padStart(2,'0')}`;
+  const fmt = new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric', month: 'long', day: 'numeric', weekday: 'short',
+    hour: '2-digit', minute: '2-digit', hour12: false
+  });
+  const str = fmt.format(new Date());
   return `【現在日時: ${str}（JST）】\nメモリ内にこの日付に近い「予定」や「約束」があれば、会話の流れの中で自然に確認してください。ただし、唐突すぎないように注意すること。`;
 }
 
@@ -2411,9 +2414,9 @@ async function sendMessage() {
     userContent = sentText;
   }
 
-  // ── push to history (text only for DB / context) ──
+  // ── push to history (text only — 画像base64はhistoryに残さない) ──
   const historyContent = sentText || '[画像を送信]';
-  history.push({ role: 'user', content: userContent });
+  history.push({ role: 'user', content: historyContent });
   if (history.length > API_CONTEXT) history = history.slice(-API_CONTEXT);
 
   // DB: テキストのみ保存（画像base64は容量大のため除外）
@@ -2432,7 +2435,15 @@ async function sendMessage() {
       content: `【長期メモ（要約）】\n${longSummary.trim()}\n\n※上記は背景知識として参照するのみ。自分から蒸し返さないこと。`
     });
   }
-  msgs.push(...history);
+  // historyをコピーし、最後のユーザーメッセージだけ画像付きに差し替え
+  const histCopy = history.map(m => ({ ...m }));
+  if (sentImgs.length > 0 && histCopy.length > 0) {
+    const lastIdx = histCopy.length - 1;
+    if (histCopy[lastIdx].role === 'user') {
+      histCopy[lastIdx] = { role: 'user', content: userContent };
+    }
+  }
+  msgs.push(...histCopy);
 
   try {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
