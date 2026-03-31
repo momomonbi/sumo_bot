@@ -803,15 +803,10 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
 <div id="setup">
   <div class="setup-card">
     <div class="logo">もも<em>.</em></div>
-    <div class="sub">sumo0612 · private chat</div>
+    <div class="sub"></div>
     <label for="apiKey">OpenAI API Key</label>
     <input type="password" id="apiKey" placeholder="sk-..." autocomplete="off" spellcheck="false" inputmode="text">
     <p id="savedKeyNote" style="display:none;margin-top:8px;font-size:11px;color:var(--accent);opacity:0.7;letter-spacing:0.04em;">✓ 保存済みのAPIキーを読み込みました</p>
-    <p class="setup-note">
-      キーはブラウザ内のみで使用されます。<br>
-      プロファイル読込には <code>sumo_ripi_basic_info.txt</code> を同フォルダに置き<br>
-      HTTP サーバ経由で開いてください。
-    </p>
     <button class="btn-start" onclick="startChat()">ももと話す →</button>
   </div>
 </div>
@@ -883,7 +878,6 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
         </svg>
       </button>
     </div>
-    <div class="hint">Enter で送信 · Shift+Enter で改行 · 📎 画像添付可</div>
   </footer>
 </div>
 
