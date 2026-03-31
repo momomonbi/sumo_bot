@@ -2374,6 +2374,86 @@ async function correctTypos(text) {
 }
 
 // ================================================================
+// WEB SEARCH — OpenAI Responses API の web_search ツール
+// ================================================================
+async function needsWebSearch(userText) {
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: MODEL, temperature: 0, max_completion_tokens: 10,
+        messages: [{
+          role: 'system',
+          content: `ユーザーの発言がWeb検索を必要とするか判定してください。
+YESの場合:
+- 最新ニュース・時事問題・直近の出来事
+- 専門的な技術・医療・法律・学術の質問
+- 具体的なデータ・統計・価格
+- 特定の製品・サービス・人物の最新情報
+- 「調べて」「検索して」と明示的に依頼された場合
+NOの場合:
+- 日常会話・雑談・甘え・感情的なやり取り
+- 個人的な相談や愚痴
+- 既知の一般常識
+- ももとりぴの関係性に関すること
+YESかNOのみ回答。`
+        }, { role: 'user', content: userText }]
+      })
+    });
+    if (!res.ok) return false;
+    const d = await res.json();
+    const answer = d.choices?.[0]?.message?.content?.trim().toUpperCase() || '';
+    return answer.startsWith('YES');
+  } catch { return false; }
+}
+
+async function performWebSearch(userText) {
+  try {
+    const res = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: MODEL,
+        tools: [{
+          type: 'web_search',
+          search_context_size: 'medium',
+          user_location: { type: 'approximate', country: 'JP' }
+        }],
+        input: userText
+      })
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+
+    // テキスト抽出
+    const text = data.output_text || '';
+
+    // ソースURL抽出
+    const sources = [];
+    const seen = new Set();
+    for (const item of (data.output || [])) {
+      if (item.type === 'message') {
+        for (const content of (item.content || [])) {
+          if (content.annotations) {
+            for (const ann of content.annotations) {
+              if (ann.type === 'url_citation' && ann.url && !seen.has(ann.url)) {
+                seen.add(ann.url);
+                sources.push({ title: ann.title || ann.url, url: ann.url });
+              }
+            }
+          }
+        }
+      }
+    }
+    return { text, sources };
+  } catch (e) {
+    console.warn('[もも] Web検索失敗:', e.message);
+    return null;
+  }
+}
+
+// ================================================================
 // SEND
 // ================================================================
 async function sendMessage() {
@@ -2437,6 +2517,17 @@ async function sendMessage() {
   updateMemoryUI();
   showTyping();
 
+  // ── Web検索判定 & 実行 ──
+  let searchResult = null;
+  if (sentText && !hasImgs) {
+    const shouldSearch = await needsWebSearch(sentText);
+    if (shouldSearch) {
+      showToast('🔍 Web検索中...');
+      searchResult = await performWebSearch(sentText);
+      if (searchResult) showToast('✅ 検索完了');
+    }
+  }
+
   // ── build messages array ──
   const msgs = [
     { role: 'system', content: buildSystemPrompt() },
@@ -2446,6 +2537,19 @@ async function sendMessage() {
     msgs.push({
       role: 'system',
       content: `【長期メモ（要約）】\n${longSummary.trim()}\n\n※上記は背景知識として参照するのみ。自分から蒸し返さないこと。`
+    });
+  }
+  if (searchResult) {
+    const srcList = searchResult.sources.map(s => `- ${s.title}: ${s.url}`).join('\n');
+    msgs.push({
+      role: 'system',
+      content: `【Web検索結果】以下はりぴの質問に関するWeb検索結果です。この情報を参考にして、ももらしく回答してください。
+回答の最後に必ず「\\n\\n📎 ソース:」として参照元URLを箇条書きで提示してください。
+
+${searchResult.text}
+
+【参照元】
+${srcList}`
     });
   }
   // historyをコピーし、最後のユーザーメッセージだけ画像付きに差し替え
