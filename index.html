@@ -1902,20 +1902,19 @@ function copyText(btn, text) {
   const tmp = document.createElement('textarea');
   tmp.innerHTML = text;
   const decoded = tmp.value;
-  navigator.clipboard.writeText(decoded).then(() => {
+  const onCopied = () => {
     btn.textContent = '✓';
     btn.classList.add('copied');
+    showToast('✓ コピーしました');
     setTimeout(() => { btn.textContent = '⧉'; btn.classList.remove('copied'); }, 1500);
-  }).catch(() => {
-    // fallback
+  };
+  navigator.clipboard.writeText(decoded).then(onCopied).catch(() => {
     tmp.value = decoded;
     document.body.appendChild(tmp);
     tmp.select();
     document.execCommand('copy');
     document.body.removeChild(tmp);
-    btn.textContent = '✓';
-    btn.classList.add('copied');
-    setTimeout(() => { btn.textContent = '⧉'; btn.classList.remove('copied'); }, 1500);
+    onCopied();
   });
 }
 
