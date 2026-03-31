@@ -324,6 +324,34 @@ header {
 .hist-card-del:hover { color: #ff7b7b; background: rgba(255,123,123,0.1); }
 
 /* ── history view mode (read-only messages) ── */
+/* ── topic bar (リアルタイムトピック表示) ── */
+.topic-bar {
+  display: none; align-items: center; gap: 10px;
+  padding: 6px 22px; background: rgba(200,240,160,0.04);
+  border-bottom: 1px solid rgba(200,240,160,0.08); flex-shrink: 0;
+  animation: elemFadeIn 0.3s ease both;
+}
+.topic-bar.show { display: flex; }
+.topic-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+  box-shadow: 0 0 6px rgba(200,240,160,0.4);
+  animation: typingFlow 2s ease infinite;
+}
+.topic-label {
+  font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.06em;
+  color: var(--text-muted); text-transform: uppercase;
+}
+.topic-title {
+  font-size: 13px; color: var(--accent); font-weight: 400;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;
+  transition: opacity 0.3s;
+}
+.topic-num {
+  font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-muted);
+  background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+  border-radius: 4px; padding: 1px 6px; flex-shrink: 0;
+}
+
 .history-viewing-bar {
   display: none; align-items: center; justify-content: space-between;
   padding: 8px 22px; background: rgba(200,240,160,0.06);
@@ -728,6 +756,13 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
     </div>
   </header>
 
+  <div class="topic-bar" id="topicBar">
+    <div class="topic-dot"></div>
+    <span class="topic-label">TOPIC</span>
+    <span class="topic-title" id="topicTitle">─</span>
+    <span class="topic-num" id="topicNum">#1</span>
+  </div>
+
   <div class="history-viewing-bar" id="viewingBar">
     <span id="viewingTitle">📖 閲覧中</span>
     <button class="btn-back-chat" onclick="backToChat()">← 会話に戻る</button>
@@ -801,7 +836,6 @@ const META_STORE    = 'meta';
 const ARCHIVE_STORE = 'archives';  // 会話アーカイブ
 const MODEL         = 'gpt-5.4';
 const SUMMARY_EVERY = 20;
-const AUTO_ARCHIVE_EVERY = 40;  // 自動アーカイブ間隔（メッセージ数）
 // 重要記憶キー（削除されない永続情報）
 const KEY_SUMMARY   = 'summary';
 const KEY_IMPORTANT = 'important_memories';
@@ -1441,49 +1475,133 @@ async function newChat() {
   showToast(`📦 「${title}」を保存しました`);
 }
 
-// タイトルなしで即座にアーカイブ（ページ離脱時用、API呼ばない）
-async function quickArchive() {
-  if (!db) return;
+// ================================================================
+// REALTIME TOPIC DETECTION — 会話をリアルタイムで区切り・履歴化
+// ================================================================
+let currentTopicTitle = '';
+let currentTopicMsgs  = [];   // 現トピックのメッセージ [{role, content, ts}]
+let topicCount        = 0;    // 今セッションのトピック番号
+let topicCheckPending = false;
+
+function showTopicBar(title, num) {
+  const bar = document.getElementById('topicBar');
+  document.getElementById('topicTitle').textContent = title;
+  document.getElementById('topicNum').textContent = `#${num}`;
+  bar.classList.add('show');
+}
+
+// AIにトピック分析させる（軽量・高速）
+async function analyzeTopicShift(recentMessages) {
+  const sample = recentMessages.slice(-10).map(r =>
+    `${r.role === 'user' ? 'りぴ' : 'もも'}: ${r.content}`
+  ).join('\n');
+
+  const currentInfo = currentTopicTitle
+    ? `現在のトピック:「${currentTopicTitle}」`
+    : '（まだトピックなし）';
+
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: MODEL, temperature: 0, max_completion_tokens: 80,
+        messages: [{
+          role: 'system',
+          content: `あなたは会話のトピック分析係です。以下のルールに従い、JSON形式のみで出力してください。
+
+${currentInfo}
+
+【判定ルール】
+- 会話の話題が明確に変わった場合: {"changed":true,"title":"新しいトピック名"}
+- 同じ話題が続いている場合: {"changed":false,"title":"現在のトピック名"}
+- まだトピックが決まっていない場合: {"changed":false,"title":"トピック名"}
+
+【タイトルのルール】
+- 12文字以内の日本語
+- 具体的な内容を反映（「雑談」は避ける）
+- 例: 「仕事の愚痴」「りぴの体調」「週末の予定」「甘えタイム」「イラストの相談」`
+        }, {
+          role: 'user', content: sample
+        }]
+      })
+    });
+    if (!res.ok) return null;
+    const d = await res.json();
+    const text = d.choices?.[0]?.message?.content?.trim() || '';
+    // JSON抽出
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    return JSON.parse(match[0]);
+  } catch { return null; }
+}
+
+// メイン: 毎回のAI返答後に呼ぶ
+async function maybeUpdateTopic() {
+  if (!db || topicCheckPending) return;
+  topicCheckPending = true;
+
   try {
     const all = await idbAll();
-    if (all.length < 3) return; // 短すぎる会話はスキップ
-    const firstTs = all[0]?.ts || Date.now();
-    const lastTs  = all[all.length - 1]?.ts || Date.now();
-    const d = new Date(lastTs);
-    const fallback = `${d.getMonth()+1}/${d.getDate()} の会話 (${all.length}通)`;
+    if (all.length < 2) {
+      topicCheckPending = false;
+      return;
+    }
+
+    const result = await analyzeTopicShift(all);
+    if (!result) { topicCheckPending = false; return; }
+
+    if (result.changed && currentTopicTitle && currentTopicMsgs.length >= 2) {
+      // ── トピックが変わった → 前のトピックをアーカイブ ──
+      const firstTs = currentTopicMsgs[0]?.ts || Date.now();
+      const lastTs  = currentTopicMsgs[currentTopicMsgs.length - 1]?.ts || Date.now();
+      await arcAdd({
+        title: currentTopicTitle,
+        messages: currentTopicMsgs,
+        msgCount: currentTopicMsgs.length,
+        firstTs, lastTs,
+        ts: Date.now()
+      });
+      console.log(`[もも] トピック保存: 「${currentTopicTitle}」(${currentTopicMsgs.length}通)`);
+      showToast(`📖 「${currentTopicTitle}」を履歴に保存`);
+
+      // 新トピック開始
+      currentTopicMsgs = all.slice(-4).map(r => ({ role: r.role, content: r.content, ts: r.ts }));
+    }
+
+    // トピック更新
+    if (result.title && result.title !== currentTopicTitle) {
+      currentTopicTitle = result.title;
+      topicCount++;
+      showTopicBar(currentTopicTitle, topicCount);
+    }
+
+    // 現トピックにメッセージ追加（最新のものだけ）
+    const latest = all.slice(-2);
+    for (const m of latest) {
+      if (!currentTopicMsgs.find(x => x.ts === m.ts)) {
+        currentTopicMsgs.push({ role: m.role, content: m.content, ts: m.ts });
+      }
+    }
+  } catch (e) { console.warn('[もも] トピック分析失敗:', e); }
+  topicCheckPending = false;
+}
+
+// ページ離脱時に現在のトピックを保存
+async function saveCurrentTopic() {
+  if (!db || !currentTopicTitle || currentTopicMsgs.length < 2) return;
+  try {
+    const firstTs = currentTopicMsgs[0]?.ts || Date.now();
+    const lastTs  = currentTopicMsgs[currentTopicMsgs.length - 1]?.ts || Date.now();
     await arcAdd({
-      title: fallback, msgCount: all.length, firstTs, lastTs, ts: Date.now(),
-      messages: all.map(r => ({ role: r.role, content: r.content, ts: r.ts }))
+      title: currentTopicTitle, messages: currentTopicMsgs,
+      msgCount: currentTopicMsgs.length, firstTs, lastTs, ts: Date.now()
     });
-  } catch (e) { console.warn('[もも] quickArchive失敗', e); }
+  } catch {}
 }
-
-// 自動アーカイブ（一定件数ごとにバックグラウンドで実行）
-let lastAutoArchiveCount = 0;
-async function maybeAutoArchive() {
-  if (!db) return;
-  // 前回のアーカイブからAUTO_ARCHIVE_EVERY件以上増えたら
-  if (totalMsgCount - lastAutoArchiveCount < AUTO_ARCHIVE_EVERY) return;
-  lastAutoArchiveCount = totalMsgCount;
-
-  const all = await idbAll();
-  if (all.length < AUTO_ARCHIVE_EVERY) return;
-
-  const title = await generateTitle(all) || `会話 (${all.length}通)`;
-  const firstTs = all[0]?.ts || Date.now();
-  const lastTs  = all[all.length - 1]?.ts || Date.now();
-  await arcAdd({
-    title, msgCount: all.length, firstTs, lastTs, ts: Date.now(),
-    messages: all.map(r => ({ role: r.role, content: r.content, ts: r.ts }))
-  });
-  showToast(`📦 自動保存: 「${title}」`);
-  console.log(`[もも] 自動アーカイブ完了: ${title}`);
-}
-
-// ページ離脱時に自動保存
-window.addEventListener('beforeunload', () => { quickArchive(); });
+window.addEventListener('beforeunload', () => { saveCurrentTopic(); });
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden') quickArchive();
+  if (document.visibilityState === 'hidden') saveCurrentTopic();
 });
 
 // 履歴パネルを開く
@@ -2050,7 +2168,7 @@ async function sendMessage() {
     if (db) {
       await persistMessage('assistant', fullText);
       maybeUpdateSummary(); // background
-      maybeAutoArchive();  // 一定件数で自動アーカイブ
+      maybeUpdateTopic();  // リアルタイムトピック検出
     }
     updateMemoryUI();
 
