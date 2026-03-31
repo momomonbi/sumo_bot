@@ -1475,6 +1475,14 @@ async function startChat() {
   // APIキーを記憶する
   try { localStorage.setItem('momo_api_key', key); } catch(e) {}
 
+  // ストレージ永続化リクエスト（ブラウザによる自動削除を防止）
+  if (navigator.storage && navigator.storage.persist) {
+    navigator.storage.persist().then(granted => {
+      if (granted) console.log('[もも] ストレージ永続化: 許可済み');
+      else console.warn('[もも] ストレージ永続化: 拒否（ブラウザがデータを自動削除する可能性あり）');
+    }).catch(() => {});
+  }
+
   // Parallel: load basicInfo + open DB
   const [_, stored] = await Promise.all([
     loadBasicInfo(),
@@ -1609,12 +1617,12 @@ async function newChat() {
     ts: Date.now()
   });
 
-  // 現在の会話をクリア
-  history = []; longSummary = ''; totalMsgCount = 0; heavyWarned = false;
+  // 現在の会話をクリア（longSummary は保持して前回の文脈を引き継ぐ）
+  history = []; totalMsgCount = 0; heavyWarned = false;
   document.getElementById('heavyBanner')?.remove();
   pendingImages = []; updateImagePreview();
   await idbClear();
-  await idbSetM(KEY_SUMMARY, '');
+  // longSummary, KEY_SUMMARY はクリアしない → 新しい会話でも直前の文脈を覚えている
 
   document.getElementById('messages').innerHTML = `
     <div class="empty-state" id="emptyState">
