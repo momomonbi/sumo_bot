@@ -651,10 +651,8 @@ header {
   position: absolute; top: 8px; right: 8px; opacity: 0;
   width: 26px; height: 26px; border-radius: 6px;
 }
-/* 段落のコピー */
-.bubble p { position: relative; display: flex; align-items: flex-start; gap: 6px; }
-.bubble p .p-text { flex: 1; }
-.bubble p .copy-btn { flex-shrink: 0; margin-top: 2px; }
+/* 段落 — flexは使わない（インライン要素が分断されるため） */
+.bubble p { position: relative; }
 
 /* ── コードブロック ── */
 .bubble pre {
@@ -2153,9 +2151,10 @@ function fmt(text) {
       continue;
     }
 
-    // 「キー：値」パターン検出（リストでもなく見出しでもない行）
-    const kvMatch = trimmed.match(/^(.{1,15})[：:]\s*(.+)/);
-    if (kvMatch && !inUl && !inOl) {
+    // 「キー：値」パターン検出（キーが短い名詞の場合のみ）
+    // キーは漢字・カタカナ・英数・スペースのみ8文字以内、文中の「：」誤爆を防ぐ
+    const kvMatch = trimmed.match(/^([A-Za-z0-9\u3000-\u30FF\u4E00-\u9FFF]{1,8})[：:]\s*(.+)/);
+    if (kvMatch && !inUl && !inOl && trimmed.length < 60) {
       flushPara(); closeBq();
       const kvVal = kvMatch[2];
       html += `<div class="kv-row"><span class="kv-key">${fmtInline(kvMatch[1])}</span><span class="kv-val">${fmtInline(kvVal)}</span><button class="copy-btn" onclick="copyText(this,'${esc(kvVal).replace(/'/g,'&#39;')}')">⧉</button></div>`;
