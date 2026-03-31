@@ -239,10 +239,6 @@ header {
   color: var(--text-muted); letter-spacing: 0.08em; margin-top: 4px;
 }
 
-.memory-badge { display: flex; align-items: center; gap: 5px; font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-muted); }
-.mem-track { display: flex; gap: 2px; }
-.mem-pip { width: 3px; height: 9px; border-radius: 2px; background: rgba(255,255,255,0.09); transition: background 0.3s; }
-.mem-pip.filled { background: var(--accent); opacity: 0.55; }
 /* ── header buttons ── */
 .btn-header {
   background: none; border: 1px solid var(--border); color: var(--text-muted);
@@ -818,10 +814,6 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
         <span class="growth-title" id="growthTitle">はじまり</span>
         <div class="growth-bar"><div class="growth-fill" id="growthFill"></div></div>
       </div>
-      <div class="memory-badge">
-        <span id="memCount">0</span>
-        <div class="mem-track" id="memTrack"></div>
-      </div>
       <button class="btn-header accent" onclick="openHistory()">履歴</button>
       <button class="btn-header" onclick="newChat()">New</button>
     </div>
@@ -1340,19 +1332,58 @@ async function maybeUpdateSummary() {
 }
 
 // ================================================================
-// Memory UI
+// Heavy conversation warning
 // ================================================================
-const PIP = 10;
+const HEAVY_THRESHOLD = 24;   // この件数を超えたら警告
+let heavyWarned = false;       // 一度だけ出す
+
 function updateMemoryUI() {
   const count = history.length;
-  document.getElementById('memCount').textContent = count + '/' + API_CONTEXT;
-  const track = document.getElementById('memTrack');
-  track.innerHTML = '';
-  for (let i = 0; i < PIP; i++) {
-    const p = document.createElement('div');
-    p.className = 'mem-pip' + (count / API_CONTEXT > i / PIP ? ' filled' : '');
-    track.appendChild(p);
+  if (!heavyWarned && count >= HEAVY_THRESHOLD) {
+    heavyWarned = true;
+    showHeavyWarning();
   }
+}
+
+function showHeavyWarning() {
+  // 既存トーストではなく専用モーダル風バナーを表示
+  const banner = document.createElement('div');
+  banner.id = 'heavyBanner';
+  banner.style.cssText = `
+    position:fixed; bottom:90px; left:50%; transform:translateX(-50%);
+    background:#1a1a20; border:1px solid rgba(200,240,160,0.3);
+    border-radius:14px; padding:16px 20px; z-index:500;
+    max-width:320px; width:calc(100vw - 40px);
+    box-shadow:0 8px 32px rgba(0,0,0,0.6);
+    animation: fadeUp 0.4s cubic-bezier(.22,1,.36,1) both;
+    font-family:'Syne',sans-serif;
+  `;
+  banner.innerHTML = `
+    <div style="display:flex;align-items:flex-start;gap:12px;">
+      <span style="font-size:20px;line-height:1;">💬</span>
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:500;color:#e8e8e2;margin-bottom:5px;">会話がかなり長くなってきたよ</div>
+        <div style="font-size:11px;color:rgba(232,232,226,0.55);line-height:1.6;">New を押してリフレッシュすると、もも の応答がより軽くなるよ。過去の会話は履歴に残ってるから安心して。</div>
+        <div style="display:flex;gap:8px;margin-top:12px;">
+          <button onclick="newChat();document.getElementById('heavyBanner')?.remove();" style="
+            flex:1;padding:8px 12px;background:var(--accent);color:#0d0d0f;
+            border:none;border-radius:8px;font-family:'Syne',sans-serif;
+            font-size:12px;font-weight:500;cursor:pointer;letter-spacing:0.05em;">
+            New チャット
+          </button>
+          <button onclick="document.getElementById('heavyBanner')?.remove();" style="
+            padding:8px 14px;background:none;color:rgba(232,232,226,0.45);
+            border:1px solid rgba(255,255,255,0.1);border-radius:8px;
+            font-family:'Syne',sans-serif;font-size:12px;cursor:pointer;">
+            続ける
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(banner);
+  // 20秒後に自動で消える
+  setTimeout(() => banner.remove(), 20000);
 }
 
 function updateGrowthUI(gd) {
@@ -1562,7 +1593,8 @@ async function newChat() {
   });
 
   // 現在の会話をクリア
-  history = []; longSummary = ''; totalMsgCount = 0;
+  history = []; longSummary = ''; totalMsgCount = 0; heavyWarned = false;
+  document.getElementById('heavyBanner')?.remove();
   pendingImages = []; updateImagePreview();
   await idbClear();
   await idbSetM(KEY_SUMMARY, '');
