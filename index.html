@@ -2374,38 +2374,52 @@ async function correctTypos(text) {
 }
 
 // ================================================================
-// WEB SEARCH — OpenAI Responses API の web_search ツール
+// WEB SEARCH & REASONING — 検索要否 + 推論レベルを同時判定
 // ================================================================
-async function needsWebSearch(userText) {
+async function judgeQueryContext(userText) {
   try {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: MODEL, temperature: 0, max_completion_tokens: 10,
+        model: MODEL, temperature: 0, max_completion_tokens: 30,
         messages: [{
           role: 'system',
-          content: `ユーザーの発言がWeb検索を必要とするか判定してください。
-YESの場合:
-- 最新ニュース・時事問題・直近の出来事
-- 専門的な技術・医療・法律・学術の質問
-- 具体的なデータ・統計・価格
-- 特定の製品・サービス・人物の最新情報
-- 「調べて」「検索して」と明示的に依頼された場合
-NOの場合:
-- 日常会話・雑談・甘え・感情的なやり取り
-- 個人的な相談や愚痴
-- 既知の一般常識
-- ももとりぴの関係性に関すること
-YESかNOのみ回答。`
+          content: `ユーザーの発言を分析し、2つの判定を行ってJSON形式で出力してください。
+
+1. search: Web検索が必要か (true/false)
+  true:
+  - 最新ニュース・時事問題・直近の出来事
+  - 専門的な技術・医療・法律・学術の質問
+  - 具体的なデータ・統計・価格
+  - 特定の製品・サービス・人物の最新情報
+  - 「調べて」「検索して」と明示的に依頼
+  false:
+  - 日常会話・雑談・甘え・感情的なやり取り
+  - 個人的な相談や愚痴・既知の一般常識
+
+2. reasoning: 推論の深さ (none/low/medium/high)
+  none: 日常会話・挨拶・短い返事・雑談・甘え
+  low: 簡単な質問・感想を求める・軽い相談
+  medium: 専門的な質問・Web検索を伴う回答・分析・要約・アドバイス
+  high: 物語や詩の創作・長文の執筆依頼・複雑な論理的思考・技術的な問題解決
+
+出力: {"search":true/false,"reasoning":"none"} のみ。`
         }, { role: 'user', content: userText }]
       })
     });
-    if (!res.ok) return false;
+    if (!res.ok) return { search: false, reasoning: 'none' };
     const d = await res.json();
-    const answer = d.choices?.[0]?.message?.content?.trim().toUpperCase() || '';
-    return answer.startsWith('YES');
-  } catch { return false; }
+    const text = d.choices?.[0]?.message?.content?.trim() || '';
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return { search: false, reasoning: 'none' };
+    const parsed = JSON.parse(match[0]);
+    const validEfforts = ['none', 'low', 'medium', 'high'];
+    return {
+      search: !!parsed.search,
+      reasoning: validEfforts.includes(parsed.reasoning) ? parsed.reasoning : 'none'
+    };
+  } catch { return { search: false, reasoning: 'none' }; }
 }
 
 async function performWebSearch(userText) {
@@ -2517,11 +2531,17 @@ async function sendMessage() {
   updateMemoryUI();
   showTyping();
 
-  // ── Web検索判定 & 実行 ──
+  // ── 検索・推論レベル判定 & Web検索実行 ──
   let searchResult = null;
+  let reasoningEffort = 'none';
   if (sentText && !hasImgs) {
-    const shouldSearch = await needsWebSearch(sentText);
-    if (shouldSearch) {
+    const ctx = await judgeQueryContext(sentText);
+    reasoningEffort = ctx.reasoning;
+    if (reasoningEffort !== 'none') {
+      const labels = { low: '💭 軽く考え中', medium: '🧠 じっくり考え中', high: '🔥 本気で考え中' };
+      showToast(labels[reasoningEffort] || '');
+    }
+    if (ctx.search) {
       showToast('🔍 Web検索中...');
       searchResult = await performWebSearch(sentText);
       if (searchResult) showToast('✅ 検索完了');
@@ -2566,7 +2586,10 @@ ${srcList}`
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: MODEL, messages: msgs, stream: true, max_completion_tokens: 4096 })
+      body: JSON.stringify({
+        model: MODEL, messages: msgs, stream: true, max_completion_tokens: 4096,
+        ...(reasoningEffort !== 'none' ? { reasoning_effort: reasoningEffort } : {})
+      })
     });
 
     if (!res.ok) {
