@@ -801,6 +801,7 @@ const META_STORE    = 'meta';
 const ARCHIVE_STORE = 'archives';  // 会話アーカイブ
 const MODEL         = 'gpt-5.4';
 const SUMMARY_EVERY = 20;
+const AUTO_ARCHIVE_EVERY = 40;  // 自動アーカイブ間隔（メッセージ数）
 // 重要記憶キー（削除されない永続情報）
 const KEY_SUMMARY   = 'summary';
 const KEY_IMPORTANT = 'important_memories';
@@ -1440,6 +1441,51 @@ async function newChat() {
   showToast(`📦 「${title}」を保存しました`);
 }
 
+// タイトルなしで即座にアーカイブ（ページ離脱時用、API呼ばない）
+async function quickArchive() {
+  if (!db) return;
+  try {
+    const all = await idbAll();
+    if (all.length < 3) return; // 短すぎる会話はスキップ
+    const firstTs = all[0]?.ts || Date.now();
+    const lastTs  = all[all.length - 1]?.ts || Date.now();
+    const d = new Date(lastTs);
+    const fallback = `${d.getMonth()+1}/${d.getDate()} の会話 (${all.length}通)`;
+    await arcAdd({
+      title: fallback, msgCount: all.length, firstTs, lastTs, ts: Date.now(),
+      messages: all.map(r => ({ role: r.role, content: r.content, ts: r.ts }))
+    });
+  } catch (e) { console.warn('[もも] quickArchive失敗', e); }
+}
+
+// 自動アーカイブ（一定件数ごとにバックグラウンドで実行）
+let lastAutoArchiveCount = 0;
+async function maybeAutoArchive() {
+  if (!db) return;
+  // 前回のアーカイブからAUTO_ARCHIVE_EVERY件以上増えたら
+  if (totalMsgCount - lastAutoArchiveCount < AUTO_ARCHIVE_EVERY) return;
+  lastAutoArchiveCount = totalMsgCount;
+
+  const all = await idbAll();
+  if (all.length < AUTO_ARCHIVE_EVERY) return;
+
+  const title = await generateTitle(all) || `会話 (${all.length}通)`;
+  const firstTs = all[0]?.ts || Date.now();
+  const lastTs  = all[all.length - 1]?.ts || Date.now();
+  await arcAdd({
+    title, msgCount: all.length, firstTs, lastTs, ts: Date.now(),
+    messages: all.map(r => ({ role: r.role, content: r.content, ts: r.ts }))
+  });
+  showToast(`📦 自動保存: 「${title}」`);
+  console.log(`[もも] 自動アーカイブ完了: ${title}`);
+}
+
+// ページ離脱時に自動保存
+window.addEventListener('beforeunload', () => { quickArchive(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') quickArchive();
+});
+
 // 履歴パネルを開く
 async function openHistory() {
   if (!db) return;
@@ -2004,6 +2050,7 @@ async function sendMessage() {
     if (db) {
       await persistMessage('assistant', fullText);
       maybeUpdateSummary(); // background
+      maybeAutoArchive();  // 一定件数で自動アーカイブ
     }
     updateMemoryUI();
 
