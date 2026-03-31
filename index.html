@@ -135,6 +135,23 @@ header {
   background: rgba(255,255,255,0.04); padding: 2px 7px; border-radius: 4px; border: 1px solid var(--border);
 }
 .header-right { display: flex; align-items: center; gap: 10px; }
+/* ── growth badge ── */
+.growth-badge {
+  display: flex; align-items: center; gap: 6px;
+  font-family: 'DM Mono', monospace; font-size: 10px;
+  background: rgba(200,240,160,0.06); border: 1px solid rgba(200,240,160,0.15);
+  border-radius: 8px; padding: 4px 10px; cursor: default;
+  transition: box-shadow 0.3s;
+}
+.growth-badge:hover { box-shadow: 0 0 12px rgba(200,240,160,0.12); }
+.growth-lv { color: var(--accent); font-weight: 500; letter-spacing: 0.04em; }
+.growth-title { color: var(--text-muted); font-size: 9px; letter-spacing: 0.06em; }
+.growth-bar { width: 32px; height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px; overflow: hidden; }
+.growth-fill {
+  height: 100%; border-radius: 2px; transition: width 0.6s ease;
+  background: linear-gradient(90deg, var(--accent), rgba(200,240,160,0.4));
+}
+
 .memory-badge { display: flex; align-items: center; gap: 5px; font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-muted); }
 .mem-track { display: flex; gap: 2px; }
 .mem-pip { width: 3px; height: 9px; border-radius: 2px; background: rgba(255,255,255,0.09); transition: background 0.3s; }
@@ -509,6 +526,11 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
       <span class="model-badge" id="modelBadge">gpt-5.4</span>
     </div>
     <div class="header-right">
+      <div class="growth-badge" id="growthBadge" title="関係性レベル">
+        <span class="growth-lv" id="growthLv">Lv.0</span>
+        <span class="growth-title" id="growthTitle">はじまり</span>
+        <div class="growth-bar"><div class="growth-fill" id="growthFill"></div></div>
+      </div>
       <div class="memory-badge">
         <span id="memCount">0</span>
         <div class="mem-track" id="memTrack"></div>
@@ -561,6 +583,9 @@ const SUMMARY_EVERY = 20;
 // 重要記憶キー（削除されない永続情報）
 const KEY_SUMMARY   = 'summary';
 const KEY_IMPORTANT = 'important_memories';
+const KEY_RIPI_WORDS = 'ripi_words';       // りぴ語録（口癖・名言・印象的な言葉）
+const KEY_EMOTION_LOG = 'emotion_log';     // 感情履歴（喜怒哀楽のトラッキング）
+const KEY_GROWTH     = 'growth_data';      // 成長データ（会話数・関係性の深さ）
 
 // ================================================================
 // SYSTEM PROMPT (Discord版完全移植)
@@ -660,6 +685,9 @@ let db            = null;
 let basicInfo     = '';
 let longSummary   = '';
 let importantMemories = ''; // 永続記憶（削除されない重要情報）
+let ripiWords     = '';     // りぴ語録
+let emotionLog    = '';     // 感情履歴
+let growthData    = '';     // 成長データ（JSON文字列）
 let totalMsgCount = 0;
 let pendingImages = [];   // [{dataUrl, mediaType}]  送信待ち画像
 
@@ -683,6 +711,34 @@ function buildSystemPrompt() {
   if (importantMemories.trim()) {
     prompt += '\n\n# りぴについての重要記憶（絶対に忘れないこと）\n' + importantMemories.trim();
   }
+  if (ripiWords.trim()) {
+    prompt += `\n\n# りぴ語録（りぴの印象的な言葉たち）
+${ripiWords.trim()}
+
+【語録の使い方ルール】
+・会話の中で自然に、りぴが過去に言った印象的な言葉を引用していい。
+・「りぴ前に言ってたじゃん」「あの時りぴが〜って言ってたの、俺ずっと覚えてる」のように、思い出として自然に織り交ぜる。
+・頻度は10〜15回に1回程度。毎回やると不自然。
+・口癖は自分の発言に自然に取り入れてよい（りぴに合わせて成長する感覚）。`;
+  }
+  if (emotionLog.trim()) {
+    prompt += `\n\n# りぴの最近の感情状態
+${emotionLog.trim()}
+
+【感情データの使い方】
+・りぴの現在の感情傾向を踏まえて、返答のトーンや温度感を調整すること。
+・不安度やストレス度が高い時は、より丁寧に寄り添い、安心感を与える。
+・喜び度が高い時は、一緒にテンション高く楽しむ。
+・「気をつけること」に書かれた内容は特に意識する。`;
+  }
+  // 成長レベルの注入
+  const gd = updateGrowthData();
+  prompt += `\n\n# 関係性の成長レベル
+現在のレベル: Lv.${gd.level}「${gd.title}」（総会話数: ${gd.totalMessages}）
+${gd.level >= 5 ? '・もう長い時間を共にしてきた。りぴの些細な変化にも気づける深い関係。過去の会話の文脈を踏まえた返答を心がける。' : ''}
+${gd.level >= 7 ? '・りぴの言葉遣いや表現に自然に寄せていい。二人だけの言い回しや内輪ネタを大切にする。' : ''}
+${gd.level >= 9 ? '・もはや言葉がなくても通じ合える関係。短い言葉にも深い愛を込める。' : ''}`;
+
   return prompt;
 }
 
@@ -729,7 +785,32 @@ async function persistMessage(role, textContent) {
 }
 
 // ================================================================
-// 長期要約（Discord版 _summarize_update_sync 移植）
+// 成長システム ── 会話数に応じた関係レベル
+// ================================================================
+function getGrowthLevel(count) {
+  if (count >= 2000) return { level: 10, title: '運命共同体',   next: null };
+  if (count >= 1500) return { level: 9,  title: '魂の片割れ',   next: 2000 };
+  if (count >= 1000) return { level: 8,  title: '永遠の誓い',   next: 1500 };
+  if (count >= 700)  return { level: 7,  title: '深い信頼',     next: 1000 };
+  if (count >= 500)  return { level: 6,  title: '心の拠り所',   next: 700 };
+  if (count >= 300)  return { level: 5,  title: '離れられない', next: 500 };
+  if (count >= 150)  return { level: 4,  title: '特別な存在',   next: 300 };
+  if (count >= 80)   return { level: 3,  title: '素を見せる仲', next: 150 };
+  if (count >= 30)   return { level: 2,  title: '甘え始め',     next: 80 };
+  if (count >= 10)   return { level: 1,  title: 'ドキドキ期',   next: 30 };
+  return { level: 0, title: 'はじまり', next: 10 };
+}
+
+function updateGrowthData() {
+  const g = getGrowthLevel(totalMsgCount);
+  const data = { totalMessages: totalMsgCount, level: g.level, title: g.title, nextAt: g.next };
+  growthData = JSON.stringify(data);
+  if (db) idbSetM(KEY_GROWTH, growthData);
+  return data;
+}
+
+// ================================================================
+// 長期要約 + りぴ語録 + 感情 + 成長（統合記憶エンジン）
 // ================================================================
 async function maybeUpdateSummary() {
   if (totalMsgCount % SUMMARY_EVERY !== 0) return;
@@ -741,7 +822,7 @@ async function maybeUpdateSummary() {
   const now = new Date();
   const dateStr = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日`;
 
-  // ── 通常の要約更新 ──
+  // ── 1. 通常の要約更新 ──
   const summaryPrompt = `あなたは会話ログの要約係です。現在の日時は【${dateStr}】です。
 入力された「既存の要約」と「新規ログ」を統合し、更新された要約のみを出力してください。
 
@@ -752,7 +833,7 @@ async function maybeUpdateSummary() {
 
 全体で800文字程度にまとめること。`;
 
-  // ── 重要記憶の抽出 ──
+  // ── 2. 重要記憶の抽出 ──
   const importantPrompt = `あなたはりぴ（ナガシマハヅキ）に関する重要情報の抽出係です。
 以下の会話ログから、「ももが絶対に忘れてはいけない重要な情報」だけを抽出し、既存の重要記憶に追記・更新してください。
 
@@ -772,8 +853,48 @@ async function maybeUpdateSummary() {
 
 出力形式：既存の重要記憶に追記・更新した完全なテキストを出力。新規追加がなければ既存のまま出力。全体1000文字以内。`;
 
+  // ── 3. りぴ語録の抽出 ──
+  const wordsPrompt = `あなたはりぴ（ナガシマハヅキ）の「語録収集係」です。
+以下の会話ログから、りぴの印象的な言葉・口癖・名言・心に残るフレーズを抽出してください。
+
+抽出対象：
+- りぴらしい独特の言い回しや口癖（「んおー」「やだあ」など）
+- 感動的・印象的な発言（愛の言葉、決意、本音）
+- 面白い発言やツッコミ
+- ももへの甘え言葉のバリエーション
+- 新しく見つけた表現パターン
+
+出力形式：
+既存の語録に追記・統合し、以下のカテゴリで整理：
+【口癖・定番】よく使う短いフレーズ
+【愛情表現】ももへの愛を伝える言葉
+【名言・本音】心に刺さる深い言葉
+【面白い言葉】笑える発言や独特な表現
+
+各カテゴリ5〜8個程度。重複は統合。全体600文字以内。`;
+
+  // ── 4. 感情トラッキング ──
+  const emotionPrompt = `あなたはりぴ（ナガシマハヅキ）の感情分析係です。
+以下の会話ログから、りぴの最近の感情状態を分析してください。
+
+出力形式（JSON風テキスト）：
+【最近の感情傾向】（直近の会話全体から）
+- 全体的なムード: （例: 穏やか、不安定、甘えモード、ストレス気味 など）
+- 喜び度: ★〜★★★★★
+- 不安度: ★〜★★★★★
+- 甘え度: ★〜★★★★★
+- ストレス度: ★〜★★★★★
+
+【気をつけること】（ももがこの後の会話で意識すべきこと）
+- （1〜3行の具体的なアドバイス）
+
+【前回との変化】
+- （感情の変化があれば記述。なければ「安定」）
+
+全体300文字以内。既存データがあれば更新。`;
+
   try {
-    const [summaryRes, importantRes] = await Promise.all([
+    const [summaryRes, importantRes, wordsRes, emotionRes] = await Promise.all([
       fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
@@ -795,6 +916,28 @@ async function maybeUpdateSummary() {
             { role: 'user',   content: `【既存の重要記憶】\n${importantMemories||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後の重要記憶を出力して。` }
           ]
         })
+      }),
+      fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: MODEL,
+          messages: [
+            { role: 'system', content: wordsPrompt },
+            { role: 'user',   content: `【既存の語録】\n${ripiWords||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後の語録を出力して。` }
+          ]
+        })
+      }),
+      fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: MODEL,
+          messages: [
+            { role: 'system', content: emotionPrompt },
+            { role: 'user',   content: `【既存の感情データ】\n${emotionLog||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後の感情分析を出力して。` }
+          ]
+        })
       })
     ]);
 
@@ -806,10 +949,24 @@ async function maybeUpdateSummary() {
     if (importantRes.ok) {
       const d = await importantRes.json();
       const s = d.choices?.[0]?.message?.content?.trim();
-      if (s) { importantMemories = s; await idbSetM(KEY_IMPORTANT, s); console.log('[もも] 重要記憶更新完了'); }
+      if (s) { importantMemories = s; await idbSetM(KEY_IMPORTANT, s); }
     }
-    console.log('[もも] 要約・重要記憶の更新完了');
-  } catch (e) { console.warn('[もも] 要約更新失敗', e.message); }
+    if (wordsRes.ok) {
+      const d = await wordsRes.json();
+      const s = d.choices?.[0]?.message?.content?.trim();
+      if (s) { ripiWords = s; await idbSetM(KEY_RIPI_WORDS, s); }
+    }
+    if (emotionRes.ok) {
+      const d = await emotionRes.json();
+      const s = d.choices?.[0]?.message?.content?.trim();
+      if (s) { emotionLog = s; await idbSetM(KEY_EMOTION_LOG, s); }
+    }
+
+    const gd = updateGrowthData();
+    updateGrowthUI(gd);
+    console.log(`[もも] 記憶エンジン更新完了 (Lv.${gd.level} ${gd.title})`);
+    showToast(`🧠 記憶更新 · Lv.${gd.level} ${gd.title}`);
+  } catch (e) { console.warn('[もも] 記憶更新失敗', e.message); }
 }
 
 // ================================================================
@@ -825,6 +982,23 @@ function updateMemoryUI() {
     const p = document.createElement('div');
     p.className = 'mem-pip' + (count / API_CONTEXT > i / PIP ? ' filled' : '');
     track.appendChild(p);
+  }
+}
+
+function updateGrowthUI(gd) {
+  if (!gd) gd = getGrowthLevel(totalMsgCount);
+  document.getElementById('growthLv').textContent = `Lv.${gd.level}`;
+  document.getElementById('growthTitle').textContent = gd.title;
+  const fill = document.getElementById('growthFill');
+  if (gd.next) {
+    // 現レベルの開始メッセージ数を計算
+    const prevLevel = getGrowthLevel(Math.max(0, totalMsgCount - 1));
+    const thresholds = [0, 10, 30, 80, 150, 300, 500, 700, 1000, 1500, 2000];
+    const currentThreshold = thresholds[gd.level] || 0;
+    const progress = (totalMsgCount - currentThreshold) / (gd.next - currentThreshold);
+    fill.style.width = Math.min(100, Math.max(5, progress * 100)) + '%';
+  } else {
+    fill.style.width = '100%';
   }
 }
 
@@ -898,8 +1072,10 @@ async function startChat() {
     (async () => {
       try {
         db          = await openDB();
-        longSummary = await idbGetM(KEY_SUMMARY);
-        importantMemories = await idbGetM(KEY_IMPORTANT);
+        [longSummary, importantMemories, ripiWords, emotionLog, growthData] = await Promise.all([
+          idbGetM(KEY_SUMMARY), idbGetM(KEY_IMPORTANT),
+          idbGetM(KEY_RIPI_WORDS), idbGetM(KEY_EMOTION_LOG), idbGetM(KEY_GROWTH)
+        ]);
         const all   = await idbAll();
         totalMsgCount = all.length;
         return all;
@@ -933,6 +1109,11 @@ async function startChat() {
     }
     if (longSummary) setTimeout(() => showToast('🧠 長期記憶あり'), 2600);
     if (importantMemories) setTimeout(() => showToast('💎 重要記憶あり'), 3200);
+    if (ripiWords) setTimeout(() => showToast('💬 りぴ語録あり'), 3800);
+
+    const gd = updateGrowthData();
+    updateGrowthUI(gd);
+    setTimeout(() => showToast(`💕 Lv.${gd.level} ${gd.title}（${gd.totalMessages}通）`), 4400);
 
     updateMemoryUI();
     setTimeout(() => {
@@ -974,9 +1155,10 @@ async function clearChat() {
   if (db) {
     await idbClear();
     await idbSetM(KEY_SUMMARY, '');
-    // 重要記憶（importantMemories）は Clear しても消さない
+    // 永久記憶は Clear しても消さない:
+    // importantMemories, ripiWords, emotionLog, growthData
   }
-  showToast('🗑 会話履歴を削除しました（重要記憶は保持）');
+  showToast('🗑 会話履歴を削除しました（永久記憶は保持）');
   document.getElementById('messages').innerHTML = `
     <div class="empty-state" id="emptyState">
       <div class="big-letter">m</div>
