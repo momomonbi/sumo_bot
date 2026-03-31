@@ -2132,6 +2132,7 @@ async function sendMessage() {
     const decoder = new TextDecoder();
     let sseBuffer = '';  // SSEパース用バッファ
     let rafPending = false; // レンダリング間引きフラグ
+    let rafId = null;       // rAFキャンセル用
 
     while (true) {
       const { done, value } = await reader.read();
@@ -2150,7 +2151,7 @@ async function sendMessage() {
           // ── ストリーミング中はプレーンテキスト表示 + rAF間引き ──
           if (!rafPending) {
             rafPending = true;
-            requestAnimationFrame(() => {
+            rafId = requestAnimationFrame(() => {
               bubble.textContent = fullText;
               document.getElementById('messages').scrollTop = 999999;
               rafPending = false;
@@ -2159,8 +2160,11 @@ async function sendMessage() {
         } catch {}
       }
     }
-    // ── 完了後にMarkdown整形を1回だけ適用 ──
+    // ── 完了: 残rAFをキャンセルしてからMarkdown整形 ──
+    if (rafId) cancelAnimationFrame(rafId);
+    rafPending = false;
     bubble.innerHTML = fmt(fullText);
+    document.getElementById('messages').scrollTop = 999999;
 
     // push assistant reply (text only to history)
     history.push({ role: 'assistant', content: fullText });
