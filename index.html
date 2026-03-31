@@ -2511,7 +2511,16 @@ async function sendMessage() {
     bubble.innerHTML = fmt(fullText);
     makeQuestionsClickable(bubble);
     makeTapCopyable(bubble);
-    document.getElementById('messages').scrollTop = 999999;
+
+    // 長文の場合はメッセージの先頭までぬるっとスクロール
+    const msgContainer = document.getElementById('messages');
+    const row = bubble.closest('.message-row');
+    if (row && fullText.length > 200) {
+      const rowTop = row.offsetTop - msgContainer.offsetTop;
+      msgContainer.scrollTo({ top: rowTop, behavior: 'smooth' });
+    } else {
+      msgContainer.scrollTop = 999999;
+    }
 
     // push assistant reply (text only to history)
     history.push({ role: 'assistant', content: fullText });
