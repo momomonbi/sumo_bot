@@ -140,16 +140,103 @@ header {
   display: flex; align-items: center; gap: 6px;
   font-family: 'DM Mono', monospace; font-size: 10px;
   background: rgba(200,240,160,0.06); border: 1px solid rgba(200,240,160,0.15);
-  border-radius: 8px; padding: 4px 10px; cursor: default;
-  transition: box-shadow 0.3s;
+  border-radius: 8px; padding: 4px 10px; cursor: pointer;
+  transition: box-shadow 0.3s, transform 0.15s;
 }
-.growth-badge:hover { box-shadow: 0 0 12px rgba(200,240,160,0.12); }
+.growth-badge:hover { box-shadow: 0 0 12px rgba(200,240,160,0.12); transform: scale(1.03); }
+.growth-badge:active { transform: scale(0.97); }
 .growth-lv { color: var(--accent); font-weight: 500; letter-spacing: 0.04em; }
 .growth-title { color: var(--text-muted); font-size: 9px; letter-spacing: 0.06em; }
 .growth-bar { width: 32px; height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px; overflow: hidden; }
 .growth-fill {
   height: 100%; border-radius: 2px; transition: width 0.6s ease;
   background: linear-gradient(90deg, var(--accent), rgba(200,240,160,0.4));
+}
+
+/* ═══ LEARN MODAL ═══ */
+.learn-overlay {
+  position: fixed; inset: 0; z-index: 400;
+  background: rgba(0,0,0,0.6); backdrop-filter: blur(6px);
+  opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
+  display: flex; align-items: center; justify-content: center;
+}
+.learn-overlay.open { opacity: 1; pointer-events: auto; }
+
+.learn-modal {
+  width: min(480px, calc(100vw - 32px)); max-height: 80vh;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; overflow: hidden;
+  transform: translateY(20px) scale(0.95); transition: transform 0.35s cubic-bezier(.22,1,.36,1);
+  display: flex; flex-direction: column;
+}
+.learn-overlay.open .learn-modal { transform: translateY(0) scale(1); }
+
+.learn-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.learn-header-left { display: flex; align-items: baseline; gap: 10px; }
+.learn-header h2 {
+  font-family: 'DM Serif Display', serif; font-size: 18px; font-weight: 400;
+  color: var(--text); letter-spacing: -0.3px;
+}
+.learn-header h2 em { color: var(--accent); font-style: italic; }
+.learn-level-big {
+  font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 500;
+  color: var(--accent); background: rgba(200,240,160,0.1);
+  border: 1px solid rgba(200,240,160,0.2); border-radius: 6px;
+  padding: 2px 8px;
+}
+
+.learn-body {
+  flex: 1; overflow-y: auto; padding: 16px 20px;
+  display: flex; flex-direction: column; gap: 16px;
+}
+.learn-body::-webkit-scrollbar { width: 3px; }
+.learn-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+
+.learn-section { animation: elemFadeIn 0.3s ease both; }
+.learn-section-title {
+  font-family: 'DM Mono', monospace; font-size: 10px; font-weight: 500;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--accent); opacity: 0.7; margin-bottom: 8px;
+  display: flex; align-items: center; gap: 6px;
+}
+.learn-section-title .count-badge {
+  background: rgba(200,240,160,0.15); border-radius: 4px;
+  padding: 1px 5px; font-size: 9px; color: var(--accent);
+}
+.learn-section-body {
+  background: rgba(255,255,255,0.02); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px 14px;
+  font-size: 13px; line-height: 1.7; color: rgba(232,232,226,0.8);
+  white-space: pre-wrap; word-break: break-word;
+}
+.learn-section-body .learn-item {
+  padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+.learn-section-body .learn-item:last-child { border-bottom: none; }
+
+.learn-empty {
+  text-align: center; color: var(--text-muted); font-size: 13px;
+  padding: 40px 0;
+}
+
+.learn-stats {
+  display: flex; gap: 12px; flex-wrap: wrap;
+}
+.learn-stat {
+  flex: 1; min-width: 80px; text-align: center;
+  background: rgba(255,255,255,0.02); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px 8px;
+}
+.learn-stat-num {
+  font-family: 'DM Serif Display', serif; font-size: 24px;
+  color: var(--accent); line-height: 1;
+}
+.learn-stat-label {
+  font-family: 'DM Mono', monospace; font-size: 9px;
+  color: var(--text-muted); letter-spacing: 0.08em; margin-top: 4px;
 }
 
 .memory-badge { display: flex; align-items: center; gap: 5px; font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-muted); }
@@ -627,7 +714,7 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
       <span class="model-badge" id="modelBadge">gpt-5.4</span>
     </div>
     <div class="header-right">
-      <div class="growth-badge" id="growthBadge" title="関係性レベル">
+      <div class="growth-badge" id="growthBadge" title="学習データを見る" onclick="openLearnModal()">
         <span class="growth-lv" id="growthLv">Lv.0</span>
         <span class="growth-title" id="growthTitle">はじまり</span>
         <div class="growth-bar"><div class="growth-fill" id="growthFill"></div></div>
@@ -685,6 +772,20 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
   </div>
   <div class="history-list" id="histList">
     <div class="history-empty">まだ履歴がありません</div>
+  </div>
+</div>
+
+<!-- LEARN MODAL -->
+<div class="learn-overlay" id="learnOverlay" onclick="closeLearnModal()">
+  <div class="learn-modal" onclick="event.stopPropagation()">
+    <div class="learn-header">
+      <div class="learn-header-left">
+        <h2>学習データ<em>.</em></h2>
+        <span class="learn-level-big" id="learnLevelBig">Lv.0</span>
+      </div>
+      <button class="btn-close-hist" onclick="closeLearnModal()">✕</button>
+    </div>
+    <div class="learn-body" id="learnBody"></div>
   </div>
 </div>
 
@@ -1425,6 +1526,86 @@ async function deleteArchive(id) {
   await arcDel(id);
   showToast('🗑 削除しました');
   openHistory(); // リスト更新
+}
+
+// ================================================================
+// LEARN MODAL
+// ================================================================
+function formatLearnSection(raw) {
+  if (!raw || !raw.trim()) return null;
+  return raw.trim().split('\n').map(line => {
+    const t = line.trim();
+    if (!t) return '';
+    if (t.startsWith('【') && t.endsWith('】')) return `</div><div class="learn-section-title">${t}</div><div>`;
+    if (t.startsWith('【')) return `</div><div class="learn-section-title">${t}</div><div>`;
+    return `<div class="learn-item">${esc(t)}</div>`;
+  }).join('');
+}
+
+function openLearnModal() {
+  const g = getGrowthInfo();
+  document.getElementById('learnLevelBig').textContent = `Lv.${g.level}`;
+  const body = document.getElementById('learnBody');
+
+  let html = '';
+
+  // Stats bar
+  html += `<div class="learn-stats">
+    <div class="learn-stat"><div class="learn-stat-num">${g.words}</div><div class="learn-stat-label">語録</div></div>
+    <div class="learn-stat"><div class="learn-stat-num">${g.adopted}</div><div class="learn-stat-label">使い始めた言葉</div></div>
+    <div class="learn-stat"><div class="learn-stat-num">${g.feedback}</div><div class="learn-stat-label">フィードバック</div></div>
+    <div class="learn-stat"><div class="learn-stat-num">${g.total}</div><div class="learn-stat-label">合計</div></div>
+  </div>`;
+
+  if (!ripiWords && !adoptedWords && !behaviorFeedback && !emotionLog) {
+    html += '<div class="learn-empty">まだ学習データがありません<br>会話を続けると自動で学習します</div>';
+  } else {
+    // りぴ語録
+    if (ripiWords.trim()) {
+      const lines = ripiWords.trim().split('\n').filter(l => l.trim());
+      html += `<div class="learn-section">
+        <div class="learn-section-title">💬 りぴ語録 <span class="count-badge">${lines.length}</span></div>
+        <div class="learn-section-body">${formatLearnSection(ripiWords)}</div>
+      </div>`;
+    }
+    // 使い始めた言葉
+    if (adoptedWords.trim()) {
+      const lines = adoptedWords.trim().split('\n').filter(l => l.trim());
+      html += `<div class="learn-section">
+        <div class="learn-section-title">🌱 ももが学習した言葉 <span class="count-badge">${lines.length}</span></div>
+        <div class="learn-section-body">${formatLearnSection(adoptedWords)}</div>
+      </div>`;
+    }
+    // フィードバック
+    if (behaviorFeedback.trim()) {
+      const lines = behaviorFeedback.trim().split('\n').filter(l => l.trim());
+      html += `<div class="learn-section">
+        <div class="learn-section-title">📝 行動フィードバック <span class="count-badge">${lines.length}</span></div>
+        <div class="learn-section-body">${formatLearnSection(behaviorFeedback)}</div>
+      </div>`;
+    }
+    // 感情
+    if (emotionLog.trim()) {
+      html += `<div class="learn-section">
+        <div class="learn-section-title">💭 感情トラッキング</div>
+        <div class="learn-section-body">${formatLearnSection(emotionLog)}</div>
+      </div>`;
+    }
+    // 重要記憶
+    if (importantMemories.trim()) {
+      html += `<div class="learn-section">
+        <div class="learn-section-title">💎 永久記憶</div>
+        <div class="learn-section-body">${formatLearnSection(importantMemories)}</div>
+      </div>`;
+    }
+  }
+
+  body.innerHTML = html;
+  document.getElementById('learnOverlay').classList.add('open');
+}
+
+function closeLearnModal() {
+  document.getElementById('learnOverlay').classList.remove('open');
 }
 
 function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
