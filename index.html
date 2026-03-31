@@ -585,6 +585,27 @@ header {
   font-weight: 500; pointer-events: none;
 }
 
+/* ── タップコピー共通 ── */
+.ai .bubble p,
+.ai .bubble li .li-text,
+.ai .bubble blockquote,
+.ai .bubble .kv-val {
+  cursor: pointer; transition: background 0.15s;
+  border-radius: 4px;
+}
+.ai .bubble p:active,
+.ai .bubble li .li-text:active,
+.ai .bubble blockquote:active,
+.ai .bubble .kv-val:active {
+  background: rgba(200,240,160,0.08);
+}
+/* コピーフラッシュ */
+@keyframes copyFlash {
+  0% { background: rgba(200,240,160,0.18); }
+  100% { background: transparent; }
+}
+.copy-flash { animation: copyFlash 0.6s ease both; }
+
 /* ── タップ可能な質問チップ ── */
 .q-chip {
   display: inline-block; cursor: pointer;
@@ -1587,7 +1608,8 @@ let topicCount        = 0;
 let topicCheckPending = false;
 let lastTopicCheckAt  = 0;    // 前回チェック時のメッセージ数
 let topicSavedFlag    = false; // ページ離脱で二重保存防止
-const TOPIC_CHECK_INTERVAL = 4; // N通ごとにチェック（毎回ではなく間引く）
+const TOPIC_CHECK_INTERVAL = 8; // N通ごとにチェック（頻繁すぎると重複する）
+const TOPIC_MIN_MSGS = 8;       // アーカイブに必要な最低メッセージ数
 
 function showTopicBar(title, num) {
   document.getElementById('topicTitle').textContent = title;
@@ -1643,12 +1665,12 @@ async function maybeUpdateTopic() {
 
   try {
     const all = await idbAll();
-    if (all.length < 4) { topicCheckPending = false; return; }
+    if (all.length < TOPIC_MIN_MSGS) { topicCheckPending = false; return; }
 
     const result = await analyzeTopicShift(all);
     if (!result) { topicCheckPending = false; return; }
 
-    if (result.changed && currentTopicTitle && currentTopicMsgs.length >= 4) {
+    if (result.changed && currentTopicTitle && currentTopicMsgs.length >= TOPIC_MIN_MSGS) {
       // ── トピック変更 → 前トピックをアーカイブ ──
       const firstTs = currentTopicMsgs[0]?.ts || Date.now();
       const lastTs  = currentTopicMsgs[currentTopicMsgs.length - 1]?.ts || Date.now();
@@ -1926,6 +1948,42 @@ function makeQuestionsClickable(bubble) {
   }
 }
 
+// ================================================================
+// TAP-TO-COPY — AI発言のテキスト要素をタップでコピー
+// ================================================================
+function makeTapCopyable(bubble) {
+  // 対象: p, li .li-text, blockquote, kv-val
+  const targets = bubble.querySelectorAll('p, li .li-text, blockquote, .kv-val');
+  targets.forEach(el => {
+    el.addEventListener('click', (e) => {
+      // コピーボタンや選択肢ボタンのクリックは除外
+      if (e.target.closest('.copy-btn, .choice-btn, .q-chip')) return;
+      // テキスト取得（Markdown記号除去）
+      const raw = el.textContent.trim()
+        .replace(/\*\*(.*?)\*\*/g, '$1')
+        .replace(/\*(.*?)\*/g, '$1')
+        .replace(/`([^`]+)`/g, '$1');
+      if (!raw) return;
+      navigator.clipboard.writeText(raw).then(() => {
+        el.classList.add('copy-flash');
+        showToast('✓ コピーしました');
+        setTimeout(() => el.classList.remove('copy-flash'), 600);
+      }).catch(() => {
+        // fallback
+        const tmp = document.createElement('textarea');
+        tmp.value = raw;
+        document.body.appendChild(tmp);
+        tmp.select();
+        document.execCommand('copy');
+        document.body.removeChild(tmp);
+        el.classList.add('copy-flash');
+        showToast('✓ コピーしました');
+        setTimeout(() => el.classList.remove('copy-flash'), 600);
+      });
+    });
+  });
+}
+
 function selectQChip(chip, text) {
   chip.classList.add('used');
   const input = document.getElementById('input');
@@ -2136,7 +2194,7 @@ function renderMessage(role, content, animate = true, imageDataUrls = []) {
   msgs.appendChild(row);
   const bbl = row.querySelector('.bubble');
   // AI発言で描画済みの場合、質問チップ化を適用
-  if (role === 'ai' && bubbleContent) makeQuestionsClickable(bbl);
+  if (role === 'ai' && bubbleContent) { makeQuestionsClickable(bbl); makeTapCopyable(bbl); }
   if (animate) msgs.scrollTop = 999999;
   return bbl;
 }
@@ -2404,6 +2462,7 @@ async function sendMessage() {
     rafPending = false;
     bubble.innerHTML = fmt(fullText);
     makeQuestionsClickable(bubble);
+    makeTapCopyable(bubble);
     document.getElementById('messages').scrollTop = 999999;
 
     // push assistant reply (text only to history)
