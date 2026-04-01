@@ -1605,11 +1605,20 @@ document.getElementById('apiKey').addEventListener('keydown', e => { if (e.key =
 // ================================================================
 // Chat UI helpers
 // ================================================================
+function isMobile() {
+  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || ('ontouchstart' in window && window.innerWidth <= 768);
+}
 function handleKey(e) {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); return; }
-  // Shift+Enter で改行が挿入された後にリサイズ
-  if (e.key === 'Enter' && e.shiftKey) {
-    requestAnimationFrame(() => autoResize(e.target));
+  if (e.key === 'Enter') {
+    if (isMobile()) {
+      // モバイル: Enterで改行（送信ボタンで送信）
+      requestAnimationFrame(() => autoResize(e.target));
+    } else if (!e.shiftKey) {
+      // デスクトップ: Enterで送信、Shift+Enterで改行
+      e.preventDefault(); sendMessage(); return;
+    } else {
+      requestAnimationFrame(() => autoResize(e.target));
+    }
   }
 }
 function autoResize(el) {
