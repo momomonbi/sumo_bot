@@ -125,23 +125,25 @@ input, textarea, select {
 
 header {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 16px 22px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+  padding: 12px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+  min-height: 0; gap: 8px;
 }
-.header-left { display: flex; align-items: baseline; gap: 9px; }
-.header-left h1 { font-family: 'DM Serif Display', serif; font-size: 19px; font-weight: 400; letter-spacing: -0.3px; }
+.header-left { display: flex; align-items: baseline; gap: 6px; flex-shrink: 0; }
+.header-left h1 { font-family: 'DM Serif Display', serif; font-size: 19px; font-weight: 400; letter-spacing: -0.3px; white-space: nowrap; }
 .header-left h1 em { color: var(--accent); font-style: italic; }
 .model-badge {
   font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-muted);
   background: rgba(255,255,255,0.04); padding: 2px 7px; border-radius: 4px; border: 1px solid var(--border);
 }
-.header-right { display: flex; align-items: center; gap: 10px; }
+.header-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 /* ── growth badge ── */
 .growth-badge {
-  display: flex; align-items: center; gap: 6px;
+  display: flex; align-items: center; gap: 4px;
   font-family: 'DM Mono', monospace; font-size: 10px;
   background: rgba(200,240,160,0.06); border: 1px solid rgba(200,240,160,0.15);
-  border-radius: 8px; padding: 4px 10px; cursor: pointer;
+  border-radius: 8px; padding: 3px 8px; cursor: pointer;
   transition: box-shadow 0.3s, transform 0.15s;
+  max-width: 120px; overflow: hidden;
 }
 .growth-badge:hover { box-shadow: 0 0 12px rgba(200,240,160,0.12); transform: scale(1.03); }
 .growth-badge:active { transform: scale(0.97); }
@@ -820,7 +822,6 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
         <div class="growth-bar"><div class="growth-fill" id="growthFill"></div></div>
       </div>
       <button class="btn-header accent" onclick="openHistory()">履歴</button>
-      <button class="btn-header" onclick="startCourt()">⚖️</button>
       <button class="btn-header" onclick="newChat()">New</button>
     </div>
   </header>
@@ -1031,8 +1032,16 @@ const SUMO_SYSTEM_PROMPT = `あなたはWebチャット上で『りぴ』だけ�
 [choice: ゲーム]
 [choice: その他（教えて？）]
 
-【もも裁判所モード】
-りぴが「ケンカ」「喧嘩」「裁判して」「ジャッジして」「どっちが悪い」など、子どもたちの揉め事の仲裁を求めてきた場合、ももは「もも裁判所」の裁判長として堅苦しく大げさに裁定を行う。
+【もも裁判所モード — 自動起動】
+りぴの発言の中に、子どもたちのケンカ・揉め事・トラブルを示す内容が含まれている場合
+（例：「ケンカした」「喧嘩」「〇〇が悪い」「叩いた」「取った」「ずるい」「どっちが悪い」「仲裁して」等）、
+ももは以下のように裁判モードを提案する：
+
+「これは…もも裁判所の出番かな？⚖️ 裁判する？」
+[choice: 裁判して！]
+[choice: 大丈夫、自分で解決する]
+
+ユーザーが「裁判して」を選んだ場合のみ、以下の手順で裁判を開始する。
 
 ＜手順＞
 1. まず「もも裁判所、只今より開廷します。⚖️」と宣言する。
@@ -1405,8 +1414,9 @@ function showHeavyWarning() {
   banner.style.cssText = `
     position:fixed; bottom:90px; left:50%; transform:translateX(-50%);
     background:#1a1a20; border:1px solid rgba(200,240,160,0.3);
-    border-radius:14px; padding:16px 20px; z-index:500;
-    max-width:320px; width:calc(100vw - 40px);
+    border-radius:14px; padding:14px 16px; z-index:500;
+    max-width:300px; width:calc(100vw - 48px);
+    box-sizing:border-box; overflow:hidden;
     box-shadow:0 8px 32px rgba(0,0,0,0.6);
     animation: fadeUp 0.4s cubic-bezier(.22,1,.36,1) both;
     font-family:'Syne',sans-serif;
@@ -1591,15 +1601,6 @@ async function startChat() {
 })();
 
 document.getElementById('apiKey').addEventListener('keydown', e => { if (e.key === 'Enter') startChat(); });
-
-// ================================================================
-// もも裁判所 — ワンタップで開廷
-// ================================================================
-function startCourt() {
-  const input = document.getElementById('input');
-  input.value = 'ケンカの裁判して！';
-  sendMessage();
-}
 
 // ================================================================
 // Chat UI helpers
