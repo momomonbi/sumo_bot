@@ -1189,6 +1189,38 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
       </div>
     </div>
   </div>
+
+  <div class="tool-cat-label">子どもの学習・学校生活</div>
+  <div class="tool-cards">
+    <div class="tool-card" onclick="openToolModal('homework')">
+      <div class="tool-card-icon">📝</div>
+      <div class="tool-card-body">
+        <div class="tool-card-title">AI宿題サポーター</div>
+        <div class="tool-card-desc">問題の写真を撮るとヒントや考え方を段階的に教えてくれる（答えは出さない）</div>
+      </div>
+    </div>
+    <div class="tool-card" onclick="openToolModal('sakubun')">
+      <div class="tool-card-icon">✏️</div>
+      <div class="tool-card-body">
+        <div class="tool-card-title">作文・日記AIコーチ</div>
+        <div class="tool-card-desc">子どもの作文や日記を写真で読み取り、やさしく添削＆アドバイス</div>
+      </div>
+    </div>
+    <div class="tool-card" onclick="openToolModal('jiyuu')">
+      <div class="tool-card-icon">🔬</div>
+      <div class="tool-card-body">
+        <div class="tool-card-title">自由研究テーマ提案</div>
+        <div class="tool-card-desc">子どもの興味・学年・家にある材料から実現可能な自由研究を提案</div>
+      </div>
+    </div>
+    <div class="tool-card" onclick="openToolModal('remind')">
+      <div class="tool-card-icon">🔔</div>
+      <div class="tool-card-body">
+        <div class="tool-card-title">持ち物・提出物リマインダー</div>
+        <div class="tool-card-desc">おたよりの写真→期限・持ち物を抽出→はづきノートに自動登録</div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- TOOL MODAL: PTA要約 -->
@@ -1353,6 +1385,136 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
     <textarea id="workNote" placeholder="例：週3日くらい、月3万円目標、子ども帰宅が15時なのでそれまでに終わる仕事..." style="min-height:60px"></textarea>
     <p class="tool-modal-hint">Web検索で最新の在宅ワーク情報を探してピックアップします。</p>
     <button class="btn-tool-exec" id="workExecBtn" onclick="execWorkTool()">探してもらう →</button>
+  </div>
+</div>
+
+<!-- TOOL MODAL: AI宿題サポーター -->
+<div class="tool-modal-overlay" id="homeworkModal">
+  <div class="tool-modal" onclick="event.stopPropagation()">
+    <div class="tool-modal-header">
+      <span class="tool-modal-icon">📝</span>
+      <span class="tool-modal-title">AI宿題サポーター</span>
+      <button class="tool-modal-close" onclick="closeToolModal('homework')">✕</button>
+    </div>
+    <label>だれの宿題？</label>
+    <div class="scene-chips" id="hwChildChips">
+      <span class="scene-chip" data-val="そうま（小4）" onclick="selectChipIn(this,'hwChildChips')">そうま（小4）</span>
+      <span class="scene-chip" data-val="ゆうさ（小2）" onclick="selectChipIn(this,'hwChildChips')">ゆうさ（小2）</span>
+    </div>
+    <label>教え方モード</label>
+    <div class="scene-chips" id="hwModeChips">
+      <span class="scene-chip selected" data-val="子どもに直接ヒントを出す" onclick="selectChipIn(this,'hwModeChips')">子どもに教える</span>
+      <span class="scene-chip" data-val="親が教えられるように解説する" onclick="selectChipIn(this,'hwModeChips')">親が教えるモード</span>
+    </div>
+    <label>問題の写真を添付</label>
+    <div class="pta-img-area" id="hwImgArea" onclick="document.getElementById('hwFileInput').click()">
+      <div class="pta-img-placeholder" id="hwImgPlaceholder">
+        <span style="font-size:24px;opacity:0.5;">📷</span>
+        <span>タップして写真を追加</span>
+      </div>
+      <div class="pta-img-thumbs" id="hwImgThumbs"></div>
+    </div>
+    <input type="file" id="hwFileInput" accept="image/*" multiple onchange="handleToolFileSelect(event,'hw')" style="display:none">
+    <div style="display:flex;align-items:center;gap:8px;margin:10px 0 6px;">
+      <div style="flex:1;height:1px;background:var(--border)"></div>
+      <span style="font-size:10px;color:var(--text-muted);letter-spacing:0.1em;">または テキストで入力</span>
+      <div style="flex:1;height:1px;background:var(--border)"></div>
+    </div>
+    <textarea id="hwTextInput" placeholder="問題をテキストで入力してもOK..." style="min-height:60px"></textarea>
+    <p class="tool-modal-hint">答えは出さず、ヒントと考え方を段階的に教えます。</p>
+    <button class="btn-tool-exec" id="hwExecBtn" onclick="execHomeworkTool()">ヒントをもらう →</button>
+  </div>
+</div>
+
+<!-- TOOL MODAL: 作文・日記AIコーチ -->
+<div class="tool-modal-overlay" id="sakubunModal">
+  <div class="tool-modal" onclick="event.stopPropagation()">
+    <div class="tool-modal-header">
+      <span class="tool-modal-icon">✏️</span>
+      <span class="tool-modal-title">作文・日記AIコーチ</span>
+      <button class="tool-modal-close" onclick="closeToolModal('sakubun')">✕</button>
+    </div>
+    <label>だれの作文？</label>
+    <div class="scene-chips" id="skChildChips">
+      <span class="scene-chip" data-val="そうま（小4）" onclick="selectChipIn(this,'skChildChips')">そうま（小4）</span>
+      <span class="scene-chip" data-val="ゆうさ（小2）" onclick="selectChipIn(this,'skChildChips')">ゆうさ（小2）</span>
+    </div>
+    <label>作文の写真を添付</label>
+    <div class="pta-img-area" id="skImgArea" onclick="document.getElementById('skFileInput').click()">
+      <div class="pta-img-placeholder" id="skImgPlaceholder">
+        <span style="font-size:24px;opacity:0.5;">📷</span>
+        <span>タップして写真を追加</span>
+      </div>
+      <div class="pta-img-thumbs" id="skImgThumbs"></div>
+    </div>
+    <input type="file" id="skFileInput" accept="image/*" multiple onchange="handleToolFileSelect(event,'sk')" style="display:none">
+    <div style="display:flex;align-items:center;gap:8px;margin:10px 0 6px;">
+      <div style="flex:1;height:1px;background:var(--border)"></div>
+      <span style="font-size:10px;color:var(--text-muted);letter-spacing:0.1em;">または テキストで入力</span>
+      <div style="flex:1;height:1px;background:var(--border)"></div>
+    </div>
+    <textarea id="skTextInput" placeholder="作文の内容をテキストで入力してもOK..." style="min-height:80px"></textarea>
+    <p class="tool-modal-hint">やさしい言葉で「もっとこう書くといいよ」と添削します。</p>
+    <button class="btn-tool-exec" id="skExecBtn" onclick="execSakubunTool()">添削してもらう →</button>
+  </div>
+</div>
+
+<!-- TOOL MODAL: 自由研究テーマ提案 -->
+<div class="tool-modal-overlay" id="jiyuuModal">
+  <div class="tool-modal" onclick="event.stopPropagation()">
+    <div class="tool-modal-header">
+      <span class="tool-modal-icon">🔬</span>
+      <span class="tool-modal-title">自由研究テーマ提案</span>
+      <button class="tool-modal-close" onclick="closeToolModal('jiyuu')">✕</button>
+    </div>
+    <label>だれの自由研究？</label>
+    <div class="scene-chips" id="jyChildChips">
+      <span class="scene-chip" data-val="そうま（小4男子）" onclick="selectChipIn(this,'jyChildChips')">そうま（小4）</span>
+      <span class="scene-chip" data-val="ゆうさ（小2女子）" onclick="selectChipIn(this,'jyChildChips')">ゆうさ（小2）</span>
+    </div>
+    <label>興味のあること（複数OK）</label>
+    <div class="scene-chips" id="jyInterestChips">
+      <span class="scene-chip" data-val="生き物・自然" onclick="toggleChip(this)">生き物</span>
+      <span class="scene-chip" data-val="工作・ものづくり" onclick="toggleChip(this)">工作</span>
+      <span class="scene-chip" data-val="料理・食べ物" onclick="toggleChip(this)">料理</span>
+      <span class="scene-chip" data-val="実験・科学" onclick="toggleChip(this)">実験</span>
+      <span class="scene-chip" data-val="歴史・社会" onclick="toggleChip(this)">歴史</span>
+      <span class="scene-chip" data-val="スポーツ・体" onclick="toggleChip(this)">スポーツ</span>
+      <span class="scene-chip" data-val="IT・プログラミング" onclick="toggleChip(this)">IT</span>
+      <span class="scene-chip" data-val="アート・絵" onclick="toggleChip(this)">アート</span>
+    </div>
+    <label for="jyNote">家にある材料・条件（任意）</label>
+    <textarea id="jyNote" placeholder="例：100均で買える材料だけで、1日で終わるもの希望。ペットボトルとか段ボールはある..." style="min-height:60px"></textarea>
+    <p class="tool-modal-hint">学年に合った難易度で、手順・まとめ方まで提案します。</p>
+    <button class="btn-tool-exec" id="jyExecBtn" onclick="execJiyuuTool()">テーマを提案 →</button>
+  </div>
+</div>
+
+<!-- TOOL MODAL: 持ち物・提出物リマインダー -->
+<div class="tool-modal-overlay" id="remindModal">
+  <div class="tool-modal" onclick="event.stopPropagation()">
+    <div class="tool-modal-header">
+      <span class="tool-modal-icon">🔔</span>
+      <span class="tool-modal-title">持ち物・提出物リマインダー</span>
+      <button class="tool-modal-close" onclick="closeToolModal('remind')">✕</button>
+    </div>
+    <label>おたよりの写真を添付</label>
+    <div class="pta-img-area" id="rmImgArea" onclick="document.getElementById('rmFileInput').click()">
+      <div class="pta-img-placeholder" id="rmImgPlaceholder">
+        <span style="font-size:24px;opacity:0.5;">📷</span>
+        <span>タップして写真を追加</span>
+      </div>
+      <div class="pta-img-thumbs" id="rmImgThumbs"></div>
+    </div>
+    <input type="file" id="rmFileInput" accept="image/*" multiple onchange="handleToolFileSelect(event,'rm')" style="display:none">
+    <div style="display:flex;align-items:center;gap:8px;margin:10px 0 6px;">
+      <div style="flex:1;height:1px;background:var(--border)"></div>
+      <span style="font-size:10px;color:var(--text-muted);letter-spacing:0.1em;">または テキストで入力</span>
+      <div style="flex:1;height:1px;background:var(--border)"></div>
+    </div>
+    <textarea id="rmTextInput" placeholder="おたよりの内容をテキストで入力してもOK..." style="min-height:60px"></textarea>
+    <p class="tool-modal-hint">期限・持ち物・提出物を抽出し、<a href="https://momomonbi.github.io/hazuki_note/" target="_blank" style="color:var(--accent);">はづきノート</a>に登録できる形式で整理します。</p>
+    <button class="btn-tool-exec" id="rmExecBtn" onclick="execRemindTool()">抽出する →</button>
   </div>
 </div>
 
@@ -3884,8 +4046,346 @@ async function execWorkTool() {
   }
 }
 
+// ── 汎用ツール画像ハンドラ ──
+const toolImages = {}; // { prefix: [{dataUrl, mediaType}] }
+async function handleToolFileSelect(e, prefix) {
+  const files = Array.from(e.target.files || []);
+  if (!files.length) return;
+  e.target.value = '';
+  if (!toolImages[prefix]) toolImages[prefix] = [];
+  for (const file of files) {
+    if (!file.type.startsWith('image/')) continue;
+    try {
+      showToast('🖼 画像を圧縮中...');
+      const compressed = await compressImage(file);
+      toolImages[prefix].push(compressed);
+    } catch { showToast('⚠ 画像の読み込みに失敗しました'); }
+  }
+  updateToolImagePreview(prefix);
+}
+function updateToolImagePreview(prefix) {
+  const area = document.getElementById(prefix + 'ImgArea');
+  const placeholder = document.getElementById(prefix + 'ImgPlaceholder');
+  const thumbs = document.getElementById(prefix + 'ImgThumbs');
+  const imgs = toolImages[prefix] || [];
+  thumbs.innerHTML = '';
+  if (!imgs.length) { placeholder.style.display = 'flex'; area.classList.remove('has-images'); return; }
+  placeholder.style.display = 'none'; area.classList.add('has-images');
+  imgs.forEach((img, i) => {
+    const w = document.createElement('div'); w.className = 'pta-thumb-wrap';
+    w.innerHTML = `<img class="pta-thumb" src="${img.dataUrl}" alt=""><div class="pta-thumb-del" onclick="event.stopPropagation();removeToolImage('${prefix}',${i})">✕</div>`;
+    thumbs.appendChild(w);
+  });
+  const addBtn = document.createElement('div'); addBtn.className = 'pta-img-add'; addBtn.textContent = '+';
+  addBtn.onclick = function(ev) { ev.stopPropagation(); document.getElementById(prefix + 'FileInput').click(); };
+  thumbs.appendChild(addBtn);
+}
+function removeToolImage(prefix, idx) {
+  (toolImages[prefix] || []).splice(idx, 1);
+  updateToolImagePreview(prefix);
+}
+function buildVisionContent(prefix, textInput) {
+  const text = textInput ? textInput.trim() : '';
+  const imgs = toolImages[prefix] || [];
+  if (!imgs.length && !text) return null;
+  const content = [];
+  if (text) content.push({ type: 'text', text });
+  for (const img of imgs) {
+    content.push({ type: 'image_url', image_url: { url: `data:${img.mediaType};base64,${dataUrlToBase64(img.dataUrl)}`, detail: 'high' } });
+  }
+  if (!text && imgs.length) content.push({ type: 'text', text: 'この画像の内容を読み取ってください。' });
+  return content;
+}
+function clearToolImages(prefix) {
+  toolImages[prefix] = [];
+  updateToolImagePreview(prefix);
+}
+
+// ── AI宿題サポーター ──
+async function execHomeworkTool() {
+  const textVal = document.getElementById('hwTextInput').value.trim();
+  const imgs = toolImages['hw'] || [];
+  if (!textVal && !imgs.length) { showToast('問題の写真またはテキストを入力してください'); return; }
+  const child = getSingleChip('hwChildChips');
+  const mode = getSingleChip('hwModeChips') || '子どもに直接ヒントを出す';
+  const btn = document.getElementById('hwExecBtn');
+  showToolLoading('homeworkModal', 'ヒントを考え中...');
+
+  const isParentMode = mode.includes('親');
+  const sysPrompt = `あなたは小学生の宿題をサポートするAIチューターです。
+${child ? `対象: ${child}` : ''}
+
+## 最重要ルール
+- **絶対に答えそのものを教えない**
+- ヒントと考え方を段階的に教える
+
+## 出力形式
+${isParentMode ? `### お子さんへの教え方ガイド（保護者向け）
+
+#### この問題のポイント
+（この問題が何を理解しているか確認するものかを解説）
+
+#### 教え方ステップ
+1. **まず聞いてみよう**: （お子さんに最初に聞く質問）
+2. **ヒントの出し方**: （行き詰まった時にどう声かけするか）
+3. **具体例で説明**: （身近なもので例える方法）
+
+#### NGな教え方
+（やりがちだけど避けたい教え方を1-2個）
+
+#### 「できた！」のサイン
+（理解できたかどうかの確認ポイント）` :
+`### ヒント💡
+
+#### まずここから考えてみよう
+（最初の一歩となるヒント。やさしい言葉で）
+
+#### もうちょっとヒント
+（それでもわからない時のための、もう一段深いヒント）
+
+#### 考え方のコツ
+（この種類の問題で使える考え方を1〜2個）
+
+#### チャレンジ！
+（できたら追加で考えてみてほしい発展問題）`}
+
+## ルール
+- 学年に合った語彙と説明レベルで
+- ${isParentMode ? '保護者が読む前提。敬語で分かりやすく。' : '子ども本人が読む前提。「〜だよ」「〜してみて！」のやさしい口調で。'}
+- 図や絵で説明できそうな場合は、テキストで簡易図を描く
+- 算数なら途中式のヒントを、国語なら文脈のヒントを`;
+
+  const userContent = buildVisionContent('hw', textVal) || textVal;
+
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: MODEL, temperature: 0.5, max_completion_tokens: 1500,
+        messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: userContent }]
+      })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const reply = (await res.json()).choices?.[0]?.message?.content || '読み取れませんでした';
+    hideToolLoading('homeworkModal'); closeToolModal('homework');
+    document.getElementById('hwTextInput').value = ''; clearToolImages('hw');
+    const label = child ? `📝 宿題サポート（${child}）` : '📝 宿題サポート';
+    renderMessage('user', label, true);
+    history.push({ role:'user', content:'[AI宿題サポーターツール使用]' });
+    if (db) await persistMessage('user','[AI宿題サポーターツール使用]');
+    const bubble = renderMessage('ai','');
+    bubble.innerHTML = fmt(reply); makeTapCopyable(bubble);
+    history.push({ role:'assistant', content: reply });
+    if (db) await persistMessage('assistant', reply);
+    document.getElementById('messages').scrollTop = 999999; updateMemoryUI();
+  } catch (err) { hideToolLoading('homeworkModal'); showToast('エラー: ' + err.message); }
+  finally { btn.disabled = false; }
+}
+
+// ── 作文・日記AIコーチ ──
+async function execSakubunTool() {
+  const textVal = document.getElementById('skTextInput').value.trim();
+  const imgs = toolImages['sk'] || [];
+  if (!textVal && !imgs.length) { showToast('作文の写真またはテキストを入力してください'); return; }
+  const child = getSingleChip('skChildChips');
+  const btn = document.getElementById('skExecBtn');
+  showToolLoading('sakubunModal', '読んでるよ...');
+
+  const sysPrompt = `あなたは小学生の作文・日記をやさしく添削するAIコーチです。
+${child ? `対象: ${child}` : ''}
+
+## 出力形式
+
+### いいところ
+（まず褒める！具体的にどこが良かったか2〜3個挙げる。子どもの自信を育てる。）
+
+### もっと良くなるポイント
+それぞれ以下の形式で2〜3個:
+#### 1. ポイント名
+- **元の文**: （該当部分を引用）
+- **こうするともっといいよ**: （具体的な書き直し例）
+- **なぜいいの？**: （理由を子どもにもわかる言葉で）
+
+### 使えるテクニック
+（この学年で身につけたい作文テクニックを1〜2個、例文付きで）
+
+### 先生からのひとこと
+（「先生」として、温かい総評を2〜3文で。「次はこれに挑戦してみてね！」で締める）
+
+## ルール
+- 絶対に全否定しない。必ず良い点から始める
+- 赤ペン先生のように、具体的な修正例を示す
+- 漢字の間違いは正しい字を教える（叱らない）
+- 学年に合った表現力の目標を意識する
+- 「〜だね」「〜してみよう！」のやさしい口調`;
+
+  const userContent = buildVisionContent('sk', textVal) || textVal;
+
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: MODEL, temperature: 0.5, max_completion_tokens: 1500,
+        messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: userContent }]
+      })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const reply = (await res.json()).choices?.[0]?.message?.content || '読み取れませんでした';
+    hideToolLoading('sakubunModal'); closeToolModal('sakubun');
+    document.getElementById('skTextInput').value = ''; clearToolImages('sk');
+    renderMessage('user', `✏️ 作文添削${child ? '（'+child+'）' : ''}`, true);
+    history.push({ role:'user', content:'[作文AIコーチツール使用]' });
+    if (db) await persistMessage('user','[作文AIコーチツール使用]');
+    const bubble = renderMessage('ai','');
+    bubble.innerHTML = fmt(reply); makeTapCopyable(bubble);
+    history.push({ role:'assistant', content: reply });
+    if (db) await persistMessage('assistant', reply);
+    document.getElementById('messages').scrollTop = 999999; updateMemoryUI();
+  } catch (err) { hideToolLoading('sakubunModal'); showToast('エラー: ' + err.message); }
+  finally { btn.disabled = false; }
+}
+
+// ── 自由研究テーマ提案AI ──
+async function execJiyuuTool() {
+  const child = getSingleChip('jyChildChips');
+  const interests = getSelectedChips('jyInterestChips');
+  const note = document.getElementById('jyNote').value.trim();
+  if (!child && !interests.length && !note) { showToast('条件を1つ以上入力してください'); return; }
+  const btn = document.getElementById('jyExecBtn');
+  showToolLoading('jiyuuModal', 'テーマを考え中...');
+
+  const sysPrompt = `あなたは小学生の自由研究テーマを提案するAIアドバイザーです。
+${child ? `対象: ${child}` : ''}
+
+## 出力形式
+
+3つのテーマを提案してください。それぞれ:
+
+### テーマ1: 【テーマ名】
+- **難易度**: ★☆☆〜★★★（学年に合わせて）
+- **期間**: 〇日くらい
+- **必要な材料**: （箇条書き。100均や家にあるもので揃うか明記）
+- **やり方**:
+  1. （手順を番号付きで）
+  2. ...
+- **まとめ方のコツ**: （模造紙 or ノートでの見せ方）
+- **先生ウケポイント**: （評価されやすいポイント）
+
+### テーマ2: ...
+### テーマ3: ...
+
+### 親御さんへのアドバイス
+（サポートの仕方・写真の撮り方・声かけのコツなど）
+
+## ルール
+- 学年の理解力に合った内容にする
+- 「家にあるもの」「100均で買える」レベルの材料で完結できるもの
+- 実験系は安全面の注意を必ず入れる
+- まとめ方まで提案（子どもが一人でできるレベル）
+- テーマの多様性を確保（実験・調査・工作など混ぜる）`;
+
+  let userMsg = '';
+  if (child) userMsg += `子ども: ${child}\n`;
+  if (interests.length) userMsg += `興味: ${interests.join('、')}\n`;
+  if (note) userMsg += `条件: ${note}\n`;
+
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: MODEL, temperature: 0.8, max_completion_tokens: 2500,
+        messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: userMsg }]
+      })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const reply = (await res.json()).choices?.[0]?.message?.content || '提案できませんでした';
+    hideToolLoading('jiyuuModal'); closeToolModal('jiyuu');
+    document.getElementById('jyNote').value = '';
+    clearChips('jyChildChips'); clearChips('jyInterestChips');
+    renderMessage('user', `🔬 自由研究テーマ提案${child ? '（'+child+'）' : ''}`, true);
+    history.push({ role:'user', content:'[自由研究テーマ提案ツール使用]' });
+    if (db) await persistMessage('user','[自由研究テーマ提案ツール使用]');
+    const bubble = renderMessage('ai','');
+    bubble.innerHTML = fmt(reply); makeTapCopyable(bubble);
+    history.push({ role:'assistant', content: reply });
+    if (db) await persistMessage('assistant', reply);
+    document.getElementById('messages').scrollTop = 999999; updateMemoryUI();
+  } catch (err) { hideToolLoading('jiyuuModal'); showToast('エラー: ' + err.message); }
+  finally { btn.disabled = false; }
+}
+
+// ── 持ち物・提出物リマインダー ──
+async function execRemindTool() {
+  const textVal = document.getElementById('rmTextInput').value.trim();
+  const imgs = toolImages['rm'] || [];
+  if (!textVal && !imgs.length) { showToast('おたよりの写真またはテキストを入力してください'); return; }
+  const btn = document.getElementById('rmExecBtn');
+  showToolLoading('remindModal', '読み取り中...');
+
+  const todayStr = new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).format(new Date());
+
+  const sysPrompt = `あなたは学校のおたよりから「持ち物・提出物・期限」を抽出するアシスタントです。
+今日の日付: ${todayStr}
+
+## 出力形式
+
+### 抽出結果
+
+それぞれ以下の形式で:
+| 項目 | 期限 | 持ち物・提出物 | 対象 |
+|------|------|----------------|------|
+| （行事名や項目名） | （YYYY/MM/DD or なし） | （具体的な持ち物リスト） | （全員 / そうま / ゆうさ 等） |
+
+### カレンダー登録用
+以下の形式で、はづきノートにコピペできるようにまとめてください:
+（それぞれの項目を1行ずつ）
+📅 YYYY/MM/DD ｜ 【項目名】持ち物: 〇〇、△△
+📅 YYYY/MM/DD ｜ 【項目名】提出: 〇〇
+
+### 注意・補足
+（見落としがちなポイントや、前日までに準備が必要なものなど）
+
+## ルール
+- 曖昧な日付は「来週の〇曜日」→ 具体的な日付に変換
+- 「いつもの持ち物」は省略し、特別な持ち物だけ抽出
+- 対象が学年やクラス限定の場合は明記
+- 期限が近い順に並べる`;
+
+  const userContent = buildVisionContent('rm', textVal) || textVal;
+
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: MODEL, temperature: 0.3, max_completion_tokens: 1500,
+        messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: userContent }]
+      })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const reply = (await res.json()).choices?.[0]?.message?.content || '読み取れませんでした';
+    hideToolLoading('remindModal'); closeToolModal('remind');
+    document.getElementById('rmTextInput').value = ''; clearToolImages('rm');
+    renderMessage('user', '🔔 持ち物・提出物リマインダー', true);
+    history.push({ role:'user', content:'[持ち物リマインダーツール使用]' });
+    if (db) await persistMessage('user','[持ち物リマインダーツール使用]');
+    const bubble = renderMessage('ai','');
+    bubble.innerHTML = fmt(reply); makeTapCopyable(bubble);
+    history.push({ role:'assistant', content: reply });
+    if (db) await persistMessage('assistant', reply);
+    document.getElementById('messages').scrollTop = 999999; updateMemoryUI();
+  } catch (err) { hideToolLoading('remindModal'); showToast('エラー: ' + err.message); }
+  finally { btn.disabled = false; }
+}
+
 // モーダル外クリックで閉じる
-['ptaModal','lineModal','sukimaModal','journalModal','workModal'].forEach(id => {
+['ptaModal','lineModal','sukimaModal','journalModal','workModal',
+ 'homeworkModal','sakubunModal','jiyuuModal','remindModal'].forEach(id => {
   document.getElementById(id).addEventListener('click', function(e) {
     if (e.target === this) closeToolModal(id.replace('Modal',''));
   });
