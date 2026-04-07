@@ -858,7 +858,7 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
   background: var(--surface); border: 1px solid var(--border);
   border-radius: 20px; padding: 28px 24px;
   transform: translateY(20px) scale(0.97); transition: transform 0.3s cubic-bezier(.22,1,.36,1);
-  overflow-y: auto;
+  overflow-y: auto; position: relative;
 }
 .tool-modal-overlay.open .tool-modal { transform: translateY(0) scale(1); }
 
@@ -958,6 +958,90 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
   transition: border-color 0.2s, color 0.2s;
 }
 .pta-img-add:hover { border-color: rgba(200,240,160,0.3); color: var(--accent); }
+
+/* ── Tool Loading Overlay ── */
+.tool-loading {
+  position: absolute; inset: 0; z-index: 5;
+  background: rgba(20,20,23,0.88);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 16px;
+  border-radius: 20px;
+  animation: fadeIn 0.2s ease;
+}
+.tool-loading-dots {
+  display: flex; gap: 8px;
+}
+.tool-loading-dots span {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--accent);
+  animation: toolDotPulse 1.4s ease-in-out infinite;
+}
+.tool-loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+.tool-loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes toolDotPulse {
+  0%, 100% { opacity: 0.15; transform: scale(0.7); }
+  50%      { opacity: 1;    transform: scale(1.15); box-shadow: 0 0 12px rgba(200,240,160,0.5); }
+}
+.tool-loading-text {
+  font-size: 13px; color: var(--text-muted); letter-spacing: 0.04em;
+  animation: toolTextPulse 2s ease-in-out infinite;
+}
+@keyframes toolTextPulse {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 1; }
+}
+
+/* ── Journal History ── */
+.journal-hist-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 12px; border-radius: 14px; font-size: 11px;
+  background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+  color: var(--text-muted); cursor: pointer; transition: all 0.2s;
+  margin-bottom: 10px;
+}
+.journal-hist-btn:hover { border-color: rgba(200,240,160,0.25); color: var(--accent); }
+.journal-hist-btn .badge {
+  background: var(--accent-dim); color: var(--accent); border-radius: 8px;
+  padding: 1px 6px; font-size: 10px; font-weight: 500;
+}
+
+.jrn-entry {
+  background: rgba(255,255,255,0.02); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 14px; margin-bottom: 10px;
+  cursor: pointer; transition: background 0.2s, border-color 0.2s;
+}
+.jrn-entry:hover { background: rgba(200,240,160,0.03); border-color: rgba(200,240,160,0.15); }
+.jrn-entry-date {
+  font-size: 11px; color: var(--accent); opacity: 0.7; margin-bottom: 4px;
+  letter-spacing: 0.04em;
+}
+.jrn-entry-preview {
+  font-size: 13px; color: var(--text); line-height: 1.55;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.jrn-entry-mood {
+  font-size: 11px; color: var(--text-muted); margin-top: 6px;
+}
+.jrn-entry-actions {
+  display: flex; justify-content: flex-end; margin-top: 6px;
+}
+.jrn-del-btn {
+  font-size: 11px; color: var(--text-muted); background: none; border: none;
+  cursor: pointer; padding: 2px 8px; border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+}
+.jrn-del-btn:hover { color: #ff7b7b; background: rgba(255,123,123,0.1); }
+
+.jrn-detail-body {
+  font-size: 14px; line-height: 1.8; color: var(--text);
+}
+.jrn-back-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 12px; color: var(--text-muted); background: none; border: none;
+  cursor: pointer; padding: 4px 0; margin-bottom: 12px; transition: color 0.15s;
+}
+.jrn-back-btn:hover { color: var(--accent); }
 
 /* ── keyframes ── */
 @keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
@@ -1147,6 +1231,11 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
       <span class="tool-modal-title">ママ友LINE下書き</span>
       <button class="tool-modal-close" onclick="closeToolModal('line')">✕</button>
     </div>
+    <label>自分の立場</label>
+    <div class="scene-chips" id="lineRoleChips">
+      <span class="scene-chip" data-val="相談する側（自分から送る）" onclick="selectChipIn(this,'lineRoleChips')">自分から送る</span>
+      <span class="scene-chip" data-val="相談される側（返信する）" onclick="selectChipIn(this,'lineRoleChips')">返信する</span>
+    </div>
     <label>シーンを選択</label>
     <div class="scene-chips" id="sceneChips">
       <span class="scene-chip" data-scene="お断り" onclick="selectScene(this)">お断り</span>
@@ -1197,15 +1286,41 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
 <!-- TOOL MODAL: 愚痴聞きジャーナル -->
 <div class="tool-modal-overlay" id="journalModal">
   <div class="tool-modal" onclick="event.stopPropagation()">
-    <div class="tool-modal-header">
-      <span class="tool-modal-icon">📔</span>
-      <span class="tool-modal-title">愚痴聞きジャーナル</span>
-      <button class="tool-modal-close" onclick="closeToolModal('journal')">✕</button>
+    <!-- 書く画面 -->
+    <div id="journalWriteView">
+      <div class="tool-modal-header">
+        <span class="tool-modal-icon">📔</span>
+        <span class="tool-modal-title">愚痴聞きジャーナル</span>
+        <button class="tool-modal-close" onclick="closeToolModal('journal')">✕</button>
+      </div>
+      <button class="journal-hist-btn" onclick="showJournalHistory()">
+        📖 過去の日記 <span class="badge" id="jrnCount">0</span>
+      </button>
+      <label for="journalInput">今日のモヤモヤを書いてね</label>
+      <textarea id="journalInput" placeholder="今日あったこと、イライラしたこと、悲しかったこと...なんでもOK。誰にも見せないから正直に書いてね。"></textarea>
+      <p class="tool-modal-hint">共感しつつ気持ちを整理し、感情の傾向も分析します。ジャーナルは自動保存され、ももの記憶にも反映されます。</p>
+      <button class="btn-tool-exec" id="journalExecBtn" onclick="execJournalTool()">聞いてもらう →</button>
     </div>
-    <label for="journalInput">今日のモヤモヤを書いてね</label>
-    <textarea id="journalInput" placeholder="今日あったこと、イライラしたこと、悲しかったこと...なんでもOK。誰にも見せないから正直に書いてね。"></textarea>
-    <p class="tool-modal-hint">共感しつつ気持ちを整理し、感情の傾向も分析します。</p>
-    <button class="btn-tool-exec" id="journalExecBtn" onclick="execJournalTool()">聞いてもらう →</button>
+    <!-- 履歴一覧 -->
+    <div id="journalHistView" style="display:none;">
+      <div class="tool-modal-header">
+        <span class="tool-modal-icon">📖</span>
+        <span class="tool-modal-title">日記の記録</span>
+        <button class="tool-modal-close" onclick="closeToolModal('journal')">✕</button>
+      </div>
+      <button class="jrn-back-btn" onclick="showJournalWrite()">← 書く画面に戻る</button>
+      <div id="jrnHistList"></div>
+    </div>
+    <!-- 個別詳細 -->
+    <div id="journalDetailView" style="display:none;">
+      <div class="tool-modal-header">
+        <span class="tool-modal-icon">📔</span>
+        <span class="tool-modal-title" id="jrnDetailDate"></span>
+        <button class="tool-modal-close" onclick="closeToolModal('journal')">✕</button>
+      </div>
+      <button class="jrn-back-btn" onclick="showJournalHistory()">← 一覧に戻る</button>
+      <div id="jrnDetailBody" class="jrn-detail-body"></div>
+    </div>
   </div>
 </div>
 
@@ -1273,10 +1388,11 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
 // ================================================================
 const API_CONTEXT   = 30;     // APIに送る直近件数（記憶の窓）
 const DB_NAME       = 'momochat_db';
-const DB_VERSION    = 4;      // bump version to handle schema upgrade
+const DB_VERSION    = 5;      // bump version to handle schema upgrade
 const MSG_STORE     = 'messages';
 const META_STORE    = 'meta';
 const ARCHIVE_STORE = 'archives';  // 会話アーカイブ
+const JOURNAL_STORE = 'journal';   // 愚痴聞きジャーナル
 const MODEL         = 'gpt-5.4';
 const SUMMARY_EVERY = 10;
 // 重要記憶キー（削除されない永続情報）
@@ -1602,6 +1718,10 @@ function openDB() {
         const a = d.createObjectStore(ARCHIVE_STORE, { keyPath: 'id', autoIncrement: true });
         a.createIndex('ts', 'ts', { unique: false });
       }
+      if (!d.objectStoreNames.contains(JOURNAL_STORE)) {
+        const j = d.createObjectStore(JOURNAL_STORE, { keyPath: 'id', autoIncrement: true });
+        j.createIndex('ts', 'ts', { unique: false });
+      }
     };
     req.onsuccess = e => resolve(e.target.result);
     req.onerror   = e => reject(e.target.error);
@@ -1618,6 +1738,10 @@ const idbSetM = (k,v)   => new Promise((res,rej) => { const r = idbTx(META_STORE
 const arcAdd  = (rec)   => new Promise((res,rej) => { const r = idbTx(ARCHIVE_STORE,'readwrite').add(rec); r.onsuccess=e=>res(e.target.result); r.onerror=e=>rej(e.target.error); });
 const arcAll  = ()       => new Promise((res,rej) => { const r = idbTx(ARCHIVE_STORE,'readonly').index('ts').getAll(); r.onsuccess=e=>res(e.target.result); r.onerror=e=>rej(e.target.error); });
 const arcDel  = (id)    => new Promise((res,rej) => { const r = idbTx(ARCHIVE_STORE,'readwrite').delete(id); r.onsuccess=()=>res(); r.onerror=e=>rej(e.target.error); });
+// Journal helpers
+const jrnAdd  = (rec)   => new Promise((res,rej) => { const r = idbTx(JOURNAL_STORE,'readwrite').add(rec); r.onsuccess=e=>res(e.target.result); r.onerror=e=>rej(e.target.error); });
+const jrnAll  = ()       => new Promise((res,rej) => { const r = idbTx(JOURNAL_STORE,'readonly').index('ts').getAll(); r.onsuccess=e=>res(e.target.result); r.onerror=e=>rej(e.target.error); });
+const jrnDel  = (id)    => new Promise((res,rej) => { const r = idbTx(JOURNAL_STORE,'readwrite').delete(id); r.onsuccess=()=>res(); r.onerror=e=>rej(e.target.error); });
 
 // メッセージを保存（テキストのみ。画像はbase64が大きすぎるため除外）
 async function persistMessage(role, textContent) {
@@ -1988,6 +2112,9 @@ async function startChat() {
     // Restore messages from DB (last API_CONTEXT for display, but DB has all)
     const slice = stored.slice(-API_CONTEXT);
     history = slice.map(r => ({ role: r.role, content: r.content }));
+
+    // ジャーナル件数をバッジに反映
+    updateJournalCount();
 
     if (slice.length > 0) {
       slice.forEach(r => renderMessage(r.role === 'assistant' ? 'ai' : r.role, r.content, false));
@@ -3200,7 +3327,7 @@ async function execPtaTool() {
   const hasImgs = ptaImages.length > 0;
   if (!text && !hasImgs) { showToast('写真またはテキストを入力してください'); return; }
   const btn = document.getElementById('ptaExecBtn');
-  btn.disabled = true; btn.textContent = '要約中...';
+  showToolLoading('ptaModal', '要約中...');
 
   const sysPrompt = `あなたは忙しいママ・パパのためのアシスタントです。
 PTAのおたよりやLINEグループの長い会話を受け取り、以下の形式で要約してください。
@@ -3257,6 +3384,7 @@ PTAのおたよりやLINEグループの長い会話を受け取り、以下の�
     const data = await res.json();
     const reply = data.choices?.[0]?.message?.content || '要約できませんでした';
 
+    hideToolLoading('ptaModal');
     closeToolModal('pta');
     document.getElementById('ptaInput').value = '';
     ptaImages = [];
@@ -3276,9 +3404,10 @@ PTAのおたよりやLINEグループの長い会話を受け取り、以下の�
     document.getElementById('messages').scrollTop = 999999;
     updateMemoryUI();
   } catch (err) {
+    hideToolLoading('ptaModal');
     showToast('エラー: ' + err.message);
   } finally {
-    btn.disabled = false; btn.textContent = '要約する →';
+    btn.disabled = false;
   }
 }
 
@@ -3287,12 +3416,15 @@ async function execLineTool() {
   const context = document.getElementById('lineContext').value.trim();
   if (!context) { showToast('状況を入力してください'); return; }
   const btn = document.getElementById('lineExecBtn');
-  btn.disabled = true; btn.textContent = '作成中...';
+  const lineRole = getSingleChip('lineRoleChips');
+
+  showToolLoading('lineModal', '下書き作成中...');
 
   const sceneLabel = selectedScene ? `【シーン: ${selectedScene}】\n` : '';
+  const roleLabel = lineRole ? `【立場: ${lineRole}】\n` : '';
 
-  const sysPrompt = `あなたはママ友へのLINE返信の下書きを作るアシスタントです。
-ユーザーが伝えた状況・シーンに合わせて、絶妙な距離感の返信を3パターン提案してください。
+  const sysPrompt = `あなたはママ友へのLINEメッセージの下書きを作るアシスタントです。
+ユーザーが伝えた状況・シーン・立場に合わせて、絶妙な距離感のメッセージを3パターン提案してください。
 
 ## 出力形式
 ### パターン1（やわらかめ）
@@ -3308,6 +3440,8 @@ async function execLineTool() {
 （どんな相手・状況にどのパターンが向いているか、1〜2行ずつ簡潔に）
 
 ## ルール
+- ユーザーが「自分から送る」場合は、自然な切り出し方を工夫する
+- ユーザーが「返信する」場合は、相手のメッセージへの自然な反応として作る
 - 実際にLINEで送れるリアルな文面にする（長すぎない、絵文字は控えめ）
 - 相手を傷つけず、かつ自分の意思もちゃんと伝わるバランスを意識
 - お断りの場合は代替案や次回への含みを入れる
@@ -3323,7 +3457,7 @@ async function execLineTool() {
         model: MODEL, temperature: 0.7, max_completion_tokens: 1500,
         messages: [
           { role: 'system', content: sysPrompt },
-          { role: 'user', content: sceneLabel + context }
+          { role: 'user', content: roleLabel + sceneLabel + context }
         ]
       })
     });
@@ -3331,10 +3465,12 @@ async function execLineTool() {
     const data = await res.json();
     const reply = data.choices?.[0]?.message?.content || '作成できませんでした';
 
+    hideToolLoading('lineModal');
     closeToolModal('line');
     document.getElementById('lineContext').value = '';
     selectedScene = '';
     document.querySelectorAll('#sceneChips .scene-chip').forEach(c => c.classList.remove('selected'));
+    clearChips('lineRoleChips');
 
     // チャットに結果を表示
     const sceneTag = selectedScene ? `（${selectedScene}）` : '';
@@ -3350,10 +3486,28 @@ async function execLineTool() {
     document.getElementById('messages').scrollTop = 999999;
     updateMemoryUI();
   } catch (err) {
+    hideToolLoading('lineModal');
     showToast('エラー: ' + err.message);
   } finally {
-    btn.disabled = false; btn.textContent = '下書きを作成 →';
+    btn.disabled = false;
   }
+}
+
+// ── ツールモーダル ローディングアニメーション ──
+function showToolLoading(modalId, text) {
+  const modal = document.querySelector('#' + modalId + ' .tool-modal');
+  if (!modal) return;
+  // 既存のローディングがあれば除去
+  modal.querySelector('.tool-loading')?.remove();
+  const el = document.createElement('div');
+  el.className = 'tool-loading';
+  el.innerHTML = `<div class="tool-loading-dots"><span></span><span></span><span></span></div><div class="tool-loading-text">${esc(text || '処理中...')}</div>`;
+  modal.appendChild(el);
+}
+function hideToolLoading(modalId) {
+  const modal = document.querySelector('#' + modalId + ' .tool-modal');
+  if (!modal) return;
+  modal.querySelector('.tool-loading')?.remove();
 }
 
 // ── チップ選択ヘルパー（単一選択） ──
@@ -3384,7 +3538,7 @@ async function execSukimaTool() {
   const moods = getSelectedChips('sukimaMoodChips');
   const note = document.getElementById('sukimaNote').value.trim();
   const btn = document.getElementById('sukimaExecBtn');
-  btn.disabled = true; btn.textContent = '検索中...';
+  showToolLoading('sukimaModal', '検索中...');
 
   const query = `${time}のすきま時間 おすすめの過ごし方 ` +
     (moods.length ? moods.join(' ') + ' ' : '') +
@@ -3441,6 +3595,7 @@ async function execSukimaTool() {
       reply += '\n\n📎 ソース:\n' + searchResult.sources.slice(0, 3).map(s => `- [${s.title}](${s.url})`).join('\n');
     }
 
+    hideToolLoading('sukimaModal');
     closeToolModal('sukima');
     document.getElementById('sukimaNote').value = '';
     clearChips('sukimaTimeChips'); clearChips('sukimaMoodChips');
@@ -3457,18 +3612,19 @@ async function execSukimaTool() {
     document.getElementById('messages').scrollTop = 999999;
     updateMemoryUI();
   } catch (err) {
+    hideToolLoading('sukimaModal');
     showToast('エラー: ' + err.message);
   } finally {
-    btn.disabled = false; btn.textContent = '提案してもらう →';
+    btn.disabled = false;
   }
 }
 
-// ── 愚痴聞きジャーナル実行（感情分析付き） ──
+// ── 愚痴聞きジャーナル実行（感情分析 + 保存 + 記憶反映） ──
 async function execJournalTool() {
   const text = document.getElementById('journalInput').value.trim();
   if (!text) { showToast('モヤモヤを書いてください'); return; }
   const btn = document.getElementById('journalExecBtn');
-  btn.disabled = true; btn.textContent = '読んでるよ...';
+  showToolLoading('journalModal', '読んでるよ...');
 
   const sysPrompt = `あなたは「ママの味方の日記帳」です。
 ユーザーが書いた日々のモヤモヤ・愚痴・不満を読み、以下の3ステップで応答してください。
@@ -3523,6 +3679,24 @@ async function execJournalTool() {
     const data = await res.json();
     const reply = data.choices?.[0]?.message?.content || '読み取れませんでした';
 
+    // ── ジャーナルをIndexedDBに保存 ──
+    if (db) {
+      const moodMatch = reply.match(/\*\*今の状態\*\*[:：]\s*(.+)/);
+      const mood = moodMatch ? moodMatch[1].trim() : '';
+      await jrnAdd({ ts: Date.now(), date: now, input: text, reply, mood });
+      updateJournalCount();
+
+      // ── ももの記憶に反映（感情ログに追加） ──
+      const emotionEntry = `[${now}] ${mood || '日記を書いた'}`;
+      const currentLog = emotionLog ? emotionLog.split('\n') : [];
+      currentLog.push(emotionEntry);
+      // 直近20件だけ保持
+      const trimmed = currentLog.slice(-20).join('\n');
+      emotionLog = trimmed;
+      await idbSetM(KEY_EMOTION_LOG, trimmed);
+    }
+
+    hideToolLoading('journalModal');
     closeToolModal('journal');
     document.getElementById('journalInput').value = '';
 
@@ -3537,11 +3711,81 @@ async function execJournalTool() {
     if (db) await persistMessage('assistant', reply);
     document.getElementById('messages').scrollTop = 999999;
     updateMemoryUI();
+    showToast('📔 日記を保存しました');
   } catch (err) {
+    hideToolLoading('journalModal');
     showToast('エラー: ' + err.message);
   } finally {
-    btn.disabled = false; btn.textContent = '聞いてもらう →';
+    btn.disabled = false;
   }
+}
+
+// ── ジャーナル履歴表示 ──
+async function updateJournalCount() {
+  if (!db) return;
+  try {
+    const all = await jrnAll();
+    document.getElementById('jrnCount').textContent = all.length;
+  } catch {}
+}
+
+function showJournalWrite() {
+  document.getElementById('journalWriteView').style.display = '';
+  document.getElementById('journalHistView').style.display = 'none';
+  document.getElementById('journalDetailView').style.display = 'none';
+}
+
+async function showJournalHistory() {
+  document.getElementById('journalWriteView').style.display = 'none';
+  document.getElementById('journalDetailView').style.display = 'none';
+  document.getElementById('journalHistView').style.display = '';
+
+  const list = document.getElementById('jrnHistList');
+  if (!db) { list.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">データベース未接続</p>'; return; }
+
+  try {
+    const all = await jrnAll();
+    if (!all.length) {
+      list.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">まだ日記がありません</p>';
+      return;
+    }
+    // 新しい順で表示
+    list.innerHTML = all.slice().reverse().map(e => `
+      <div class="jrn-entry" onclick="viewJournalEntry(${e.id})">
+        <div class="jrn-entry-date">${esc(e.date)}</div>
+        <div class="jrn-entry-preview">${esc(e.input)}</div>
+        ${e.mood ? `<div class="jrn-entry-mood">${esc(e.mood)}</div>` : ''}
+        <div class="jrn-entry-actions">
+          <button class="jrn-del-btn" onclick="event.stopPropagation();deleteJournalEntry(${e.id})">削除</button>
+        </div>
+      </div>
+    `).join('');
+  } catch {
+    list.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">読み込みに失敗しました</p>';
+  }
+}
+
+async function viewJournalEntry(id) {
+  if (!db) return;
+  try {
+    const entry = await new Promise((res,rej) => {
+      const r = idbTx(JOURNAL_STORE,'readonly').get(id);
+      r.onsuccess = e => res(e.target.result);
+      r.onerror = e => rej(e.target.error);
+    });
+    if (!entry) return;
+    document.getElementById('journalHistView').style.display = 'none';
+    document.getElementById('journalDetailView').style.display = '';
+    document.getElementById('jrnDetailDate').textContent = entry.date;
+    document.getElementById('jrnDetailBody').innerHTML =
+      `<div style="margin-bottom:16px;padding:12px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--text-muted);line-height:1.7;">` +
+      esc(entry.input) + `</div>` + fmt(entry.reply);
+  } catch {}
+}
+
+async function deleteJournalEntry(id) {
+  if (!db) return;
+  try { await jrnDel(id); showToast('日記を削除しました'); showJournalHistory(); updateJournalCount(); } catch {}
 }
 
 // ── 在宅ワーク探し実行（Web検索付き） ──
@@ -3551,7 +3795,7 @@ async function execWorkTool() {
   const note = document.getElementById('workNote').value.trim();
   if (!skills.length && !time && !note) { showToast('条件を1つ以上入力してください'); return; }
   const btn = document.getElementById('workExecBtn');
-  btn.disabled = true; btn.textContent = '検索中...';
+  showToolLoading('workModal', '検索中...');
 
   const query = '在宅ワーク 求人 ' +
     (skills.length ? skills.join(' ') + ' ' : '未経験OK ') +
@@ -3616,6 +3860,7 @@ async function execWorkTool() {
       reply += '\n\n📎 ソース:\n' + searchResult.sources.slice(0, 5).map(s => `- [${s.title}](${s.url})`).join('\n');
     }
 
+    hideToolLoading('workModal');
     closeToolModal('work');
     document.getElementById('workNote').value = '';
     clearChips('workSkillChips'); clearChips('workTimeChips');
@@ -3632,9 +3877,10 @@ async function execWorkTool() {
     document.getElementById('messages').scrollTop = 999999;
     updateMemoryUI();
   } catch (err) {
+    hideToolLoading('workModal');
     showToast('エラー: ' + err.message);
   } finally {
-    btn.disabled = false; btn.textContent = '探してもらう →';
+    btn.disabled = false;
   }
 }
 
