@@ -2450,6 +2450,14 @@ async function newChat() {
   await idbClear();
   // longSummary, KEY_SUMMARY はクリアしない → 新しい会話でも直前の文脈を覚えている
 
+  // トピックステートをリセット
+  currentTopicTitle = '';
+  currentTopicMsgs  = [];
+  topicCount        = 0;
+  lastTopicCheckAt  = 0;
+  topicSavedFlag    = false;
+  document.getElementById('topicBar').classList.remove('show');
+
   document.getElementById('messages').innerHTML = `
     <div class="empty-state" id="emptyState">
       <div class="big-letter">m</div>
@@ -2598,7 +2606,7 @@ async function openHistory() {
     list.innerHTML = '<div class="history-empty">まだ履歴がありません</div>';
   } else {
     // 新しい順
-    list.innerHTML = archives.reverse().map(a => {
+    list.innerHTML = [...archives].reverse().map(a => {
       const d = new Date(a.lastTs);
       const dateStr = `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
       return `<div class="hist-card" onclick="viewArchive(${a.id})">
@@ -2928,6 +2936,28 @@ function fmt(text) {
     return `\n%%CODEBLOCK_${codeBlocks.length - 1}%%\n`;
   });
 
+  // ── Markdownテーブル変換（パイプ行を<table>に変換） ──
+  const tableBlocks = [];
+  text = text.replace(/((?:^|\n)\|.+\|(?:\n\|.+\|)+)/g, (block) => {
+    const rows = block.trim().split('\n').filter(r => r.trim());
+    if (rows.length < 2) return block;
+    // セパレータ行（|---|---|）を検出して除外
+    const isSep = r => /^\|[\s\-:]+\|$/.test(r.replace(/[^|:\-\s]/g, ''));
+    const dataRows = rows.filter(r => !isSep(r));
+    if (dataRows.length === 0) return block;
+    const parseRow = r => r.replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
+    const headerCells = parseRow(dataRows[0]);
+    let tbl = '<div style="overflow-x:auto;margin:8px 0;"><table style="width:100%;border-collapse:collapse;font-size:13px;">';
+    tbl += '<thead><tr>' + headerCells.map(c => `<th style="padding:6px 10px;border-bottom:2px solid rgba(200,240,160,0.3);text-align:left;color:var(--accent);font-weight:500;white-space:nowrap;">${fmtInline(c)}</th>`).join('') + '</tr></thead><tbody>';
+    for (let ri = 1; ri < dataRows.length; ri++) {
+      const cells = parseRow(dataRows[ri]);
+      tbl += '<tr>' + cells.map(c => `<td style="padding:5px 10px;border-bottom:1px solid var(--border);">${fmtInline(c)}</td>`).join('') + '</tr>';
+    }
+    tbl += '</tbody></table></div>';
+    tableBlocks.push(tbl);
+    return `\n%%TABLE_${tableBlocks.length - 1}%%\n`;
+  });
+
   const lines = text.split('\n');
   let html = '';
   let inUl = false, inOl = false, inBq = false, inChoice = false;
@@ -2954,6 +2984,12 @@ function fmt(text) {
     if (/^%%CODEBLOCK_\d+%%$/.test(trimmed)) {
       flushPara(); closeList(); closeBq();
       html += codeBlocks[parseInt(trimmed.match(/\d+/)[0])];
+      continue;
+    }
+    // テーブル復元
+    if (/^%%TABLE_\d+%%$/.test(trimmed)) {
+      flushPara(); closeList(); closeBq();
+      html += tableBlocks[parseInt(trimmed.match(/\d+/)[0])];
       continue;
     }
 
@@ -3015,7 +3051,7 @@ function fmt(text) {
 
     // 「キー：値」パターン検出（キーが短い名詞の場合のみ）
     // キーは漢字・カタカナ・英数・スペースのみ8文字以内、文中の「：」誤爆を防ぐ
-    const kvMatch = trimmed.match(/^([A-Za-z0-9\u3000-\u30FF\u4E00-\u9FFF]{1,8})[：:]\s*(.+)/);
+    const kvMatch = trimmed.match(/^([A-Za-z0-9\u3000-\u30FF\u3040-\u309F\u4E00-\u9FFF]{1,8})[：:]\s*(.+)/);
     if (kvMatch && !inUl && !inOl && trimmed.length < 60) {
       flushPara(); closeBq();
       const kvVal = kvMatch[2];
@@ -3542,6 +3578,7 @@ async function execPtaTool() {
   const hasImgs = ptaImages.length > 0;
   if (!text && !hasImgs) { showToast('写真またはテキストを入力してください'); return; }
   const btn = document.getElementById('ptaExecBtn');
+  btn.disabled = true;
   showToolLoading('ptaModal', '要約中...');
 
   const sysPrompt = `あなたは忙しいママ・パパのためのアシスタントです。
@@ -3631,6 +3668,7 @@ async function execLineTool() {
   const context = document.getElementById('lineContext').value.trim();
   if (!context) { showToast('状況を入力してください'); return; }
   const btn = document.getElementById('lineExecBtn');
+  btn.disabled = true;
   const lineRole = getSingleChip('lineRoleChips');
 
   showToolLoading('lineModal', '下書き作成中...');
@@ -3683,12 +3721,12 @@ async function execLineTool() {
     hideToolLoading('lineModal');
     closeToolModal('line');
     document.getElementById('lineContext').value = '';
+
+    // チャットに結果を表示（クリア前に値を取得）
+    const sceneTag = selectedScene ? `（${selectedScene}）` : '';
     selectedScene = '';
     document.querySelectorAll('#sceneChips .scene-chip').forEach(c => c.classList.remove('selected'));
     clearChips('lineRoleChips');
-
-    // チャットに結果を表示
-    const sceneTag = selectedScene ? `（${selectedScene}）` : '';
     renderMessage('user', `💬 LINE下書き${sceneTag}をお願い`, true);
     history.push({ role: 'user', content: '[ママ友LINE下書きツール使用]' });
     if (db) await persistMessage('user', '[ママ友LINE下書きツール使用]');
@@ -3757,6 +3795,7 @@ async function execSukimaTool() {
   const moods = getSelectedChips('sukimaMoodChips');
   const note = document.getElementById('sukimaNote').value.trim();
   const btn = document.getElementById('sukimaExecBtn');
+  btn.disabled = true;
   showToolLoading('sukimaModal', '検索中...');
 
   const query = `${time}のすきま時間 おすすめの過ごし方 ` +
@@ -3843,6 +3882,7 @@ async function execJournalTool() {
   const text = document.getElementById('journalInput').value.trim();
   if (!text) { showToast('モヤモヤを書いてください'); return; }
   const btn = document.getElementById('journalExecBtn');
+  btn.disabled = true;
   showToolLoading('journalModal', '読んでるよ...');
 
   const sysPrompt = `あなたは「ママの味方の日記帳」です。
@@ -4014,11 +4054,12 @@ async function execWorkTool() {
   const note = document.getElementById('workNote').value.trim();
   if (!skills.length && !time && !note) { showToast('条件を1つ以上入力してください'); return; }
   const btn = document.getElementById('workExecBtn');
+  btn.disabled = true;
   showToolLoading('workModal', '検索中...');
 
   const query = '在宅ワーク 求人 ' +
     (skills.length ? skills.join(' ') + ' ' : '未経験OK ') +
-    (time || '') + ' 主婦 ママ 2025';
+    (time || '') + ` 主婦 ママ ${new Date().getFullYear()}`;
 
   try {
     showToast('🔍 在宅ワーク情報を検索中...');
@@ -4166,6 +4207,7 @@ async function execHomeworkTool() {
   const child = getSingleChip('hwChildChips');
   const mode = getSingleChip('hwModeChips') || '子どもに直接ヒントを出す';
   const btn = document.getElementById('hwExecBtn');
+  btn.disabled = true;
   showToolLoading('homeworkModal', 'ヒントを考え中...');
 
   const isParentMode = mode.includes('親');
@@ -4227,6 +4269,7 @@ ${isParentMode ? `### お子さんへの教え方ガイド（保護者向け）
     const reply = (await res.json()).choices?.[0]?.message?.content || '読み取れませんでした';
     hideToolLoading('homeworkModal'); closeToolModal('homework');
     document.getElementById('hwTextInput').value = ''; clearToolImages('hw');
+    clearChips('hwChildChips');
     const label = child ? `📝 宿題サポート（${child}）` : '📝 宿題サポート';
     renderMessage('user', label, true);
     history.push({ role:'user', content:'[AI宿題サポーターツール使用]' });
@@ -4247,6 +4290,7 @@ async function execSakubunTool() {
   if (!textVal && !imgs.length) { showToast('作文の写真またはテキストを入力してください'); return; }
   const child = getSingleChip('skChildChips');
   const btn = document.getElementById('skExecBtn');
+  btn.disabled = true;
   showToolLoading('sakubunModal', '読んでるよ...');
 
   const sysPrompt = `あなたは小学生の作文・日記をやさしく添削するAIコーチです。
@@ -4292,6 +4336,7 @@ ${child ? `対象: ${child}` : ''}
     const reply = (await res.json()).choices?.[0]?.message?.content || '読み取れませんでした';
     hideToolLoading('sakubunModal'); closeToolModal('sakubun');
     document.getElementById('skTextInput').value = ''; clearToolImages('sk');
+    clearChips('skChildChips');
     renderMessage('user', `✏️ 作文添削${child ? '（'+child+'）' : ''}`, true);
     history.push({ role:'user', content:'[作文AIコーチツール使用]' });
     if (db) await persistMessage('user','[作文AIコーチツール使用]');
@@ -4311,6 +4356,7 @@ async function execJiyuuTool() {
   const note = document.getElementById('jyNote').value.trim();
   if (!child && !interests.length && !note) { showToast('条件を1つ以上入力してください'); return; }
   const btn = document.getElementById('jyExecBtn');
+  btn.disabled = true;
   showToolLoading('jiyuuModal', 'テーマを考え中...');
 
   const sysPrompt = `あなたは小学生の自由研究テーマを提案するAIアドバイザーです。
@@ -4380,6 +4426,7 @@ async function execRemindTool() {
   const imgs = toolImages['rm'] || [];
   if (!textVal && !imgs.length) { showToast('おたよりの写真またはテキストを入力してください'); return; }
   const btn = document.getElementById('rmExecBtn');
+  btn.disabled = true;
   showToolLoading('remindModal', '読み取り中...');
 
   const todayStr = new Intl.DateTimeFormat('ja-JP', {
@@ -4482,10 +4529,8 @@ async function execRemindTool() {
 (function preventIOSZoom() {
   const META = document.querySelector('meta[name=viewport]');
   const NO_ZOOM = 'width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover';
-  const BASE    = 'width=device-width, initial-scale=1.0, viewport-fit=cover';
 
   function lockZoom()    { META.setAttribute('content', NO_ZOOM); }
-  function unlockZoom()  { META.setAttribute('content', NO_ZOOM); } // keep locked always
 
   // フォーカス時にロック（念のため）
   document.addEventListener('focusin', e => {
