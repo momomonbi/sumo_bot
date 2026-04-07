@@ -1417,8 +1417,8 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
         <div style="font-size:10px;color:var(--text-muted);margin-top:3px;line-height:1.4;">子ども本人が読む用。やさしい口調でヒントを段階的に出します</div>
       </div>
       <div class="hw-mode-card" data-val="親が教えられるように解説する" onclick="selectHwMode(this)">
-        <div style="font-weight:700;font-size:13px;">親が教える</div>
-        <div style="font-size:10px;color:var(--text-muted);margin-top:3px;line-height:1.4;">保護者向け。教え方のコツ・声かけ例・NG例をガイドします</div>
+        <div style="font-weight:700;font-size:13px;">親に教え方を教える</div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:3px;line-height:1.4;">保護者向け。声かけ例・ヒントの出し方・NG例をガイドします</div>
       </div>
     </div>
     <label>問題の写真を添付</label>
@@ -4360,17 +4360,24 @@ async function execRemindTool() {
 |------|------|----------------|------|
 | （行事名や項目名） | （YYYY/MM/DD or なし） | （具体的な持ち物リスト） | （全員 / そうま / ゆうさ 等） |
 
-### カレンダー登録用
-以下の形式で、はづきノートにコピペできるようにまとめてください:
-（それぞれの項目を1行ずつ）
-📅 YYYY/MM/DD ｜ 【項目名】持ち物: 〇〇、△△
-📅 YYYY/MM/DD ｜ 【項目名】提出: 〇〇
-
 ### 注意・補足
 （見落としがちなポイントや、前日までに準備が必要なものなど）
 
+### JSON
+最後に、以下のJSON配列を必ず出力してください（はづきノート自動登録用）:
+\`\`\`json
+[
+  {"title": "【項目名】持ち物: 〇〇", "date": "YYYY-MM-DD", "memo": "対象: 全員\\n詳細メモ", "type": "event"},
+  ...
+]
+\`\`\`
+- dateはYYYY-MM-DD形式（不明なら空文字""）
+- titleは短く（30文字以内）
+- memoに対象者や詳細を入れる
+- 全項目をJSON配列にまとめる
+
 ## ルール
-- 曖昧な日付は「来週の〇曜日」→ 具体的な日付に変換
+- 曖昧な日付は「来週の〇曜日」→ 具体的な日付に変換（YYYY-MM-DD形式で）
 - 「いつもの持ち物」は省略し、特別な持ち物だけ抽出
 - 対象が学年やクラス限定の場合は明記
 - 期限が近い順に並べる`;
@@ -4394,7 +4401,26 @@ async function execRemindTool() {
     history.push({ role:'user', content:'[持ち物リマインダーツール使用]' });
     if (db) await persistMessage('user','[持ち物リマインダーツール使用]');
     const bubble = renderMessage('ai','');
-    bubble.innerHTML = fmt(reply); makeTapCopyable(bubble);
+
+    // JSONブロックを抽出してはづきノート登録ボタンを生成
+    const jsonMatch = reply.match(/```json\s*([\s\S]*?)```/);
+    let displayReply = reply;
+    let registerBtn = '';
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[1].trim());
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const encoded = encodeURIComponent(JSON.stringify(parsed));
+          const url = `https://momomonbi.github.io/hazuki_note/?add=${encoded}`;
+          registerBtn = `<div style="margin-top:14px;"><a href="${url}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;padding:10px 18px;background:var(--accent);color:#0d0d0f;border-radius:10px;font-size:13px;font-weight:500;text-decoration:none;letter-spacing:0.03em;transition:opacity 0.2s;">📥 はづきノートに ${parsed.length}件 登録する →</a></div>`;
+          // JSON部分を表示から除去（見た目をすっきり）
+          displayReply = reply.replace(/### JSON[\s\S]*```json[\s\S]*?```/, '').trim();
+        }
+      } catch {}
+    }
+
+    bubble.innerHTML = fmt(displayReply) + registerBtn;
+    makeTapCopyable(bubble);
     history.push({ role:'assistant', content: reply });
     if (db) await persistMessage('assistant', reply);
     document.getElementById('messages').scrollTop = 999999; updateMemoryUI();
