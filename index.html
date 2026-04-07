@@ -774,6 +774,191 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
 .db-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 .error-msg { color: #ff7b7b; font-size: 14px; }
 
+/* ═══════════════════════════════════════════════
+   TOOL PANEL (PTA要約 / LINE下書き)
+═══════════════════════════════════════════════ */
+.btn-tool {
+  width: 32px; height: 32px; background: none;
+  border: 1px solid var(--border); border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; flex-shrink: 0; align-self: flex-end;
+  transition: border-color 0.2s, background 0.2s, color 0.2s; color: var(--text-muted);
+  font-size: 15px; line-height: 1;
+}
+.btn-tool:hover { border-color: rgba(200,240,160,0.3); background: rgba(200,240,160,0.06); color: var(--accent); }
+.btn-tool.active { border-color: var(--accent); background: var(--accent-dim); color: var(--accent); }
+
+.tool-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 90;
+  opacity: 0; pointer-events: none; transition: opacity 0.25s;
+  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+}
+.tool-overlay.open { opacity: 1; pointer-events: auto; }
+
+.tool-panel {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: var(--surface); border-top: 1px solid var(--border);
+  border-radius: 20px 20px 0 0; padding: 22px 20px 28px;
+  z-index: 91; transform: translateY(100%);
+  transition: transform 0.35s cubic-bezier(.22,1,.36,1);
+  max-width: 480px; margin: 0 auto;
+  max-height: 75vh; overflow-y: auto;
+}
+.tool-panel::-webkit-scrollbar { width: 3px; }
+.tool-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+.tool-panel.open { transform: translateY(0); }
+.tool-panel-handle {
+  width: 36px; height: 4px; border-radius: 2px;
+  background: rgba(255,255,255,0.12); margin: 0 auto 18px;
+}
+.tool-panel h3 {
+  font-family: 'DM Serif Display', serif; font-size: 17px;
+  font-weight: 400; letter-spacing: -0.3px; margin-bottom: 14px;
+}
+.tool-panel h3 em { color: var(--accent); font-style: italic; }
+
+.tool-cat-label {
+  font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--text-muted); margin: 16px 0 8px 2px;
+}
+.tool-cat-label:first-of-type { margin-top: 0; }
+
+.tool-cards { display: flex; flex-direction: column; gap: 10px; }
+.tool-card {
+  display: flex; align-items: center; gap: 14px;
+  background: rgba(255,255,255,0.025); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 16px;
+  cursor: pointer; transition: background 0.2s, border-color 0.2s, transform 0.15s;
+}
+.tool-card:hover { background: rgba(200,240,160,0.04); border-color: rgba(200,240,160,0.18); transform: translateX(-2px); }
+.tool-card:active { transform: scale(0.98); }
+.tool-card-icon {
+  width: 40px; height: 40px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; flex-shrink: 0;
+  background: linear-gradient(135deg, rgba(200,240,160,0.12), rgba(200,240,160,0.03));
+  border: 1px solid rgba(200,240,160,0.15);
+}
+.tool-card-body { flex: 1; min-width: 0; }
+.tool-card-title { font-size: 14px; font-weight: 400; letter-spacing: 0.02em; margin-bottom: 3px; }
+.tool-card-desc { font-size: 11px; color: var(--text-muted); line-height: 1.5; }
+
+/* ── Tool Modal (入力画面) ── */
+.tool-modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none; transition: opacity 0.25s;
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  padding: 16px;
+}
+.tool-modal-overlay.open { opacity: 1; pointer-events: auto; }
+
+.tool-modal {
+  width: min(440px, 100%); max-height: 85vh;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 20px; padding: 28px 24px;
+  transform: translateY(20px) scale(0.97); transition: transform 0.3s cubic-bezier(.22,1,.36,1);
+  overflow-y: auto;
+}
+.tool-modal-overlay.open .tool-modal { transform: translateY(0) scale(1); }
+
+.tool-modal-header {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 18px;
+}
+.tool-modal-icon { font-size: 22px; }
+.tool-modal-title { font-family: 'DM Serif Display', serif; font-size: 17px; font-weight: 400; }
+.tool-modal-close {
+  margin-left: auto; width: 28px; height: 28px; border-radius: 7px;
+  background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+  color: var(--text-muted); font-size: 13px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+.tool-modal-close:hover { background: rgba(255,123,123,0.1); color: #ff7b7b; }
+
+.tool-modal label {
+  display: block; font-size: 11px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--text-muted); margin-bottom: 7px;
+}
+.tool-modal textarea {
+  width: 100%; min-height: 120px; max-height: 220px; resize: vertical;
+  background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 12px 14px;
+  font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 300;
+  color: var(--text); line-height: 1.65; outline: none;
+  transition: border-color 0.2s; overflow-y: auto;
+}
+.tool-modal textarea:focus { border-color: rgba(200,240,160,0.35); }
+.tool-modal textarea::placeholder { color: var(--text-muted); font-size: 13px; }
+
+.tool-modal-hint {
+  font-size: 11px; color: var(--text-muted); margin-top: 6px; line-height: 1.6;
+}
+
+/* LINE下書き: シーン選択チップ */
+.scene-chips {
+  display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px;
+}
+.scene-chip {
+  padding: 6px 12px; border-radius: 16px; font-size: 12px;
+  background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+  color: var(--text-muted); cursor: pointer;
+  transition: all 0.2s; white-space: nowrap;
+}
+.scene-chip:hover { border-color: rgba(200,240,160,0.25); color: var(--text); }
+.scene-chip.selected { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+
+.btn-tool-exec {
+  margin-top: 16px; width: 100%; padding: 13px;
+  background: var(--accent); color: #0d0d0f; border: none; border-radius: var(--radius-sm);
+  font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 500;
+  letter-spacing: 0.06em; cursor: pointer;
+  transition: opacity 0.2s, transform 0.15s;
+}
+.btn-tool-exec:hover { opacity: 0.85; transform: translateY(-1px); }
+.btn-tool-exec:active { transform: translateY(0); opacity: 0.7; }
+.btn-tool-exec:disabled { opacity: 0.3; cursor: not-allowed; transform: none; }
+
+/* PTA画像添付エリア */
+.pta-img-area {
+  border: 1.5px dashed var(--border); border-radius: var(--radius-sm);
+  padding: 14px; cursor: pointer; transition: border-color 0.2s, background 0.2s;
+  min-height: 70px; display: flex; align-items: center; justify-content: center;
+}
+.pta-img-area:hover { border-color: rgba(200,240,160,0.3); background: rgba(200,240,160,0.03); }
+.pta-img-area.has-images { justify-content: flex-start; cursor: default; }
+.pta-img-placeholder {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  font-size: 11px; color: var(--text-muted); letter-spacing: 0.04em;
+}
+.pta-img-thumbs {
+  display: flex; flex-wrap: wrap; gap: 8px; width: 100%;
+}
+.pta-thumb-wrap {
+  position: relative; display: inline-flex;
+}
+.pta-thumb {
+  width: 64px; height: 64px; border-radius: 8px; object-fit: cover;
+  border: 1px solid var(--border);
+}
+.pta-thumb-del {
+  position: absolute; top: -5px; right: -5px;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #333; border: 1px solid var(--border);
+  color: var(--text-muted); font-size: 10px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: background 0.15s;
+}
+.pta-thumb-del:hover { background: #ff7b7b; color: #fff; }
+.pta-img-add {
+  width: 64px; height: 64px; border-radius: 8px;
+  border: 1.5px dashed var(--border); display: flex;
+  align-items: center; justify-content: center;
+  font-size: 22px; color: var(--text-muted); cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+.pta-img-add:hover { border-color: rgba(200,240,160,0.3); color: var(--accent); }
+
 /* ── keyframes ── */
 @keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
 @keyframes fadeUp  { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
@@ -848,6 +1033,12 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
   <footer>
     <div id="imgPreviewWrap"></div>
     <div class="input-wrap">
+      <button class="btn-tool" id="btnToolPanel" onclick="toggleToolPanel()" title="便利ツール">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/>
+          <rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>
+        </svg>
+      </button>
       <button class="btn-attach" onclick="document.getElementById('fileInput').click()" title="画像を添付">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66L9.41 17.41a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
@@ -866,6 +1057,189 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
 </div>
 
 <div class="db-toast" id="dbToast"></div>
+
+<!-- TOOL PANEL -->
+<div class="tool-overlay" id="toolOverlay" onclick="closeToolPanel()"></div>
+<div class="tool-panel" id="toolPanel">
+  <div class="tool-panel-handle"></div>
+  <h3>便利ツール<em>.</em></h3>
+  <div class="tool-cat-label">スケジュール・コミュニケーション</div>
+  <div class="tool-cards">
+    <div class="tool-card" onclick="openToolModal('pta')">
+      <div class="tool-card-icon">📋</div>
+      <div class="tool-card-body">
+        <div class="tool-card-title">PTAおたより要約</div>
+        <div class="tool-card-desc">長文のPTA文書やLINEグループの流れを要約し「結局何をすればいいか」だけ抽出</div>
+      </div>
+    </div>
+    <div class="tool-card" onclick="openToolModal('line')">
+      <div class="tool-card-icon">💬</div>
+      <div class="tool-card-body">
+        <div class="tool-card-title">ママ友LINE下書き</div>
+        <div class="tool-card-desc">お断り・お誘い・お礼など、ちょうどいい距離感のLINE返信を下書き</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tool-cat-label">ママ自身のケア</div>
+  <div class="tool-cards">
+    <div class="tool-card" onclick="openToolModal('sukima')">
+      <div class="tool-card-icon">🕐</div>
+      <div class="tool-card-body">
+        <div class="tool-card-title">すきま時間マッチング</div>
+        <div class="tool-card-desc">「今30分だけ空いた」→ 趣味・副業・リラックスなど最適な過ごし方を提案</div>
+      </div>
+    </div>
+    <div class="tool-card" onclick="openToolModal('journal')">
+      <div class="tool-card-icon">📔</div>
+      <div class="tool-card-body">
+        <div class="tool-card-title">愚痴聞きジャーナル</div>
+        <div class="tool-card-desc">日々のモヤモヤを書くと共感しつつ気持ちを整理。感情の傾向分析付き</div>
+      </div>
+    </div>
+    <div class="tool-card" onclick="openToolModal('work')">
+      <div class="tool-card-icon">💼</div>
+      <div class="tool-card-body">
+        <div class="tool-card-title">在宅ワーク探し</div>
+        <div class="tool-card-desc">スキル・稼働時間・子どもの帰宅時間を考慮した在宅ワークを自動ピックアップ</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TOOL MODAL: PTA要約 -->
+<div class="tool-modal-overlay" id="ptaModal">
+  <div class="tool-modal" onclick="event.stopPropagation()">
+    <div class="tool-modal-header">
+      <span class="tool-modal-icon">📋</span>
+      <span class="tool-modal-title">PTAおたより要約</span>
+      <button class="tool-modal-close" onclick="closeToolModal('pta')">✕</button>
+    </div>
+
+    <label>おたよりの写真を添付（複数OK）</label>
+    <div class="pta-img-area" id="ptaImgArea" onclick="document.getElementById('ptaFileInput').click()">
+      <div class="pta-img-placeholder" id="ptaImgPlaceholder">
+        <span style="font-size:24px;opacity:0.5;">📷</span>
+        <span>タップして写真を追加</span>
+      </div>
+      <div class="pta-img-thumbs" id="ptaImgThumbs"></div>
+    </div>
+    <input type="file" id="ptaFileInput" accept="image/*" multiple onchange="handlePtaFileSelect(event)" style="display:none">
+
+    <div style="display:flex;align-items:center;gap:8px;margin:12px 0 8px;">
+      <div style="flex:1;height:1px;background:var(--border)"></div>
+      <span style="font-size:10px;color:var(--text-muted);letter-spacing:0.1em;">または テキストで入力</span>
+      <div style="flex:1;height:1px;background:var(--border)"></div>
+    </div>
+
+    <label for="ptaInput">おたより・LINE の内容を貼り付け</label>
+    <textarea id="ptaInput" placeholder="PTAの文書やLINEグループのやり取りをそのままコピペしてください..."></textarea>
+    <p class="tool-modal-hint">写真でもテキストでもOK。「結局何をすればいいか」をアクション付きで要約します。</p>
+    <button class="btn-tool-exec" id="ptaExecBtn" onclick="execPtaTool()">要約する →</button>
+  </div>
+</div>
+
+<!-- TOOL MODAL: LINE下書き -->
+<div class="tool-modal-overlay" id="lineModal">
+  <div class="tool-modal" onclick="event.stopPropagation()">
+    <div class="tool-modal-header">
+      <span class="tool-modal-icon">💬</span>
+      <span class="tool-modal-title">ママ友LINE下書き</span>
+      <button class="tool-modal-close" onclick="closeToolModal('line')">✕</button>
+    </div>
+    <label>シーンを選択</label>
+    <div class="scene-chips" id="sceneChips">
+      <span class="scene-chip" data-scene="お断り" onclick="selectScene(this)">お断り</span>
+      <span class="scene-chip" data-scene="お誘い" onclick="selectScene(this)">お誘い</span>
+      <span class="scene-chip" data-scene="お礼" onclick="selectScene(this)">お礼</span>
+      <span class="scene-chip" data-scene="謝罪" onclick="selectScene(this)">謝罪</span>
+      <span class="scene-chip" data-scene="相談" onclick="selectScene(this)">相談</span>
+      <span class="scene-chip" data-scene="その他" onclick="selectScene(this)">その他</span>
+    </div>
+    <label for="lineContext">状況を教えてください</label>
+    <textarea id="lineContext" placeholder="例：ママ友からランチに誘われたけど、その日は用事があって断りたい。でも角が立たないようにしたい..."></textarea>
+    <p class="tool-modal-hint">状況に合わせて、ちょうどいいトーンの返信を3パターン提案します。</p>
+    <button class="btn-tool-exec" id="lineExecBtn" onclick="execLineTool()">下書きを作成 →</button>
+  </div>
+</div>
+
+<!-- TOOL MODAL: すきま時間マッチング -->
+<div class="tool-modal-overlay" id="sukimaModal">
+  <div class="tool-modal" onclick="event.stopPropagation()">
+    <div class="tool-modal-header">
+      <span class="tool-modal-icon">🕐</span>
+      <span class="tool-modal-title">すきま時間マッチング</span>
+      <button class="tool-modal-close" onclick="closeToolModal('sukima')">✕</button>
+    </div>
+    <label>空き時間</label>
+    <div class="scene-chips" id="sukimaTimeChips">
+      <span class="scene-chip" data-val="15分" onclick="selectChipIn(this,'sukimaTimeChips')">15分</span>
+      <span class="scene-chip" data-val="30分" onclick="selectChipIn(this,'sukimaTimeChips')">30分</span>
+      <span class="scene-chip" data-val="1時間" onclick="selectChipIn(this,'sukimaTimeChips')">1時間</span>
+      <span class="scene-chip" data-val="2時間以上" onclick="selectChipIn(this,'sukimaTimeChips')">2時間+</span>
+    </div>
+    <label>気分・やりたいこと（任意）</label>
+    <div class="scene-chips" id="sukimaMoodChips">
+      <span class="scene-chip" data-val="リラックス" onclick="toggleChip(this)">リラックス</span>
+      <span class="scene-chip" data-val="スキルアップ" onclick="toggleChip(this)">スキルアップ</span>
+      <span class="scene-chip" data-val="副業・お小遣い" onclick="toggleChip(this)">副業</span>
+      <span class="scene-chip" data-val="趣味・創作" onclick="toggleChip(this)">趣味・創作</span>
+      <span class="scene-chip" data-val="美容・健康" onclick="toggleChip(this)">美容・健康</span>
+      <span class="scene-chip" data-val="片付け・家事" onclick="toggleChip(this)">片付け・家事</span>
+    </div>
+    <label for="sukimaNote">補足（任意）</label>
+    <textarea id="sukimaNote" placeholder="例：子どもが昼寝中、家から出られない、スマホだけ..." style="min-height:60px"></textarea>
+    <p class="tool-modal-hint">Web検索で最新のおすすめを探して提案します。</p>
+    <button class="btn-tool-exec" id="sukimaExecBtn" onclick="execSukimaTool()">提案してもらう →</button>
+  </div>
+</div>
+
+<!-- TOOL MODAL: 愚痴聞きジャーナル -->
+<div class="tool-modal-overlay" id="journalModal">
+  <div class="tool-modal" onclick="event.stopPropagation()">
+    <div class="tool-modal-header">
+      <span class="tool-modal-icon">📔</span>
+      <span class="tool-modal-title">愚痴聞きジャーナル</span>
+      <button class="tool-modal-close" onclick="closeToolModal('journal')">✕</button>
+    </div>
+    <label for="journalInput">今日のモヤモヤを書いてね</label>
+    <textarea id="journalInput" placeholder="今日あったこと、イライラしたこと、悲しかったこと...なんでもOK。誰にも見せないから正直に書いてね。"></textarea>
+    <p class="tool-modal-hint">共感しつつ気持ちを整理し、感情の傾向も分析します。</p>
+    <button class="btn-tool-exec" id="journalExecBtn" onclick="execJournalTool()">聞いてもらう →</button>
+  </div>
+</div>
+
+<!-- TOOL MODAL: 在宅ワーク探し -->
+<div class="tool-modal-overlay" id="workModal">
+  <div class="tool-modal" onclick="event.stopPropagation()">
+    <div class="tool-modal-header">
+      <span class="tool-modal-icon">💼</span>
+      <span class="tool-modal-title">在宅ワーク探し</span>
+      <button class="tool-modal-close" onclick="closeToolModal('work')">✕</button>
+    </div>
+    <label>持っているスキル・経験</label>
+    <div class="scene-chips" id="workSkillChips">
+      <span class="scene-chip" data-val="事務・データ入力" onclick="toggleChip(this)">事務・入力</span>
+      <span class="scene-chip" data-val="ライティング" onclick="toggleChip(this)">ライティング</span>
+      <span class="scene-chip" data-val="デザイン・イラスト" onclick="toggleChip(this)">デザイン</span>
+      <span class="scene-chip" data-val="SNS運用" onclick="toggleChip(this)">SNS運用</span>
+      <span class="scene-chip" data-val="プログラミング" onclick="toggleChip(this)">プログラミング</span>
+      <span class="scene-chip" data-val="接客・電話対応" onclick="toggleChip(this)">電話対応</span>
+      <span class="scene-chip" data-val="特になし・未経験OK希望" onclick="toggleChip(this)">未経験OK</span>
+    </div>
+    <label>稼働できる時間帯</label>
+    <div class="scene-chips" id="workTimeChips">
+      <span class="scene-chip" data-val="午前中（9〜12時）" onclick="selectChipIn(this,'workTimeChips')">午前</span>
+      <span class="scene-chip" data-val="昼間（10〜15時）" onclick="selectChipIn(this,'workTimeChips')">昼間</span>
+      <span class="scene-chip" data-val="夜（21時以降）" onclick="selectChipIn(this,'workTimeChips')">夜</span>
+      <span class="scene-chip" data-val="すきま時間だけ" onclick="selectChipIn(this,'workTimeChips')">すきま時間</span>
+    </div>
+    <label for="workNote">その他の条件（任意）</label>
+    <textarea id="workNote" placeholder="例：週3日くらい、月3万円目標、子ども帰宅が15時なのでそれまでに終わる仕事..." style="min-height:60px"></textarea>
+    <p class="tool-modal-hint">Web検索で最新の在宅ワーク情報を探してピックアップします。</p>
+    <button class="btn-tool-exec" id="workExecBtn" onclick="execWorkTool()">探してもらう →</button>
+  </div>
+</div>
 
 <!-- HISTORY PANEL -->
 <div class="history-overlay" id="histOverlay" onclick="closeHistory()"></div>
@@ -2731,6 +3105,545 @@ ${srcList}`
     input.focus();
   }
 }
+
+// ================================================================
+// TOOL PANEL (PTA要約 / LINE下書き)
+// ================================================================
+function toggleToolPanel() {
+  const panel = document.getElementById('toolPanel');
+  const overlay = document.getElementById('toolOverlay');
+  const btn = document.getElementById('btnToolPanel');
+  const isOpen = panel.classList.contains('open');
+  if (isOpen) { closeToolPanel(); } else {
+    panel.classList.add('open');
+    overlay.classList.add('open');
+    btn.classList.add('active');
+  }
+}
+function closeToolPanel() {
+  document.getElementById('toolPanel').classList.remove('open');
+  document.getElementById('toolOverlay').classList.remove('open');
+  document.getElementById('btnToolPanel').classList.remove('active');
+}
+
+function openToolModal(type) {
+  closeToolPanel();
+  document.getElementById(type + 'Modal').classList.add('open');
+}
+function closeToolModal(type) {
+  document.getElementById(type + 'Modal').classList.remove('open');
+}
+
+// シーン選択
+let selectedScene = '';
+function selectScene(el) {
+  document.querySelectorAll('#sceneChips .scene-chip').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedScene = el.dataset.scene;
+}
+
+// ── PTA画像添付 ──
+let ptaImages = []; // [{dataUrl, mediaType}]
+
+async function handlePtaFileSelect(e) {
+  const files = Array.from(e.target.files || []);
+  if (!files.length) return;
+  e.target.value = '';
+  for (const file of files) {
+    if (!file.type.startsWith('image/')) continue;
+    try {
+      showToast('🖼 画像を圧縮中...');
+      const compressed = await compressImage(file);
+      ptaImages.push(compressed);
+    } catch (err) {
+      showToast('⚠ 画像の読み込みに失敗しました');
+    }
+  }
+  updatePtaImagePreview();
+}
+
+function updatePtaImagePreview() {
+  const area = document.getElementById('ptaImgArea');
+  const placeholder = document.getElementById('ptaImgPlaceholder');
+  const thumbs = document.getElementById('ptaImgThumbs');
+  thumbs.innerHTML = '';
+  if (!ptaImages.length) {
+    placeholder.style.display = 'flex';
+    area.classList.remove('has-images');
+    return;
+  }
+  placeholder.style.display = 'none';
+  area.classList.add('has-images');
+  ptaImages.forEach((img, i) => {
+    const w = document.createElement('div');
+    w.className = 'pta-thumb-wrap';
+    w.innerHTML = `<img class="pta-thumb" src="${img.dataUrl}" alt="">
+      <div class="pta-thumb-del" onclick="event.stopPropagation();removePtaImage(${i})">✕</div>`;
+    thumbs.appendChild(w);
+  });
+  // 追加ボタン
+  const addBtn = document.createElement('div');
+  addBtn.className = 'pta-img-add';
+  addBtn.textContent = '+';
+  addBtn.onclick = function(e) { e.stopPropagation(); document.getElementById('ptaFileInput').click(); };
+  thumbs.appendChild(addBtn);
+}
+
+function removePtaImage(idx) {
+  ptaImages.splice(idx, 1);
+  updatePtaImagePreview();
+}
+
+// ── PTA要約実行 ──
+async function execPtaTool() {
+  const text = document.getElementById('ptaInput').value.trim();
+  const hasImgs = ptaImages.length > 0;
+  if (!text && !hasImgs) { showToast('写真またはテキストを入力してください'); return; }
+  const btn = document.getElementById('ptaExecBtn');
+  btn.disabled = true; btn.textContent = '要約中...';
+
+  const sysPrompt = `あなたは忙しいママ・パパのためのアシスタントです。
+PTAのおたよりやLINEグループの長い会話を受け取り、以下の形式で要約してください。
+
+## 出力形式
+### 要点まとめ
+（3〜5行で全体の要旨を箇条書き）
+
+### やること（アクション）
+（「誰が」「いつまでに」「何を」すればいいかを明確にリスト化）
+- 期限があるものは日付を明記
+- 持ち物や提出物があれば具体的に
+
+### 補足・注意
+（任意。重要な変更点や見落としがちなポイントがあれば）
+
+## ルール
+- 元の文章を引用せず、自分の言葉で簡潔にまとめる
+- 敬語は使わず、友達に伝えるようなカジュアルで読みやすい口調で
+- 「結局何をすればいいか」が一目でわかることを最優先`;
+
+  try {
+    // Vision対応: 画像がある場合はcontent配列で送信
+    let userContent;
+    if (hasImgs) {
+      userContent = [];
+      if (text) userContent.push({ type: 'text', text: text });
+      for (const img of ptaImages) {
+        userContent.push({
+          type: 'image_url',
+          image_url: {
+            url: `data:${img.mediaType};base64,${dataUrlToBase64(img.dataUrl)}`,
+            detail: 'high'
+          }
+        });
+      }
+      if (!text) userContent.push({ type: 'text', text: 'この画像のおたよりを要約してください。' });
+    } else {
+      userContent = text;
+    }
+
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: MODEL, temperature: 0.3, max_completion_tokens: 1500,
+        messages: [
+          { role: 'system', content: sysPrompt },
+          { role: 'user', content: userContent }
+        ]
+      })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const reply = data.choices?.[0]?.message?.content || '要約できませんでした';
+
+    closeToolModal('pta');
+    document.getElementById('ptaInput').value = '';
+    ptaImages = [];
+    updatePtaImagePreview();
+
+    // チャットに結果を表示
+    const label = hasImgs ? '📋 PTAおたより要約をお願い（写真）' : '📋 PTAおたより要約をお願い';
+    renderMessage('user', label, true);
+    history.push({ role: 'user', content: '[PTAおたより要約ツール使用]' });
+    if (db) await persistMessage('user', '[PTAおたより要約ツール使用]');
+
+    const bubble = renderMessage('ai', '');
+    bubble.innerHTML = fmt(reply);
+    makeTapCopyable(bubble);
+    history.push({ role: 'assistant', content: reply });
+    if (db) await persistMessage('assistant', reply);
+    document.getElementById('messages').scrollTop = 999999;
+    updateMemoryUI();
+  } catch (err) {
+    showToast('エラー: ' + err.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '要約する →';
+  }
+}
+
+// ── LINE下書き実行 ──
+async function execLineTool() {
+  const context = document.getElementById('lineContext').value.trim();
+  if (!context) { showToast('状況を入力してください'); return; }
+  const btn = document.getElementById('lineExecBtn');
+  btn.disabled = true; btn.textContent = '作成中...';
+
+  const sceneLabel = selectedScene ? `【シーン: ${selectedScene}】\n` : '';
+
+  const sysPrompt = `あなたはママ友へのLINE返信の下書きを作るアシスタントです。
+ユーザーが伝えた状況・シーンに合わせて、絶妙な距離感の返信を3パターン提案してください。
+
+## 出力形式
+### パターン1（やわらかめ）
+> （LINE本文をここに）
+
+### パターン2（ちょうどいい）
+> （LINE本文をここに）
+
+### パターン3（さっぱりめ）
+> （LINE本文をここに）
+
+### 使い分けのポイント
+（どんな相手・状況にどのパターンが向いているか、1〜2行ずつ簡潔に）
+
+## ルール
+- 実際にLINEで送れるリアルな文面にする（長すぎない、絵文字は控えめ）
+- 相手を傷つけず、かつ自分の意思もちゃんと伝わるバランスを意識
+- お断りの場合は代替案や次回への含みを入れる
+- お礼の場合は具体的に何が嬉しかったか触れる
+- 「！」や絵文字の量でトーンを調整する
+- 各パターンは2〜4行程度。LINEらしい短さを保つ`;
+
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: MODEL, temperature: 0.7, max_completion_tokens: 1500,
+        messages: [
+          { role: 'system', content: sysPrompt },
+          { role: 'user', content: sceneLabel + context }
+        ]
+      })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const reply = data.choices?.[0]?.message?.content || '作成できませんでした';
+
+    closeToolModal('line');
+    document.getElementById('lineContext').value = '';
+    selectedScene = '';
+    document.querySelectorAll('#sceneChips .scene-chip').forEach(c => c.classList.remove('selected'));
+
+    // チャットに結果を表示
+    const sceneTag = selectedScene ? `（${selectedScene}）` : '';
+    renderMessage('user', `💬 LINE下書き${sceneTag}をお願い`, true);
+    history.push({ role: 'user', content: '[ママ友LINE下書きツール使用]' });
+    if (db) await persistMessage('user', '[ママ友LINE下書きツール使用]');
+
+    const bubble = renderMessage('ai', '');
+    bubble.innerHTML = fmt(reply);
+    makeTapCopyable(bubble);
+    history.push({ role: 'assistant', content: reply });
+    if (db) await persistMessage('assistant', reply);
+    document.getElementById('messages').scrollTop = 999999;
+    updateMemoryUI();
+  } catch (err) {
+    showToast('エラー: ' + err.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '下書きを作成 →';
+  }
+}
+
+// ── チップ選択ヘルパー（単一選択） ──
+function selectChipIn(el, groupId) {
+  document.querySelectorAll('#' + groupId + ' .scene-chip').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+}
+// ── チップ選択ヘルパー（複数選択トグル） ──
+function toggleChip(el) {
+  el.classList.toggle('selected');
+}
+// ── グループ内の選択値を取得 ──
+function getSelectedChips(groupId) {
+  return Array.from(document.querySelectorAll('#' + groupId + ' .scene-chip.selected')).map(c => c.dataset.val || c.dataset.scene);
+}
+function getSingleChip(groupId) {
+  const el = document.querySelector('#' + groupId + ' .scene-chip.selected');
+  return el ? (el.dataset.val || el.dataset.scene) : '';
+}
+function clearChips(groupId) {
+  document.querySelectorAll('#' + groupId + ' .scene-chip').forEach(c => c.classList.remove('selected'));
+}
+
+// ── すきま時間マッチング実行（Web検索付き） ──
+async function execSukimaTool() {
+  const time = getSingleChip('sukimaTimeChips');
+  if (!time) { showToast('空き時間を選んでください'); return; }
+  const moods = getSelectedChips('sukimaMoodChips');
+  const note = document.getElementById('sukimaNote').value.trim();
+  const btn = document.getElementById('sukimaExecBtn');
+  btn.disabled = true; btn.textContent = '検索中...';
+
+  const query = `${time}のすきま時間 おすすめの過ごし方 ` +
+    (moods.length ? moods.join(' ') + ' ' : '') +
+    (note || 'ママ 主婦 自宅');
+
+  try {
+    showToast('🔍 Web検索中...');
+    const searchResult = await performWebSearch(query);
+
+    const sysPrompt = `あなたは忙しいママのための「すきま時間コンシェルジュ」です。
+ユーザーの空き時間・気分・状況に合わせて、具体的な過ごし方を提案してください。
+
+## 出力形式
+### おすすめの過ごし方（${time}）
+
+それぞれ以下の形式で3〜5個提案:
+#### 1. 提案名
+- **何をする**: 具体的な内容
+- **始め方**: すぐ始められる手順やアプリ・サイト名
+- **おすすめポイント**: なぜこの時間にぴったりか
+
+### 今日のひとこと
+（ママを元気づける短いメッセージ）
+
+## ルール
+- Web検索結果があれば最新情報を活用し、具体的なサービス名やURLを含める
+- 「家から出られない」「スマホだけ」など制約があれば厳守
+- 副業系は現実的に${time}で成果が出るものだけ
+- カジュアルで読みやすい口調で`;
+
+    let userMsg = `空き時間: ${time}`;
+    if (moods.length) userMsg += `\n気分: ${moods.join('、')}`;
+    if (note) userMsg += `\n補足: ${note}`;
+    if (searchResult) {
+      userMsg += `\n\n【参考情報（Web検索結果）】\n${searchResult.text}`;
+    }
+
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: MODEL, temperature: 0.7, max_completion_tokens: 2000,
+        messages: [
+          { role: 'system', content: sysPrompt },
+          { role: 'user', content: userMsg }
+        ]
+      })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    let reply = data.choices?.[0]?.message?.content || '提案できませんでした';
+
+    if (searchResult?.sources?.length) {
+      reply += '\n\n📎 ソース:\n' + searchResult.sources.slice(0, 3).map(s => `- [${s.title}](${s.url})`).join('\n');
+    }
+
+    closeToolModal('sukima');
+    document.getElementById('sukimaNote').value = '';
+    clearChips('sukimaTimeChips'); clearChips('sukimaMoodChips');
+
+    renderMessage('user', `🕐 すきま時間マッチング（${time}）`, true);
+    history.push({ role: 'user', content: '[すきま時間マッチングツール使用]' });
+    if (db) await persistMessage('user', '[すきま時間マッチングツール使用]');
+
+    const bubble = renderMessage('ai', '');
+    bubble.innerHTML = fmt(reply);
+    makeTapCopyable(bubble);
+    history.push({ role: 'assistant', content: reply });
+    if (db) await persistMessage('assistant', reply);
+    document.getElementById('messages').scrollTop = 999999;
+    updateMemoryUI();
+  } catch (err) {
+    showToast('エラー: ' + err.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '提案してもらう →';
+  }
+}
+
+// ── 愚痴聞きジャーナル実行（感情分析付き） ──
+async function execJournalTool() {
+  const text = document.getElementById('journalInput').value.trim();
+  if (!text) { showToast('モヤモヤを書いてください'); return; }
+  const btn = document.getElementById('journalExecBtn');
+  btn.disabled = true; btn.textContent = '読んでるよ...';
+
+  const sysPrompt = `あなたは「ママの味方の日記帳」です。
+ユーザーが書いた日々のモヤモヤ・愚痴・不満を読み、以下の3ステップで応答してください。
+
+## 出力形式
+
+### 共感
+（まず「わかるよ」「それはつらいね」など共感から入る。2〜3文で、相手の気持ちを代弁するように。決して否定しない。）
+
+### 気持ちの整理
+（モヤモヤの中にある感情を言語化して整理する。「〜が悔しかったんだね」「本当は〜してほしかったんだよね」など。箇条書きで2〜3個。）
+
+### 感情の傾向分析
+以下の形式で感情スコアを出力:
+| 感情 | レベル |
+|------|--------|
+| 怒り | ■■■□□ |
+| 悲しみ | ■■□□□ |
+| 不安 | ■■■■□ |
+| 疲労 | ■■■□□ |
+| 自己肯定感 | ■■□□□ |
+
+**今の状態**: （一言で、例: 「がんばりすぎてパンク寸前」「怒りの裏に寂しさがある」など）
+
+### 明日へのひとこと
+（短く、押しつけがましくなく、でも温かい言葉を。「〜しなきゃ」ではなく「〜してもいいんだよ」系で。）
+
+## ルール
+- 絶対にアドバイスや正論を押し付けない
+- 「でも」「だけど」は使わない。全肯定が基本
+- 敬語は使わず、親しい友達のような口調で
+- 感情スコアは内容から客観的に判定する
+- ジャーナルとして保存される前提で、日付と曜日を冒頭に入れる`;
+
+  const now = new Intl.DateTimeFormat('ja-JP', {
+    timeZone: 'Asia/Tokyo', year: 'numeric', month: 'long', day: 'numeric', weekday: 'short'
+  }).format(new Date());
+
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: MODEL, temperature: 0.6, max_completion_tokens: 1500,
+        messages: [
+          { role: 'system', content: sysPrompt },
+          { role: 'user', content: `【${now}の日記】\n${text}` }
+        ]
+      })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const reply = data.choices?.[0]?.message?.content || '読み取れませんでした';
+
+    closeToolModal('journal');
+    document.getElementById('journalInput').value = '';
+
+    renderMessage('user', '📔 愚痴聞きジャーナル', true);
+    history.push({ role: 'user', content: '[愚痴聞きジャーナルツール使用]' });
+    if (db) await persistMessage('user', '[愚痴聞きジャーナルツール使用]');
+
+    const bubble = renderMessage('ai', '');
+    bubble.innerHTML = fmt(reply);
+    makeTapCopyable(bubble);
+    history.push({ role: 'assistant', content: reply });
+    if (db) await persistMessage('assistant', reply);
+    document.getElementById('messages').scrollTop = 999999;
+    updateMemoryUI();
+  } catch (err) {
+    showToast('エラー: ' + err.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '聞いてもらう →';
+  }
+}
+
+// ── 在宅ワーク探し実行（Web検索付き） ──
+async function execWorkTool() {
+  const skills = getSelectedChips('workSkillChips');
+  const time = getSingleChip('workTimeChips');
+  const note = document.getElementById('workNote').value.trim();
+  if (!skills.length && !time && !note) { showToast('条件を1つ以上入力してください'); return; }
+  const btn = document.getElementById('workExecBtn');
+  btn.disabled = true; btn.textContent = '検索中...';
+
+  const query = '在宅ワーク 求人 ' +
+    (skills.length ? skills.join(' ') + ' ' : '未経験OK ') +
+    (time || '') + ' 主婦 ママ 2025';
+
+  try {
+    showToast('🔍 在宅ワーク情報を検索中...');
+    const searchResult = await performWebSearch(query);
+
+    const sysPrompt = `あなたは子育て中のママ専門の「在宅ワークエージェント」です。
+ユーザーのスキル・稼働時間・生活条件を考慮し、現実的な在宅ワークをピックアップしてください。
+
+## 出力形式
+
+### おすすめ在宅ワーク
+
+それぞれ以下の形式で3〜5個提案:
+#### 1. 仕事名
+- **内容**: 具体的にどんな作業か
+- **報酬目安**: 時給 or 月収の目安
+- **必要スキル**: あれば記載、なければ「特になし」
+- **おすすめポイント**: なぜこの人に合うか
+- **探し方**: 具体的なサイト名やサービス名
+
+### 始める前のチェックリスト
+- 必要な準備（PC、口座など）を箇条書きで
+
+### 注意点
+- 怪しい案件の見分け方を1〜2点
+
+## ルール
+- Web検索結果を活用して、実在するサービスや求人サイトを紹介
+- 「子どもの帰宅時間まで」等の制約を最優先で考慮
+- 非現実的な高収入案件は除外（内職詐欺系は警告）
+- カジュアルで分かりやすい口調で
+- 各提案は子育てとの両立が現実的なものだけ`;
+
+    let userMsg = '';
+    if (skills.length) userMsg += `スキル・経験: ${skills.join('、')}\n`;
+    if (time) userMsg += `稼働時間帯: ${time}\n`;
+    if (note) userMsg += `その他の条件: ${note}\n`;
+    if (searchResult) {
+      userMsg += `\n【参考情報（Web検索結果）】\n${searchResult.text}`;
+    }
+
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: MODEL, temperature: 0.5, max_completion_tokens: 2500,
+        messages: [
+          { role: 'system', content: sysPrompt },
+          { role: 'user', content: userMsg }
+        ]
+      })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    let reply = data.choices?.[0]?.message?.content || '検索できませんでした';
+
+    if (searchResult?.sources?.length) {
+      reply += '\n\n📎 ソース:\n' + searchResult.sources.slice(0, 5).map(s => `- [${s.title}](${s.url})`).join('\n');
+    }
+
+    closeToolModal('work');
+    document.getElementById('workNote').value = '';
+    clearChips('workSkillChips'); clearChips('workTimeChips');
+
+    renderMessage('user', '💼 在宅ワーク探し', true);
+    history.push({ role: 'user', content: '[在宅ワーク探しツール使用]' });
+    if (db) await persistMessage('user', '[在宅ワーク探しツール使用]');
+
+    const bubble = renderMessage('ai', '');
+    bubble.innerHTML = fmt(reply);
+    makeTapCopyable(bubble);
+    history.push({ role: 'assistant', content: reply });
+    if (db) await persistMessage('assistant', reply);
+    document.getElementById('messages').scrollTop = 999999;
+    updateMemoryUI();
+  } catch (err) {
+    showToast('エラー: ' + err.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '探してもらう →';
+  }
+}
+
+// モーダル外クリックで閉じる
+['ptaModal','lineModal','sukimaModal','journalModal','workModal'].forEach(id => {
+  document.getElementById(id).addEventListener('click', function(e) {
+    if (e.target === this) closeToolModal(id.replace('Modal',''));
+  });
+});
 
 // ================================================================
 // iOS ズーム完全防止
