@@ -82,6 +82,107 @@ input, textarea, select {
 .btn-start:active { transform: translateY(0); opacity: 0.7; }
 
 /* ═══════════════════════════════════════════════
+   LOCK SCREEN
+═══════════════════════════════════════════════ */
+#lockScreen {
+  position: fixed; inset: 0; z-index: 250;
+  display: none; align-items: center; justify-content: center;
+  background: var(--bg);
+}
+#lockScreen.show { display: flex; }
+.lock-card { animation: fadeUp 0.5s cubic-bezier(.22,1,.36,1) both; }
+.lock-card.shake { animation: lockShake 0.4s cubic-bezier(.36,.07,.19,.97) both; }
+.lock-err {
+  display: none; margin-top: 10px; font-size: 11px; color: #ff7b7b;
+  letter-spacing: 0.04em; font-family: 'DM Mono', monospace;
+}
+.lock-err.show { display: block; }
+@keyframes lockShake {
+  10%,90% { transform: translateX(-2px); }
+  20%,80% { transform: translateX(4px); }
+  30%,50%,70% { transform: translateX(-6px); }
+  40%,60% { transform: translateX(6px); }
+}
+
+/* ═══════════════════════════════════════════════
+   PASSWORD SETTINGS MODAL
+═══════════════════════════════════════════════ */
+.pwd-overlay {
+  position: fixed; inset: 0; z-index: 400;
+  background: rgba(0,0,0,0.55); backdrop-filter: blur(4px);
+  opacity: 0; pointer-events: none; transition: opacity 0.25s ease;
+}
+.pwd-overlay.open { opacity: 1; pointer-events: auto; }
+.pwd-modal {
+  position: fixed; z-index: 401;
+  top: 50%; left: 50%; transform: translate(-50%, -45%);
+  width: min(360px, calc(100vw - 32px));
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 18px; padding: 22px;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+  font-family: 'Syne', sans-serif;
+}
+.pwd-modal.open {
+  opacity: 1; pointer-events: auto;
+  transform: translate(-50%, -50%);
+}
+.pwd-modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 14px;
+}
+.pwd-modal-head h3 {
+  margin: 0; font-size: 14px; font-weight: 500; color: var(--text);
+  letter-spacing: 0.04em;
+}
+.pwd-close {
+  background: none; border: none; color: var(--text-muted);
+  font-size: 22px; cursor: pointer; padding: 0; line-height: 1;
+}
+.pwd-close:hover { color: var(--text); }
+.pwd-desc {
+  font-size: 11.5px; color: var(--text-muted); line-height: 1.7;
+  margin: 0 0 16px 0; letter-spacing: 0.02em;
+}
+.pwd-modal-body label {
+  display: block; font-size: 10px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--text-muted);
+  margin: 12px 0 6px 0;
+}
+.pwd-modal-body input {
+  width: 100%; box-sizing: border-box;
+  background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+  border-radius: 8px; padding: 11px 12px;
+  font-family: 'DM Mono', monospace; font-size: 15px; color: var(--text);
+  outline: none; transition: border-color 0.2s, background 0.2s;
+  -webkit-appearance: none;
+}
+.pwd-modal-body input:focus { border-color: var(--accent); background: var(--accent-dim); }
+.pwd-msg {
+  min-height: 16px; margin: 12px 0 0 0;
+  font-size: 11px; font-family: 'DM Mono', monospace; letter-spacing: 0.04em;
+}
+.pwd-msg.err { color: #ff7b7b; }
+.pwd-msg.ok  { color: var(--accent); }
+.pwd-actions { display: flex; gap: 8px; margin-top: 14px; }
+.btn-pwd-save {
+  flex: 1; padding: 11px; background: var(--accent); color: #0d0d0f;
+  border: none; border-radius: 8px;
+  font-family: 'Syne', sans-serif; font-size: 12px; font-weight: 500;
+  letter-spacing: 0.06em; cursor: pointer; transition: opacity 0.2s;
+}
+.btn-pwd-save:hover { opacity: 0.85; }
+.btn-pwd-remove {
+  padding: 11px 14px; background: transparent;
+  color: rgba(255,123,123,0.8); border: 1px solid rgba(255,123,123,0.3);
+  border-radius: 8px;
+  font-family: 'Syne', sans-serif; font-size: 11px; font-weight: 500;
+  letter-spacing: 0.04em; cursor: pointer; transition: background 0.2s;
+}
+.btn-pwd-remove:hover { background: rgba(255,123,123,0.08); }
+
+/* ═══════════════════════════════════════════════
    TITLE SPLASH — "おかえり、りぴ。"
 ═══════════════════════════════════════════════ */
 #splash {
@@ -1084,6 +1185,48 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
   </div>
 </div>
 
+<!-- LOCK SCREEN — passcode required to unlock the app -->
+<div id="lockScreen">
+  <div class="setup-card lock-card">
+    <div class="logo">もも<em>.</em></div>
+    <div class="sub">passcode</div>
+    <label for="lockPwd">パスワード</label>
+    <input type="password" id="lockPwd" placeholder="••••••" autocomplete="current-password" inputmode="text">
+    <p id="lockErr" class="lock-err">パスワードが違うよ</p>
+    <button class="btn-start" onclick="submitLockPwd()">✦ 解除</button>
+  </div>
+</div>
+
+<!-- PASSWORD SETTINGS MODAL -->
+<div id="pwdOverlay" class="pwd-overlay" onclick="closePwdSettings()"></div>
+<div id="pwdModal" class="pwd-modal">
+  <div class="pwd-modal-head">
+    <h3 id="pwdModalTitle">🔒 パスワード設定</h3>
+    <button class="pwd-close" onclick="closePwdSettings()">×</button>
+  </div>
+  <div class="pwd-modal-body">
+    <p class="pwd-desc" id="pwdDesc">アプリを開く時にパスワードを要求するよ。設定するまでパスワードなしで開けるよ。</p>
+
+    <div id="pwdCurrentRow" style="display:none;">
+      <label>現在のパスワード</label>
+      <input type="password" id="pwdCurrent" placeholder="現在のパスワード" autocomplete="current-password">
+    </div>
+
+    <label>新しいパスワード</label>
+    <input type="password" id="pwdNew" placeholder="4文字以上" autocomplete="new-password">
+
+    <label>もう一度</label>
+    <input type="password" id="pwdConfirm" placeholder="確認用" autocomplete="new-password">
+
+    <p id="pwdMsg" class="pwd-msg"></p>
+
+    <div class="pwd-actions">
+      <button class="btn-pwd-save" onclick="savePwdSettings()">保存</button>
+      <button class="btn-pwd-remove" id="pwdRemoveBtn" onclick="removePwdSettings()" style="display:none;">パスワード削除</button>
+    </div>
+  </div>
+</div>
+
 <!-- SPLASH -->
 <div id="splash">
   <div class="splash-greet" id="splashGreet">おかえり、<em>りぴ</em>。</div>
@@ -1106,6 +1249,7 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
         <span class="growth-title" id="growthTitle">はじまり</span>
         <div class="growth-bar"><div class="growth-fill" id="growthFill"></div></div>
       </div>
+      <button class="btn-header" onclick="openPwdSettings()" title="パスワード設定" aria-label="パスワード設定">🔒</button>
       <button class="btn-header accent" onclick="openHistory()">履歴</button>
       <button class="btn-header" onclick="newChat()">New</button>
     </div>
@@ -2280,6 +2424,116 @@ function runSplash(onDone) {
 }
 
 // ================================================================
+// PASSWORD LOCK — アプリを開く時のパスワード保護
+// ================================================================
+const PWD_KEY = 'momo_app_password';
+
+async function hashPwd(pwd) {
+  const data = new TextEncoder().encode(pwd);
+  const buf  = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+function getStoredPwdHash() {
+  try { return localStorage.getItem(PWD_KEY) || ''; } catch { return ''; }
+}
+function isPwdSet() { return !!getStoredPwdHash(); }
+async function verifyPwd(pwd) {
+  if (!pwd) return false;
+  try { return (await hashPwd(pwd)) === getStoredPwdHash(); } catch { return false; }
+}
+
+// アプリ開始前にロック画面を出して、パスワードが正しければ resolve
+function awaitUnlock() {
+  return new Promise(resolve => {
+    if (!isPwdSet()) { resolve(); return; }
+    const lock = document.getElementById('lockScreen');
+    const card = lock.querySelector('.lock-card');
+    const inp  = document.getElementById('lockPwd');
+    const err  = document.getElementById('lockErr');
+    inp.value = '';
+    err.classList.remove('show');
+    lock.classList.add('show');
+    setTimeout(() => inp.focus(), 50);
+
+    window._lockResolve = async () => {
+      const ok = await verifyPwd(inp.value);
+      if (ok) {
+        lock.classList.remove('show');
+        window._lockResolve = null;
+        resolve();
+      } else {
+        err.classList.add('show');
+        card.classList.remove('shake');
+        void card.offsetWidth; // restart animation
+        card.classList.add('shake');
+        inp.value = '';
+        inp.focus();
+      }
+    };
+  });
+}
+function submitLockPwd() { if (window._lockResolve) window._lockResolve(); }
+
+document.getElementById('lockPwd').addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitLockPwd();
+});
+
+// ── Settings modal ───────────────────────────────────────────────
+function openPwdSettings() {
+  const set = isPwdSet();
+  document.getElementById('pwdCurrentRow').style.display = set ? 'block' : 'none';
+  document.getElementById('pwdRemoveBtn').style.display  = set ? 'inline-block' : 'none';
+  document.getElementById('pwdModalTitle').textContent   = set ? '🔒 パスワード変更' : '🔒 パスワード設定';
+  document.getElementById('pwdDesc').textContent = set
+    ? 'アプリを開く時にパスワードを要求中。変更または削除できるよ。'
+    : 'アプリを開く時にパスワードを要求するよ。設定するまでパスワードなしで開けるよ。';
+  document.getElementById('pwdCurrent').value = '';
+  document.getElementById('pwdNew').value     = '';
+  document.getElementById('pwdConfirm').value = '';
+  setPwdMsg('', '');
+  document.getElementById('pwdOverlay').classList.add('open');
+  document.getElementById('pwdModal').classList.add('open');
+}
+function closePwdSettings() {
+  document.getElementById('pwdOverlay').classList.remove('open');
+  document.getElementById('pwdModal').classList.remove('open');
+}
+function setPwdMsg(text, kind) {
+  const el = document.getElementById('pwdMsg');
+  el.textContent = text;
+  el.className = 'pwd-msg' + (kind ? ' ' + kind : '');
+}
+async function savePwdSettings() {
+  const cur = document.getElementById('pwdCurrent').value;
+  const np  = document.getElementById('pwdNew').value;
+  const cf  = document.getElementById('pwdConfirm').value;
+
+  if (isPwdSet()) {
+    if (!(await verifyPwd(cur))) { setPwdMsg('現在のパスワードが違うよ', 'err'); return; }
+  }
+  if (np.length < 4) { setPwdMsg('4文字以上で設定してね', 'err'); return; }
+  if (np !== cf)     { setPwdMsg('確認用と一致しないよ', 'err'); return; }
+
+  try {
+    const hash = await hashPwd(np);
+    localStorage.setItem(PWD_KEY, hash);
+    setPwdMsg('✓ 保存したよ', 'ok');
+    setTimeout(closePwdSettings, 900);
+    showToast('🔒 パスワードを保存したよ');
+  } catch { setPwdMsg('保存に失敗したよ', 'err'); }
+}
+async function removePwdSettings() {
+  const cur = document.getElementById('pwdCurrent').value;
+  if (!(await verifyPwd(cur))) { setPwdMsg('現在のパスワードが違うよ', 'err'); return; }
+  try {
+    localStorage.removeItem(PWD_KEY);
+    setPwdMsg('✓ パスワードを削除したよ', 'ok');
+    setTimeout(closePwdSettings, 900);
+    showToast('🔓 パスワードを削除したよ');
+  } catch { setPwdMsg('削除に失敗したよ', 'err'); }
+}
+
+// ================================================================
 // STARTUP
 // ================================================================
 async function startChat() {
@@ -2291,6 +2545,9 @@ async function startChat() {
 
   // APIキー・ユーザー名を記憶する
   try { localStorage.setItem('momo_api_key', key); } catch(e) {}
+
+  // パスワードが設定されていれば、解除されるまでここで待つ
+  await awaitUnlock();
 
   // ストレージ永続化リクエスト（ブラウザによる自動削除を防止）
   if (navigator.storage && navigator.storage.persist) {
