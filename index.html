@@ -357,12 +357,19 @@ header {
 }
 .history-viewing-bar.show { display: flex; }
 .history-viewing-bar span { font-size: 12px; color: var(--accent); font-family: 'DM Mono', monospace; }
+.history-viewing-bar .viewing-actions { display: flex; gap: 6px; flex-shrink: 0; }
 .btn-back-chat {
   background: var(--accent); color: #0d0d0f; border: none; border-radius: 6px;
   font-family: 'Syne', sans-serif; font-size: 11px; font-weight: 500;
   letter-spacing: 0.06em; padding: 5px 12px; cursor: pointer; transition: opacity 0.2s;
 }
 .btn-back-chat:hover { opacity: 0.8; }
+.btn-resume-chat {
+  background: transparent; color: var(--accent); border: 1px solid var(--accent);
+  border-radius: 6px; font-family: 'Syne', sans-serif; font-size: 11px; font-weight: 500;
+  letter-spacing: 0.06em; padding: 4px 11px; cursor: pointer; transition: all 0.2s;
+}
+.btn-resume-chat:hover { background: rgba(200,240,160,0.12); }
 
 /* ── messages ── */
 #messages {
@@ -1113,7 +1120,10 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
 
   <div class="history-viewing-bar" id="viewingBar">
     <span id="viewingTitle">📖 閲覧中</span>
-    <button class="btn-back-chat" onclick="backToChat()">← 会話に戻る</button>
+    <div class="viewing-actions">
+      <button class="btn-resume-chat" onclick="resumeArchive()">✦ ここから続ける</button>
+      <button class="btn-back-chat" onclick="backToChat()">← 戻る</button>
+    </div>
   </div>
 
   <div id="messages">
@@ -2399,6 +2409,7 @@ function autoResize(el) {
 let isViewingHistory = false;
 let savedHistory     = [];   // 閲覧中に現在の会話を一時退避
 let savedMsgsHTML    = '';
+let viewingArchiveId = null; // 現在閲覧中のアーカイブID（再開用）
 
 // AIにタイトルを付けてもらう
 async function generateTitle(messages) {
@@ -2649,6 +2660,8 @@ async function viewArchive(id) {
   });
   if (!arc) { showToast('アーカイブが見つかりません'); return; }
 
+  viewingArchiveId = id;
+
   // 閲覧バー表示
   document.getElementById('viewingBar').classList.add('show');
   document.getElementById('viewingTitle').textContent = `📖 ${arc.title}`;
@@ -2667,6 +2680,7 @@ async function viewArchive(id) {
 // 閲覧モードから戻る
 function backToChat() {
   isViewingHistory = false;
+  viewingArchiveId = null;
   document.getElementById('viewingBar').classList.remove('show');
   document.getElementById('messages').innerHTML = savedMsgsHTML;
   document.getElementById('input').disabled = false;
@@ -2674,6 +2688,85 @@ function backToChat() {
   history = savedHistory;
   savedHistory = []; savedMsgsHTML = '';
   setTimeout(() => { document.getElementById('messages').scrollTop = 999999; }, 50);
+}
+
+// アーカイブから会話を再開（続きから話す）
+async function resumeArchive() {
+  if (!db || viewingArchiveId == null) return;
+  const archiveId = viewingArchiveId;
+
+  // アーカイブ取得
+  const arc = await new Promise((res, rej) => {
+    const r = idbTx(ARCHIVE_STORE, 'readonly').get(archiveId);
+    r.onsuccess = e => res(e.target.result);
+    r.onerror = e => rej(e.target.error);
+  });
+  if (!arc) { showToast('アーカイブが見つかりません'); return; }
+
+  showToast('✦ 続きから再開中...');
+
+  // 退避していた現在の会話に内容があれば、消えないようにアーカイブへ保存
+  try {
+    if (savedHistory.length > 0) {
+      const firstTs = Date.now() - savedHistory.length * 1000;
+      const lastTs  = Date.now();
+      const title   = await generateTitle(savedHistory.map((r, i) => ({
+        role: r.role, content: r.content, ts: firstTs + i * 1000
+      }))) || `会話 (${savedHistory.length}通)`;
+      await arcAdd({
+        title,
+        messages: savedHistory.map((r, i) => ({ role: r.role, content: r.content, ts: firstTs + i * 1000 })),
+        msgCount: savedHistory.length,
+        firstTs, lastTs, ts: Date.now()
+      });
+    }
+  } catch (e) { console.error('[もも] 現在の会話の自動退避失敗:', e); }
+
+  // 現在の idb をクリアして、アーカイブの全メッセージを書き戻す
+  await idbClear();
+  const baseTs = Date.now() - arc.messages.length * 1000;
+  for (let i = 0; i < arc.messages.length; i++) {
+    const m = arc.messages[i];
+    await idbAdd({
+      role: m.role,
+      content: m.content,
+      ts: m.ts || (baseTs + i * 1000)
+    });
+  }
+
+  // 元のアーカイブは削除（アクティブ会話に昇格したので重複を避ける）
+  await arcDel(archiveId);
+
+  // メモリ上の状態を更新
+  const slice = arc.messages.slice(-API_CONTEXT);
+  history = slice.map(r => ({ role: r.role, content: r.content }));
+  totalMsgCount = arc.messages.length;
+  savedHistory = [];
+  savedMsgsHTML = '';
+  isViewingHistory = false;
+  viewingArchiveId = null;
+  pendingImages = []; updateImagePreview();
+
+  // トピックステートをリセット
+  currentTopicTitle = '';
+  currentTopicMsgs  = [];
+  topicCount        = 0;
+  lastTopicCheckAt  = 0;
+  topicSavedFlag    = false;
+  document.getElementById('topicBar').classList.remove('show');
+
+  // UIを再描画（直近 API_CONTEXT 件のみ）
+  const msgs = document.getElementById('messages');
+  msgs.innerHTML = '';
+  slice.forEach(r => renderMessage(r.role === 'assistant' ? 'ai' : r.role, r.content, false));
+
+  // 閲覧バーを閉じて入力を有効化
+  document.getElementById('viewingBar').classList.remove('show');
+  document.getElementById('input').disabled = false;
+  document.getElementById('sendBtn').disabled = false;
+
+  setTimeout(() => { msgs.scrollTop = 999999; }, 50);
+  showToast(`✦ 「${arc.title}」の続きから話せるよ`);
 }
 
 // アーカイブ削除
