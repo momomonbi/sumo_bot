@@ -1304,6 +1304,9 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
       <p class="backup-warn">
         ⚠ 現在この端末に保存されているデータは上書きされます。実行前に念のため書き出しをおすすめ。
       </p>
+      <p class="pwd-desc" style="margin:8px 0 10px 0;">
+        🔒 元の端末で鍵をかけてた場合は、復元後も<b>同じパスワード</b>で開く必要があるから忘れないでね。
+      </p>
       <input type="file" id="backupFileInput" accept="application/json,.json" onchange="importBackupFile(event)">
       <button class="btn-backup secondary" onclick="document.getElementById('backupFileInput').click()">📥 ファイルから復元</button>
     </div>
@@ -2804,6 +2807,8 @@ async function importBackupFile(ev) {
       await restoreStore(s, recs);
     }
 
+    const hadLock = !!(payload.localStorage && typeof payload.localStorage[PWD_KEY] === 'string' && payload.localStorage[PWD_KEY]);
+
     if (payload.localStorage && typeof payload.localStorage === 'object') {
       for (const k of BACKUP_LS_KEYS) {
         const v = payload.localStorage[k];
@@ -2816,7 +2821,17 @@ async function importBackupFile(ev) {
 
     setBackupMsg('✓ 復元したよ。再読み込みします...', 'ok');
     showToast('📥 バックアップを復元したよ');
-    setTimeout(() => location.reload(), 1200);
+
+    if (hadLock) {
+      alert(
+        '🔒 元の端末で鍵をかけてたよ。\n\n' +
+        '同じパスワードで復元したから、次に開く時はそのパスワードを入れてね。\n' +
+        '（鍵をかけ直したい時はヘッダーの🔒から変更できるよ）'
+      );
+      location.reload();
+    } else {
+      setTimeout(() => location.reload(), 1200);
+    }
   } catch (e) {
     console.error('[もも] backup import失敗:', e);
     setBackupMsg('復元に失敗したよ', 'err');
