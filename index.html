@@ -183,6 +183,54 @@ input, textarea, select {
 .btn-pwd-remove:hover { background: rgba(255,123,123,0.08); }
 
 /* ═══════════════════════════════════════════════
+   BACKUP / RESTORE MODAL — 機種変・引継ぎ
+═══════════════════════════════════════════════ */
+.backup-section {
+  border: 1px solid var(--border); border-radius: 12px;
+  padding: 14px; margin-top: 12px;
+  background: rgba(255,255,255,0.02);
+}
+.backup-section h4 {
+  margin: 0 0 6px 0; font-size: 12px; font-weight: 500;
+  letter-spacing: 0.06em; color: var(--text);
+  font-family: 'Syne', sans-serif;
+}
+.backup-section p {
+  margin: 0 0 10px 0; font-size: 11px; line-height: 1.6;
+  color: var(--text-muted); letter-spacing: 0.02em;
+}
+.backup-stats {
+  font-family: 'DM Mono', monospace; font-size: 10px;
+  color: var(--text-muted); letter-spacing: 0.04em;
+  margin: 0 0 10px 0; line-height: 1.7;
+}
+.backup-stats b { color: var(--text); font-weight: 500; }
+.btn-backup {
+  width: 100%; padding: 11px; background: var(--accent); color: #0d0d0f;
+  border: none; border-radius: 8px;
+  font-family: 'Syne', sans-serif; font-size: 12px; font-weight: 500;
+  letter-spacing: 0.06em; cursor: pointer; transition: opacity 0.2s;
+}
+.btn-backup:hover { opacity: 0.85; }
+.btn-backup:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-backup.secondary {
+  background: transparent; color: var(--text);
+  border: 1px solid var(--border);
+}
+.btn-backup.secondary:hover { border-color: rgba(255,255,255,0.25); background: rgba(255,255,255,0.03); }
+.btn-backup.danger {
+  background: transparent; color: rgba(255,123,123,0.85);
+  border: 1px solid rgba(255,123,123,0.3);
+}
+.btn-backup.danger:hover { background: rgba(255,123,123,0.08); }
+.backup-warn {
+  font-family: 'DM Mono', monospace; font-size: 10px;
+  color: rgba(255,123,123,0.85); letter-spacing: 0.04em;
+  line-height: 1.6; margin: 8px 0 0 0;
+}
+#backupFileInput { display: none; }
+
+/* ═══════════════════════════════════════════════
    TITLE SPLASH — "おかえり、りぴ。"
 ═══════════════════════════════════════════════ */
 #splash {
@@ -1227,6 +1275,43 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
   </div>
 </div>
 
+<!-- BACKUP / RESTORE MODAL — 機種変対応 -->
+<div id="backupOverlay" class="pwd-overlay" onclick="closeBackupModal()"></div>
+<div id="backupModal" class="pwd-modal" style="max-height: calc(100vh - 40px); overflow-y: auto; -webkit-overflow-scrolling: touch;">
+  <div class="pwd-modal-head">
+    <h3>📦 バックアップ・引継ぎ</h3>
+    <button class="pwd-close" onclick="closeBackupModal()">×</button>
+  </div>
+  <div class="pwd-modal-body">
+    <p class="pwd-desc">
+      iPhoneを機種変するときや、Safariのデータが消えてしまった時のために、
+      会話・記憶・学習データをファイルに書き出して新しい端末で読み込めるよ。
+    </p>
+
+    <div class="backup-section">
+      <h4>↓ バックアップを書き出す</h4>
+      <p>会話履歴・アーカイブ・愚痴ジャーナル・記憶/学習データ・APIキー・パスワードを1つのJSONファイルに保存するよ。</p>
+      <div class="backup-stats" id="backupStats">読み込み中...</div>
+      <button class="btn-backup" id="btnExport" onclick="exportBackup()">📤 ファイルに保存（書き出し）</button>
+      <p class="pwd-desc" style="margin-top:8px;">
+        iPhoneでは「共有」シートからiCloud Driveやファイル.appに保存できるよ。
+      </p>
+    </div>
+
+    <div class="backup-section">
+      <h4>↑ バックアップから復元する</h4>
+      <p>書き出したJSONファイルを選ぶと、新しい端末にすべての記憶を復元できるよ。</p>
+      <p class="backup-warn">
+        ⚠ 現在この端末に保存されているデータは上書きされます。実行前に念のため書き出しをおすすめ。
+      </p>
+      <input type="file" id="backupFileInput" accept="application/json,.json" onchange="importBackupFile(event)">
+      <button class="btn-backup secondary" onclick="document.getElementById('backupFileInput').click()">📥 ファイルから復元</button>
+    </div>
+
+    <p id="backupMsg" class="pwd-msg" style="margin-top:14px;"></p>
+  </div>
+</div>
+
 <!-- SPLASH -->
 <div id="splash">
   <div class="splash-greet" id="splashGreet">おかえり、<em>りぴ</em>。</div>
@@ -1250,6 +1335,7 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
         <div class="growth-bar"><div class="growth-fill" id="growthFill"></div></div>
       </div>
       <button class="btn-header" onclick="openPwdSettings()" title="パスワード設定" aria-label="パスワード設定">🔒</button>
+      <button class="btn-header" onclick="openBackupModal()" title="バックアップ・機種変引継ぎ" aria-label="バックアップ">📦</button>
       <button class="btn-header accent" onclick="openHistory()">履歴</button>
       <button class="btn-header" onclick="newChat()">New</button>
     </div>
@@ -2531,6 +2617,210 @@ async function removePwdSettings() {
     setTimeout(closePwdSettings, 900);
     showToast('🔓 パスワードを削除したよ');
   } catch { setPwdMsg('削除に失敗したよ', 'err'); }
+}
+
+// ================================================================
+// BACKUP / RESTORE — 機種変・端末引継ぎ
+// IndexedDB(全store) + localStorage(APIキー/パスワード) を JSON に書き出し／復元
+// iOSではWeb Share APIでiCloud Drive・ファイル.appに保存可能
+// ================================================================
+const BACKUP_VERSION = 1;
+const BACKUP_LS_KEYS = ['momo_api_key', PWD_KEY];
+const BACKUP_STORES  = [MSG_STORE, META_STORE, ARCHIVE_STORE, JOURNAL_STORE];
+
+function dumpStore(storeName) {
+  return new Promise((resolve, reject) => {
+    try {
+      const tx = db.transaction(storeName, 'readonly');
+      const r  = tx.objectStore(storeName).getAll();
+      r.onsuccess = e => resolve(e.target.result || []);
+      r.onerror   = e => reject(e.target.error);
+    } catch (e) { reject(e); }
+  });
+}
+
+function restoreStore(storeName, records) {
+  return new Promise((resolve, reject) => {
+    try {
+      const tx    = db.transaction(storeName, 'readwrite');
+      const store = tx.objectStore(storeName);
+      store.clear();
+      for (const rec of records) store.put(rec);
+      tx.oncomplete = () => resolve();
+      tx.onerror    = e => reject(e.target.error);
+      tx.onabort    = e => reject(e.target.error);
+    } catch (e) { reject(e); }
+  });
+}
+
+async function buildBackupPayload() {
+  const indexedDBData = {};
+  for (const s of BACKUP_STORES) indexedDBData[s] = await dumpStore(s);
+
+  const localStorageData = {};
+  for (const k of BACKUP_LS_KEYS) {
+    try {
+      const v = localStorage.getItem(k);
+      if (v != null) localStorageData[k] = v;
+    } catch {}
+  }
+
+  return {
+    app: 'momo-bot',
+    version: BACKUP_VERSION,
+    dbVersion: DB_VERSION,
+    exportedAt: new Date().toISOString(),
+    indexedDB: indexedDBData,
+    localStorage: localStorageData
+  };
+}
+
+function setBackupMsg(text, kind) {
+  const el = document.getElementById('backupMsg');
+  el.textContent = text;
+  el.className = 'pwd-msg' + (kind ? ' ' + kind : '');
+}
+
+async function refreshBackupStats() {
+  const stats = document.getElementById('backupStats');
+  if (!db) { stats.textContent = 'データベース未初期化'; return; }
+  try {
+    const counts = await Promise.all(BACKUP_STORES.map(s => dumpStore(s).then(r => r.length)));
+    const [msg, meta, arc, jrn] = counts;
+    stats.innerHTML =
+      `会話: <b>${msg}</b>件 ／ アーカイブ: <b>${arc}</b>件<br>` +
+      `ジャーナル: <b>${jrn}</b>件 ／ 記憶/学習: <b>${meta}</b>項目`;
+  } catch (e) {
+    stats.textContent = '集計に失敗したよ';
+  }
+}
+
+function openBackupModal() {
+  setBackupMsg('', '');
+  document.getElementById('backupFileInput').value = '';
+  document.getElementById('backupOverlay').classList.add('open');
+  document.getElementById('backupModal').classList.add('open');
+  refreshBackupStats();
+}
+function closeBackupModal() {
+  document.getElementById('backupOverlay').classList.remove('open');
+  document.getElementById('backupModal').classList.remove('open');
+}
+
+function backupFileName() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  return `momo-backup-${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}.json`;
+}
+
+async function exportBackup() {
+  if (!db) { setBackupMsg('データベース未初期化', 'err'); return; }
+  const btn = document.getElementById('btnExport');
+  btn.disabled = true;
+  setBackupMsg('書き出し中...', '');
+  try {
+    const payload = await buildBackupPayload();
+    const json    = JSON.stringify(payload);
+    const blob    = new Blob([json], { type: 'application/json' });
+    const fname   = backupFileName();
+
+    // iOSなどファイル共有が使える場合は共有シートで保存（iCloud Drive・ファイル.app・AirDrop等）
+    let shared = false;
+    try {
+      const file = new File([blob], fname, { type: 'application/json' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'もも バックアップ' });
+        shared = true;
+      }
+    } catch (e) {
+      // ユーザーがキャンセルした場合などはダウンロード方式にフォールバック
+      if (e && e.name === 'AbortError') {
+        setBackupMsg('書き出しをキャンセルしたよ', '');
+        btn.disabled = false;
+        return;
+      }
+    }
+
+    if (!shared) {
+      const url = URL.createObjectURL(blob);
+      const a   = document.createElement('a');
+      a.href = url; a.download = fname;
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+    }
+
+    setBackupMsg(`✓ 書き出したよ (${(blob.size/1024).toFixed(1)} KB)`, 'ok');
+    showToast('📦 バックアップを書き出したよ');
+  } catch (e) {
+    console.error('[もも] backup export失敗:', e);
+    setBackupMsg('書き出しに失敗したよ', 'err');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function importBackupFile(ev) {
+  const file = ev.target.files && ev.target.files[0];
+  ev.target.value = '';
+  if (!file) return;
+  if (!db) { setBackupMsg('データベース未初期化', 'err'); return; }
+
+  setBackupMsg('読み込み中...', '');
+
+  let payload;
+  try {
+    const text = await file.text();
+    payload = JSON.parse(text);
+  } catch {
+    setBackupMsg('ファイルを読み込めなかったよ', 'err'); return;
+  }
+
+  if (!payload || payload.app !== 'momo-bot' || !payload.indexedDB) {
+    setBackupMsg('もも用のバックアップファイルじゃないみたい', 'err'); return;
+  }
+  if (typeof payload.version === 'number' && payload.version > BACKUP_VERSION) {
+    setBackupMsg('新しいバージョンのバックアップだよ。アプリを更新してね', 'err'); return;
+  }
+
+  const stores = payload.indexedDB || {};
+  const counts = BACKUP_STORES.map(s => (stores[s] || []).length);
+  const [msg, meta, arc, jrn] = counts;
+  const summary =
+    `このファイルから復元します。\n\n` +
+    `・会話: ${msg}件\n` +
+    `・アーカイブ: ${arc}件\n` +
+    `・ジャーナル: ${jrn}件\n` +
+    `・記憶/学習: ${meta}項目\n\n` +
+    `現在この端末に保存されているデータはすべて上書きされます。よろしいですか？`;
+
+  if (!confirm(summary)) {
+    setBackupMsg('復元をキャンセルしたよ', '');
+    return;
+  }
+
+  try {
+    for (const s of BACKUP_STORES) {
+      const recs = Array.isArray(stores[s]) ? stores[s] : [];
+      await restoreStore(s, recs);
+    }
+
+    if (payload.localStorage && typeof payload.localStorage === 'object') {
+      for (const k of BACKUP_LS_KEYS) {
+        const v = payload.localStorage[k];
+        try {
+          if (typeof v === 'string') localStorage.setItem(k, v);
+          else localStorage.removeItem(k);
+        } catch {}
+      }
+    }
+
+    setBackupMsg('✓ 復元したよ。再読み込みします...', 'ok');
+    showToast('📥 バックアップを復元したよ');
+    setTimeout(() => location.reload(), 1200);
+  } catch (e) {
+    console.error('[もも] backup import失敗:', e);
+    setBackupMsg('復元に失敗したよ', 'err');
+  }
 }
 
 // ================================================================
