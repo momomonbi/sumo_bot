@@ -284,7 +284,15 @@ header {
   font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-muted);
   background: rgba(255,255,255,0.04); padding: 2px 7px; border-radius: 4px; border: 1px solid var(--border);
 }
-.header-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.header-right {
+  display: flex; align-items: center; gap: 6px;
+  flex: 1 1 auto; min-width: 0;
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.header-right::-webkit-scrollbar { display: none; }
+.header-right > * { flex-shrink: 0; }
+.header-right > *:first-child { margin-left: auto; }
 /* ── growth badge ── */
 .growth-badge {
   display: flex; align-items: center; gap: 4px;
