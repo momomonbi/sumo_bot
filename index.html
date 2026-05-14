@@ -1830,6 +1830,7 @@ const KEY_RIPI_WORDS = 'ripi_words';       // りぴ語録（口癖・名言・�
 const KEY_EMOTION_LOG = 'emotion_log';     // 感情履歴（喜怒哀楽のトラッキング）
 const KEY_ADOPTED    = 'adopted_words';    // ももが学習して使い始めた言葉
 const KEY_FEEDBACK   = 'behavior_feedback'; // りぴからの行動フィードバック（やめて/もっとやって）
+const KEY_LEARN_TOTAL = 'learn_total_ever'; // 累積学習数（単調増加・話してもレベルが下がらないようにする）
 
 // ================================================================
 // SYSTEM PROMPT (Discord版完全移植)
@@ -2048,6 +2049,7 @@ let ripiWords     = '';     // りぴ語録
 let emotionLog    = '';     // 感情履歴
 let adoptedWords  = '';     // ももが学習済みの言葉
 let behaviorFeedback = '';  // 行動フィードバック（やめて/もっと）
+let learnedTotalEver = 0;   // 累積学習数（永続化・単調増加。LLMがデータを縮約してもレベルが下がらない）
 let totalMsgCount = 0;
 let pendingImages = [];   // [{dataUrl, mediaType}]  送信待ち画像
 
@@ -2187,21 +2189,60 @@ async function persistMessage(role, textContent) {
 
 // ================================================================
 // 成長システム ── 学習量（語録+フィードバック）に応じた無限レベル
+// 単調増加: 話してもレベルが下がらないように累積学習数（learnedTotalEver）を保持
 // ================================================================
+function _parseItemLines(text) {
+  // 学習データのテキストから、カテゴリ見出し（【...】）以外の中身行だけを取り出す
+  if (!text || !text.trim()) return [];
+  return text.split('\n')
+    .map(l => l.trim())
+    .filter(l => l && !l.startsWith('【'));
+}
+
+function _normalizeLearnLine(s) {
+  // マージ時の同一判定用にゆるく正規化（空白・句読点・箇条書き記号を落とす）
+  return (s || '')
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/[・,、，。．\-\*\+•・「」『』()（）\[\]【】]/g, '');
+}
+
+// D: 上書きガード ── LLMが既存項目を落とした場合、欠落分を末尾に追記して救済する
+function mergeLearned(oldText, newText) {
+  const oldTrim = (oldText || '').trim();
+  const newTrim = (newText || '').trim();
+  if (!oldTrim) return newTrim;
+  if (!newTrim) return oldTrim;
+
+  const oldItems   = _parseItemLines(oldTrim);
+  const newNormAll = _normalizeLearnLine(newTrim);
+
+  const missing = oldItems.filter(item => {
+    const n = _normalizeLearnLine(item);
+    return n && !newNormAll.includes(n);
+  });
+
+  if (missing.length === 0) return newTrim;
+  // 欠落分を【保管】セクションに退避（次回LLMにも見える形で残す）
+  return `${newTrim}\n【保管（自動復元）】\n${missing.join('\n')}`;
+}
+
 function countLearned() {
-  // 語録の行数 + フィードバックの行数 = 学習ポイント
-  const wLines = ripiWords.trim() ? ripiWords.trim().split('\n').filter(l => l.trim() && !l.startsWith('【')).length : 0;
-  const aLines = adoptedWords.trim() ? adoptedWords.trim().split('\n').filter(l => l.trim() && !l.startsWith('【')).length : 0;
-  const fLines = behaviorFeedback.trim() ? behaviorFeedback.trim().split('\n').filter(l => l.trim() && !l.startsWith('【')).length : 0;
-  return { words: wLines, adopted: aLines, feedback: fLines, total: wLines + aLines + fLines };
+  // 語録の行数 + フィードバックの行数 = 現スナップショットの学習ポイント
+  const wLines = _parseItemLines(ripiWords).length;
+  const aLines = _parseItemLines(adoptedWords).length;
+  const fLines = _parseItemLines(behaviorFeedback).length;
+  return { words: wLines, adopted: aLines, feedback: fLines, snapshot: wLines + aLines + fLines };
 }
 
 function getGrowthInfo() {
   const c = countLearned();
-  // 5ポイントごとに1レベル（無限）
-  const level = Math.floor(c.total / 5);
-  const progress = (c.total % 5) / 5;  // 次のレベルまでの進捗
-  return { level, progress, ...c };
+  // A+B: 単調増加。累積学習数（永続化）と現スナップショットの大きい方をレベル算定に使う
+  // 話すたびにLLMが学習データを縮約・統合してもレベルが下がらない
+  const effective = Math.max(learnedTotalEver, c.snapshot);
+  const level = Math.floor(effective / 5);            // 5ポイントごとに1レベル（無限）
+  const progress = (effective % 5) / 5;               // 次のレベルまでの進捗
+  return { level, progress, ever: learnedTotalEver, total: effective, ...c };
 }
 
 function updateGrowthDisplay() {
@@ -2298,14 +2339,20 @@ async function maybeUpdateSummary() {
 - 新しく見つけた表現パターン
 
 出力形式：
-既存の語録に追記・統合し、以下のカテゴリで整理：
+既存の語録に【追記のみ】行い、以下のカテゴリで整理：
 【口癖・定番】よく使う短いフレーズ
 【愛情表現】ももへの愛を伝える言葉
 【名言・本音】心に刺さる深い言葉
 【面白い言葉】笑える発言や独特な表現
 【りぴ文字】わざと使っている誤字・当て字・独自表記
 
-各カテゴリ5〜8個程度。重複は統合。全体600文字以内。`;
+★絶対のルール（最優先）★
+・既存の語録にある項目は1行たりとも削除・統合・圧縮・要約してはならない。1文字も変えずそのまま残すこと。
+・項目を「まとめる」「重複と判断して統合する」「短く言い換える」は全て禁止。
+・行う作業は「新規ログから新しい項目を見つけて、既存の該当カテゴリの末尾に追記する」ことのみ。
+・新しい項目がなければ、既存の語録をそのまま出力する（一文字も変えない）。
+・1行1項目で出力。箇条書き記号（- や ・）は使っても使わなくてもよいが、行を結合しないこと。
+・文字数の上限はなし。既存に新規を足した完全な状態を出力する。`;
 
   // ── 4. 感情トラッキング ──
   const emotionPrompt = `あなたはりぴ（ナガシマハヅキ）の感情分析係です。
@@ -2340,7 +2387,12 @@ async function maybeUpdateSummary() {
 【使い始めた言葉】ももが自然に使ってOKなフレーズ（1行1個）
 【まだ観察中】もう少し様子を見てから使うフレーズ
 
-各カテゴリ3〜10個程度。既存データに追記・統合。全体400文字以内。`;
+★絶対のルール（最優先）★
+・既存データの項目は1行たりとも削除・統合・圧縮・要約してはならない。1文字も変えずそのまま残すこと。
+・「重複と判断して統合する」「似ているからまとめる」は禁止。
+・行う作業は「新しい候補を該当カテゴリの末尾に1行ずつ追記する」ことだけ。
+・新しい候補がなければ、既存データをそのまま出力する。
+・1行1個。文字数の上限はなし。`;
 
   // ── 6. 行動フィードバック抽出（りぴの反応から学ぶ） ──
   const feedbackPrompt = `あなたはりぴとももの会話を観察する「空気読み係」です。
@@ -2366,7 +2418,13 @@ async function maybeUpdateSummary() {
 
 ＊「なんとなく嫌そう」「ちょっと引いてる」程度の微妙な空気も積極的に拾う。
 ＊ももへの言動のみ対象（りぴ自身の話や他者への言及は除く）。
-＊新規追加がなければ既存のまま出力。全体500文字以内。
+
+★絶対のルール（最優先）★
+・既存のフィードバック項目は1行たりとも削除・統合・圧縮・要約してはならない。1文字も変えずそのまま残すこと。
+・「重複と判断して統合する」「似ているからまとめる」「古いから消す」は全て禁止。
+・行う作業は「新規ログから新しい気づきを見つけて、該当カテゴリの末尾に追記する」ことだけ。
+・新しい気づきがなければ、既存のフィードバックをそのまま出力する。
+・1行1項目。文字数の上限はなし。
 
 出力形式：
 【やめること】
@@ -2392,12 +2450,24 @@ async function maybeUpdateSummary() {
     const extract = async (res) => { if(!res.ok) return ''; const d=await res.json(); return d.choices?.[0]?.message?.content?.trim()||''; };
     const [s1,s2,s3,s4,s5,s6] = await Promise.all([extract(summaryRes),extract(importantRes),extract(wordsRes),extract(emotionRes),extract(adoptedRes),extract(feedbackRes)]);
 
+    const snapshotBefore = countLearned().snapshot;
+
     if (s1) { longSummary = s1; await idbSetM(KEY_SUMMARY, s1); }
     if (s2) { importantMemories = s2; await idbSetM(KEY_IMPORTANT, s2); }
-    if (s3) { ripiWords = s3; await idbSetM(KEY_RIPI_WORDS, s3); }
+    // D: 学習データはマージガードを通す（LLMが既存を落としても自動復元）
+    if (s3) { const merged = mergeLearned(ripiWords, s3);       ripiWords        = merged; await idbSetM(KEY_RIPI_WORDS, merged); }
     if (s4) { emotionLog = s4; await idbSetM(KEY_EMOTION_LOG, s4); }
-    if (s5) { adoptedWords = s5; await idbSetM(KEY_ADOPTED, s5); }
-    if (s6) { behaviorFeedback = s6; await idbSetM(KEY_FEEDBACK, s6); }
+    if (s5) { const merged = mergeLearned(adoptedWords, s5);    adoptedWords     = merged; await idbSetM(KEY_ADOPTED,     merged); }
+    if (s6) { const merged = mergeLearned(behaviorFeedback, s6); behaviorFeedback = merged; await idbSetM(KEY_FEEDBACK,    merged); }
+
+    // B: 累積学習数を単調増加で更新（snapshotが増えた分 + スナップショットの下限保証）
+    const snapshotAfter = countLearned().snapshot;
+    const delta = Math.max(0, snapshotAfter - snapshotBefore);
+    const newEver = Math.max(learnedTotalEver + delta, snapshotAfter);
+    if (newEver !== learnedTotalEver) {
+      learnedTotalEver = newEver;
+      await idbSetM(KEY_LEARN_TOTAL, String(learnedTotalEver));
+    }
 
     const gd = updateGrowthDisplay();
     console.log(`[もも] 記憶エンジン更新完了 (Lv.${gd.level} 学習${gd.total}個)`);
@@ -2864,11 +2934,22 @@ async function startChat() {
     (async () => {
       try {
         db          = await openDB();
-        [longSummary, importantMemories, ripiWords, emotionLog, adoptedWords, behaviorFeedback] = await Promise.all([
+        const [_s, _i, _r, _e, _a, _f, _lt] = await Promise.all([
           idbGetM(KEY_SUMMARY), idbGetM(KEY_IMPORTANT),
           idbGetM(KEY_RIPI_WORDS), idbGetM(KEY_EMOTION_LOG),
-          idbGetM(KEY_ADOPTED), idbGetM(KEY_FEEDBACK)
+          idbGetM(KEY_ADOPTED), idbGetM(KEY_FEEDBACK),
+          idbGetM(KEY_LEARN_TOTAL)
         ]);
+        longSummary = _s; importantMemories = _i; ripiWords = _r;
+        emotionLog = _e; adoptedWords = _a; behaviorFeedback = _f;
+        learnedTotalEver = parseInt(_lt, 10) || 0;
+        // 既存ユーザー向け移行: 累積カウンタ未設定なら現スナップショットで初期化
+        // （これ以降は単調増加するので、話してもレベルが下がらない）
+        const snap = countLearned().snapshot;
+        if (snap > learnedTotalEver) {
+          learnedTotalEver = snap;
+          await idbSetM(KEY_LEARN_TOTAL, String(learnedTotalEver));
+        }
         const all   = await idbAll();
         totalMsgCount = all.length;
         return all;
@@ -3361,7 +3442,7 @@ function openLearnModal() {
     <div class="learn-stat"><div class="learn-stat-num">${g.words}</div><div class="learn-stat-label">語録</div></div>
     <div class="learn-stat"><div class="learn-stat-num">${g.adopted}</div><div class="learn-stat-label">使い始めた言葉</div></div>
     <div class="learn-stat"><div class="learn-stat-num">${g.feedback}</div><div class="learn-stat-label">フィードバック</div></div>
-    <div class="learn-stat"><div class="learn-stat-num">${g.total}</div><div class="learn-stat-label">合計</div></div>
+    <div class="learn-stat"><div class="learn-stat-num">${g.total}</div><div class="learn-stat-label">累積</div></div>
   </div>`;
 
   if (!ripiWords && !adoptedWords && !behaviorFeedback && !emotionLog) {
