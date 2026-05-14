@@ -375,6 +375,12 @@ header {
   padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.03);
 }
 .learn-section-body .learn-item:last-child { border-bottom: none; }
+.learn-section-body .learn-section-subtitle {
+  font-family: 'DM Mono', monospace; font-size: 10px; font-weight: 500;
+  letter-spacing: 0.08em; color: var(--accent); opacity: 0.6;
+  padding: 8px 0 4px; border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+.learn-section-body .learn-section-subtitle:first-child { padding-top: 0; }
 
 .learn-empty {
   text-align: center; color: var(--text-muted); font-size: 13px;
@@ -2051,6 +2057,10 @@ let adoptedWords  = '';     // ももが学習済みの言葉
 let behaviorFeedback = '';  // 行動フィードバック（やめて/もっと）
 let learnedTotalEver = 0;   // 累積学習数（永続化・単調増加。LLMがデータを縮約してもレベルが下がらない）
 let totalMsgCount = 0;
+let chatEpoch = 0;          // 会話の世代カウンタ。newChat/resumeArchive で +1 して、
+                            // 古い会話に対する fire-and-forget な maybeUpdateSummary が
+                            // 新しい会話の learned data を上書きしないようにする
+let currentStreamAbort = null;  // ストリーミング中のAbortController（会話切替時にabortする）
 let pendingImages = [];   // [{dataUrl, mediaType}]  送信待ち画像
 
 // ================================================================
@@ -2169,7 +2179,11 @@ const idbTx  = (s, m) => db.transaction(s, m).objectStore(s);
 const idbAll = ()       => new Promise((res,rej) => { const r = idbTx(MSG_STORE,'readonly').index('ts').getAll(); r.onsuccess=e=>res(e.target.result); r.onerror=e=>rej(e.target.error); });
 const idbAdd = (rec)    => new Promise((res,rej) => { const r = idbTx(MSG_STORE,'readwrite').add(rec); r.onsuccess=e=>res(e.target.result); r.onerror=e=>rej(e.target.error); });
 const idbClear= ()      => new Promise((res,rej) => { const r = idbTx(MSG_STORE,'readwrite').clear(); r.onsuccess=()=>res(); r.onerror=e=>rej(e.target.error); });
-const idbGetM = (k)     => new Promise((res)     => { const r = idbTx(META_STORE,'readonly').get(k); r.onsuccess=e=>res(e.target.result?.value??''); r.onerror=()=>res(''); });
+// 取得に成功した場合は value を返し、キーがなければ null を返す。
+// 以前は onerror も '' に丸めていたが、それだと「I/O 失敗」と「未設定」が区別できず
+// learnedTotalEver などの数値カウンタが silently リセットされる事故が起きた。
+// 失敗はちゃんと reject する。
+const idbGetM = (k)     => new Promise((res, rej) => { const r = idbTx(META_STORE,'readonly').get(k); r.onsuccess=e=>res(e.target.result===undefined?null:e.target.result.value); r.onerror=e=>rej(e.target.error); });
 const idbSetM = (k,v)   => new Promise((res,rej) => { const r = idbTx(META_STORE,'readwrite').put({key:k,value:v}); r.onsuccess=()=>res(); r.onerror=e=>rej(e.target.error); });
 // Archive helpers
 const arcAdd  = (rec)   => new Promise((res,rej) => { const r = idbTx(ARCHIVE_STORE,'readwrite').add(rec); r.onsuccess=e=>res(e.target.result); r.onerror=e=>rej(e.target.error); });
@@ -2208,19 +2222,30 @@ function _normalizeLearnLine(s) {
 }
 
 // D: 上書きガード ── LLMが既存項目を落とした場合、欠落分を末尾に追記して救済する
+// 同一判定は「行単位の正規化済み集合」で行う（部分文字列マッチだと
+// 「うん」が「うんざり」に飲まれるなど短い項目で誤判定するため）
 function mergeLearned(oldText, newText) {
   const oldTrim = (oldText || '').trim();
   const newTrim = (newText || '').trim();
   if (!oldTrim) return newTrim;
   if (!newTrim) return oldTrim;
 
-  const oldItems   = _parseItemLines(oldTrim);
-  const newNormAll = _normalizeLearnLine(newTrim);
+  const oldItems = _parseItemLines(oldTrim);
+  const newItems = _parseItemLines(newTrim);
+  const newSet   = new Set(newItems.map(_normalizeLearnLine).filter(Boolean));
 
-  const missing = oldItems.filter(item => {
+  // 既存にあって新規にない項目だけ救済対象。
+  // ただし救済対象の中でも正規化後に重複する項目は1つに統合する
+  // （【保管】セクションが毎回累積して肥大化するのを防ぐ）
+  const missing = [];
+  const seen = new Set();
+  for (const item of oldItems) {
     const n = _normalizeLearnLine(item);
-    return n && !newNormAll.includes(n);
-  });
+    if (!n) continue;
+    if (newSet.has(n) || seen.has(n)) continue;
+    seen.add(n);
+    missing.push(item);
+  }
 
   if (missing.length === 0) return newTrim;
   // 欠落分を【保管】セクションに退避（次回LLMにも見える形で残す）
@@ -2437,42 +2462,60 @@ async function maybeUpdateSummary() {
     body: JSON.stringify({ model: MODEL, messages: [{ role:'system', content: sysContent }, { role:'user', content: userContent }] })
   });
 
+  // 開始時の世代を記録。書き戻し前にこれが変わっていたら、
+  // 別の会話に切り替わっているので結果を破棄する（newChat/resumeArchive 後の上書き防止）
+  const myEpoch = chatEpoch;
+  const epochValid = () => myEpoch === chatEpoch;
+
+  // 各プロンプトを独立して投げる。Promise.all だと1個でも reject すると残り5個も捨てるが、
+  // Promise.allSettled で個別に処理して fulfilled だけ採用する
+  const settled = await Promise.allSettled([
+    apiCall(summaryPrompt, `【既存の要約】\n${longSummary||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後の要約を出力して。`),
+    apiCall(importantPrompt, `【既存の重要記憶】\n${importantMemories||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後の重要記憶を出力して。`),
+    apiCall(wordsPrompt, `【既存の語録】\n${ripiWords||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後の語録を出力して。`),
+    apiCall(emotionPrompt, `【既存の感情データ】\n${emotionLog||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後の感情分析を出力して。`),
+    apiCall(adoptedPrompt, `【既存の学習済み言葉】\n${adoptedWords||'(なし)'}\n\n【りぴ語録】\n${ripiWords||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後の学習済み言葉を出力して。`),
+    apiCall(feedbackPrompt, `【既存のフィードバック】\n${behaviorFeedback||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後のフィードバックを出力して。`)
+  ]);
+
+  if (!epochValid()) { console.log('[もも] 記憶更新: 世代変更でスキップ'); return; }
+
+  const extract = async (s) => {
+    if (s.status !== 'fulfilled' || !s.value.ok) return '';
+    try { const d = await s.value.json(); return d.choices?.[0]?.message?.content?.trim() || ''; }
+    catch { return ''; }
+  };
+  const [s1,s2,s3,s4,s5,s6] = await Promise.all(settled.map(extract));
+
+  if (!epochValid()) { console.log('[もも] 記憶更新: 世代変更でスキップ'); return; }
+
   try {
-    const [summaryRes, importantRes, wordsRes, emotionRes, adoptedRes, feedbackRes] = await Promise.all([
-      apiCall(summaryPrompt, `【既存の要約】\n${longSummary||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後の要約を出力して。`),
-      apiCall(importantPrompt, `【既存の重要記憶】\n${importantMemories||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後の重要記憶を出力して。`),
-      apiCall(wordsPrompt, `【既存の語録】\n${ripiWords||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後の語録を出力して。`),
-      apiCall(emotionPrompt, `【既存の感情データ】\n${emotionLog||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後の感情分析を出力して。`),
-      apiCall(adoptedPrompt, `【既存の学習済み言葉】\n${adoptedWords||'(なし)'}\n\n【りぴ語録】\n${ripiWords||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後の学習済み言葉を出力して。`),
-      apiCall(feedbackPrompt, `【既存のフィードバック】\n${behaviorFeedback||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後のフィードバックを出力して。`)
-    ]);
-
-    const extract = async (res) => { if(!res.ok) return ''; const d=await res.json(); return d.choices?.[0]?.message?.content?.trim()||''; };
-    const [s1,s2,s3,s4,s5,s6] = await Promise.all([extract(summaryRes),extract(importantRes),extract(wordsRes),extract(emotionRes),extract(adoptedRes),extract(feedbackRes)]);
-
     const snapshotBefore = countLearned().snapshot;
 
-    if (s1) { longSummary = s1; await idbSetM(KEY_SUMMARY, s1); }
-    if (s2) { importantMemories = s2; await idbSetM(KEY_IMPORTANT, s2); }
-    // D: 学習データはマージガードを通す（LLMが既存を落としても自動復元）
-    if (s3) { const merged = mergeLearned(ripiWords, s3);       ripiWords        = merged; await idbSetM(KEY_RIPI_WORDS, merged); }
-    if (s4) { emotionLog = s4; await idbSetM(KEY_EMOTION_LOG, s4); }
-    if (s5) { const merged = mergeLearned(adoptedWords, s5);    adoptedWords     = merged; await idbSetM(KEY_ADOPTED,     merged); }
-    if (s6) { const merged = mergeLearned(behaviorFeedback, s6); behaviorFeedback = merged; await idbSetM(KEY_FEEDBACK,    merged); }
+    // 各書き込みは個別に try。1つの idbSetM が失敗しても他は採用する。
+    // また、永続化が成功してから初めてメモリ上の状態を更新する（容量超過時の表示と実体の不一致防止）
+    const setSafely = async (k, v) => { try { await idbSetM(k, v); return true; } catch (e) { console.warn('[もも] 保存失敗', k, e?.message); return false; } };
 
-    // B: 累積学習数を単調増加で更新（snapshotが増えた分 + スナップショットの下限保証）
+    if (s1) { if (await setSafely(KEY_SUMMARY,   s1)) longSummary       = s1; }
+    if (s2) { if (await setSafely(KEY_IMPORTANT, s2)) importantMemories = s2; }
+    // D: 学習データはマージガードを通す（LLMが既存を落としても自動復元）
+    if (s3) { const m = mergeLearned(ripiWords,        s3); if (await setSafely(KEY_RIPI_WORDS, m)) ripiWords        = m; }
+    if (s4) { if (await setSafely(KEY_EMOTION_LOG, s4)) emotionLog = s4; }
+    if (s5) { const m = mergeLearned(adoptedWords,     s5); if (await setSafely(KEY_ADOPTED,    m)) adoptedWords     = m; }
+    if (s6) { const m = mergeLearned(behaviorFeedback, s6); if (await setSafely(KEY_FEEDBACK,   m)) behaviorFeedback = m; }
+
+    // B: 累積学習数を単調増加で更新
     const snapshotAfter = countLearned().snapshot;
     const delta = Math.max(0, snapshotAfter - snapshotBefore);
     const newEver = Math.max(learnedTotalEver + delta, snapshotAfter);
     if (newEver !== learnedTotalEver) {
-      learnedTotalEver = newEver;
-      await idbSetM(KEY_LEARN_TOTAL, String(learnedTotalEver));
+      if (await setSafely(KEY_LEARN_TOTAL, String(newEver))) learnedTotalEver = newEver;
     }
 
     const gd = updateGrowthDisplay();
     console.log(`[もも] 記憶エンジン更新完了 (Lv.${gd.level} 学習${gd.total}個)`);
     showToast(`🧠 学習更新 · Lv.${gd.level}（${gd.total}個）`);
-  } catch (e) { console.warn('[もも] 記憶更新失敗', e.message); }
+  } catch (e) { console.warn('[もも] 記憶更新失敗', e?.message); }
 }
 
 // ================================================================
@@ -2720,13 +2763,56 @@ function dumpStore(storeName) {
   });
 }
 
+// 単一ストアの復元（互換のため残置・通常は restoreAllStores を使うこと）
 function restoreStore(storeName, records) {
   return new Promise((resolve, reject) => {
     try {
       const tx    = db.transaction(storeName, 'readwrite');
       const store = tx.objectStore(storeName);
       store.clear();
-      for (const rec of records) store.put(rec);
+      for (const rec of records) if (_validBackupRec(storeName, rec)) store.put(rec);
+      tx.oncomplete = () => resolve();
+      tx.onerror    = e => reject(e.target.error);
+      tx.onabort    = e => reject(e.target.error);
+    } catch (e) { reject(e); }
+  });
+}
+
+// バックアップレコードの最低限のバリデーション
+// 改ざんされたファイルが onclick 属性に流れ込むのを防ぐ
+function _validBackupRec(storeName, rec) {
+  if (!rec || typeof rec !== 'object') return false;
+  if (storeName === META_STORE) {
+    return typeof rec.key === 'string';
+  }
+  if (storeName === MSG_STORE) {
+    return (rec.id === undefined || Number.isFinite(rec.id))
+      && typeof rec.content === 'string'
+      && (rec.role === 'user' || rec.role === 'assistant');
+  }
+  if (storeName === ARCHIVE_STORE) {
+    return (rec.id === undefined || Number.isFinite(rec.id))
+      && typeof rec.title === 'string'
+      && Array.isArray(rec.messages);
+  }
+  if (storeName === JOURNAL_STORE) {
+    return (rec.id === undefined || Number.isFinite(rec.id))
+      && typeof rec.input === 'string';
+  }
+  return false;
+}
+
+// 全ストアを単一トランザクションで復元（途中失敗時はロールバック = アトミック）
+function restoreAllStores(storesData) {
+  return new Promise((resolve, reject) => {
+    try {
+      const tx = db.transaction(BACKUP_STORES, 'readwrite');
+      for (const s of BACKUP_STORES) {
+        const store = tx.objectStore(s);
+        store.clear();
+        const recs = Array.isArray(storesData[s]) ? storesData[s] : [];
+        for (const rec of recs) if (_validBackupRec(s, rec)) store.put(rec);
+      }
       tx.oncomplete = () => resolve();
       tx.onerror    = e => reject(e.target.error);
       tx.onabort    = e => reject(e.target.error);
@@ -2880,18 +2966,25 @@ async function importBackupFile(ev) {
   }
 
   try {
-    for (const s of BACKUP_STORES) {
-      const recs = Array.isArray(stores[s]) ? stores[s] : [];
-      await restoreStore(s, recs);
-    }
+    // 全ストアを単一トランザクションで復元（途中失敗時は全自動ロールバック）
+    await restoreAllStores(stores);
 
     if (payload.localStorage && typeof payload.localStorage === 'object') {
       for (const k of BACKUP_LS_KEYS) {
         const v = payload.localStorage[k];
-        try {
-          if (typeof v === 'string') localStorage.setItem(k, v);
-          else localStorage.removeItem(k);
-        } catch {}
+        // 認証情報は形式バリデーション + 既存値と異なる場合は明示的に確認
+        if (k === 'momo_api_key') {
+          if (typeof v !== 'string' || !v.startsWith('sk-')) continue;
+          const cur = localStorage.getItem(k);
+          if (cur && cur !== v && !confirm('バックアップにAPIキーが含まれています。現在のキーを上書きしますか？')) continue;
+          try { localStorage.setItem(k, v); } catch {}
+        } else if (k === PWD_KEY) {
+          // パスワードハッシュは 64桁の hex のみ受け入れる
+          if (typeof v !== 'string' || !/^[0-9a-f]{64}$/i.test(v)) continue;
+          const cur = localStorage.getItem(k);
+          if (cur && cur !== v && !confirm('バックアップに別のパスワードが設定されています。現在のパスワードを上書きしますか？')) continue;
+          try { localStorage.setItem(k, v); } catch {}
+        }
       }
     }
 
@@ -2934,21 +3027,27 @@ async function startChat() {
     (async () => {
       try {
         db          = await openDB();
+        // idbGetM が reject する可能性に備えて、各読み出しを個別に safe wrap
+        // （1キーの I/O 失敗で他のメモリーが全部空扱いされるのを防ぐ）
+        const safe = (p) => p.catch(e => { console.warn('[もも] メタ読み取り失敗', e?.message); return null; });
         const [_s, _i, _r, _e, _a, _f, _lt] = await Promise.all([
-          idbGetM(KEY_SUMMARY), idbGetM(KEY_IMPORTANT),
-          idbGetM(KEY_RIPI_WORDS), idbGetM(KEY_EMOTION_LOG),
-          idbGetM(KEY_ADOPTED), idbGetM(KEY_FEEDBACK),
-          idbGetM(KEY_LEARN_TOTAL)
+          safe(idbGetM(KEY_SUMMARY)),    safe(idbGetM(KEY_IMPORTANT)),
+          safe(idbGetM(KEY_RIPI_WORDS)), safe(idbGetM(KEY_EMOTION_LOG)),
+          safe(idbGetM(KEY_ADOPTED)),    safe(idbGetM(KEY_FEEDBACK)),
+          safe(idbGetM(KEY_LEARN_TOTAL))
         ]);
-        longSummary = _s; importantMemories = _i; ripiWords = _r;
-        emotionLog = _e; adoptedWords = _a; behaviorFeedback = _f;
-        learnedTotalEver = parseInt(_lt, 10) || 0;
-        // 既存ユーザー向け移行: 累積カウンタ未設定なら現スナップショットで初期化
+        // null は未設定。callers は空文字列を期待しているので '' に変換
+        longSummary = _s || ''; importantMemories = _i || ''; ripiWords = _r || '';
+        emotionLog = _e || ''; adoptedWords = _a || ''; behaviorFeedback = _f || '';
+        // KEY_LEARN_TOTAL: I/O 失敗のとき (_lt === null) は触らない（前回の値を残す）。
+        // 取得できた場合だけ採用する。未設定（新規ユーザー）は 0 のまま。
+        learnedTotalEver = _lt == null ? 0 : (parseInt(_lt, 10) || 0);
+        // 既存ユーザー向け移行: 累積カウンタが現スナップショットより小さければ補う
         // （これ以降は単調増加するので、話してもレベルが下がらない）
         const snap = countLearned().snapshot;
         if (snap > learnedTotalEver) {
           learnedTotalEver = snap;
-          await idbSetM(KEY_LEARN_TOTAL, String(learnedTotalEver));
+          try { await idbSetM(KEY_LEARN_TOTAL, String(learnedTotalEver)); } catch {}
         }
         const all   = await idbAll();
         totalMsgCount = all.length;
@@ -3074,6 +3173,8 @@ async function generateTitle(messages) {
 // 現在の会話をアーカイブして新しい会話を開始
 async function newChat() {
   if (!db) return;
+  // 進行中のストリームがあれば中断（中途半端な応答が新会話に混入するのを防ぐ）
+  if (currentStreamAbort) { try { currentStreamAbort.abort(); } catch {} currentStreamAbort = null; }
   const all = await idbAll();
   if (all.length === 0) { showToast('会話がありません'); return; }
 
@@ -3095,6 +3196,7 @@ async function newChat() {
 
   // 現在の会話をクリア（longSummary は保持して前回の文脈を引き継ぐ）
   history = []; totalMsgCount = 0; heavyWarned = false;
+  chatEpoch++;  // 古い会話の maybeUpdateSummary が、新しい会話のデータを上書きしないように世代を進める
   document.getElementById('heavyBanner')?.remove();
   pendingImages = []; updateImagePreview();
   await idbClear();
@@ -3256,15 +3358,17 @@ async function openHistory() {
     list.innerHTML = '<div class="history-empty">まだ履歴がありません</div>';
   } else {
     // 新しい順
+    // ID は数値で interpolate（改ざんバックアップから onclick 属性インジェクションされるのを防ぐ）
     list.innerHTML = [...archives].reverse().map(a => {
       const d = new Date(a.lastTs);
       const dateStr = `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-      return `<div class="hist-card" onclick="viewArchive(${a.id})">
+      const id = Number(a.id) | 0;
+      return `<div class="hist-card" onclick="viewArchive(${id})">
         <div class="hist-card-title">${esc(a.title)}</div>
         <div class="hist-card-meta">
           <span>${dateStr}</span>
-          <span class="hist-card-count">${a.msgCount}通</span>
-          <button class="hist-card-del" onclick="event.stopPropagation();deleteArchive(${a.id})">削除</button>
+          <span class="hist-card-count">${Number(a.msgCount) | 0}通</span>
+          <button class="hist-card-del" onclick="event.stopPropagation();deleteArchive(${id})">削除</button>
         </div>
       </div>`;
     }).join('');
@@ -3282,16 +3386,11 @@ function closeHistory() {
 // アーカイブを閲覧
 async function viewArchive(id) {
   if (!db) return;
+  // 進行中のストリームがあれば中断（detached bubble に書き続ける不具合を防ぐ）
+  if (currentStreamAbort) { try { currentStreamAbort.abort(); } catch {} currentStreamAbort = null; }
   closeHistory();
 
-  // 現在の会話を退避
-  if (!isViewingHistory) {
-    savedHistory = [...history];
-    savedMsgsHTML = document.getElementById('messages').innerHTML;
-  }
-  isViewingHistory = true;
-
-  // アーカイブ取得
+  // アーカイブ取得（先に取りに行って、見つからなければ何もしない）
   const arc = await new Promise((res, rej) => {
     const r = idbTx(ARCHIVE_STORE, 'readonly').get(id);
     r.onsuccess = e => res(e.target.result);
@@ -3299,11 +3398,18 @@ async function viewArchive(id) {
   });
   if (!arc) { showToast('アーカイブが見つかりません'); return; }
 
+  // 現在の会話を退避（アーカイブが見つかった後にだけ実施 = ゾンビ状態の防止）
+  if (!isViewingHistory) {
+    savedHistory = [...history];
+    savedMsgsHTML = document.getElementById('messages').innerHTML;
+  }
+  isViewingHistory = true;
   viewingArchiveId = id;
 
-  // 閲覧バー表示
+  // 閲覧バー表示・トピックバー非表示（閲覧中はライブのトピック表示を消す）
   document.getElementById('viewingBar').classList.add('show');
   document.getElementById('viewingTitle').textContent = `📖 ${arc.title}`;
+  document.getElementById('topicBar').classList.remove('show');
 
   // メッセージ描画
   const msgs = document.getElementById('messages');
@@ -3321,17 +3427,28 @@ function backToChat() {
   isViewingHistory = false;
   viewingArchiveId = null;
   document.getElementById('viewingBar').classList.remove('show');
-  document.getElementById('messages').innerHTML = savedMsgsHTML;
+  const msgs = document.getElementById('messages');
+  msgs.innerHTML = savedMsgsHTML;
+  // innerHTML で復元するとJS側で attach した onclick/イベントが消えるので、
+  // AIメッセージのバブルに対して質問チップ・タップコピーを貼り直す
+  msgs.querySelectorAll('.message-row.ai .bubble').forEach(b => {
+    makeQuestionsClickable(b);
+    makeTapCopyable(b);
+  });
   document.getElementById('input').disabled = false;
   document.getElementById('sendBtn').disabled = false;
   history = savedHistory;
   savedHistory = []; savedMsgsHTML = '';
-  setTimeout(() => { document.getElementById('messages').scrollTop = 999999; }, 50);
+  // 閲覧中に消したトピックバーは、ライブのトピックがあれば戻す
+  if (currentTopicTitle) document.getElementById('topicBar').classList.add('show');
+  setTimeout(() => { msgs.scrollTop = 999999; }, 50);
 }
 
 // アーカイブから会話を再開（続きから話す）
 async function resumeArchive() {
   if (!db || viewingArchiveId == null) return;
+  // 進行中のストリームがあれば中断
+  if (currentStreamAbort) { try { currentStreamAbort.abort(); } catch {} currentStreamAbort = null; }
   const archiveId = viewingArchiveId;
 
   // アーカイブ取得
@@ -3344,18 +3461,19 @@ async function resumeArchive() {
 
   showToast('✦ 続きから再開中...');
 
-  // 退避していた現在の会話に内容があれば、消えないようにアーカイブへ保存
+  // 現在の会話を消えないようにアーカイブへ保存。
+  // savedHistory は API_CONTEXT (30件) で打ち切られているので使わず、
+  // DBから全件読んで保存する（過去の長期会話が消えるバグの修正）
   try {
-    if (savedHistory.length > 0) {
-      const firstTs = Date.now() - savedHistory.length * 1000;
-      const lastTs  = Date.now();
-      const title   = await generateTitle(savedHistory.map((r, i) => ({
-        role: r.role, content: r.content, ts: firstTs + i * 1000
-      }))) || `会話 (${savedHistory.length}通)`;
+    const fullActive = await idbAll();
+    if (fullActive.length > 0) {
+      const firstTs = fullActive[0]?.ts || (Date.now() - fullActive.length * 1000);
+      const lastTs  = fullActive[fullActive.length - 1]?.ts || Date.now();
+      const title   = await generateTitle(fullActive) || `会話 (${fullActive.length}通)`;
       await arcAdd({
         title,
-        messages: savedHistory.map((r, i) => ({ role: r.role, content: r.content, ts: firstTs + i * 1000 })),
-        msgCount: savedHistory.length,
+        messages: fullActive.map(r => ({ role: r.role, content: r.content, ts: r.ts })),
+        msgCount: fullActive.length,
         firstTs, lastTs, ts: Date.now()
       });
     }
@@ -3380,6 +3498,7 @@ async function resumeArchive() {
   const slice = arc.messages.slice(-API_CONTEXT);
   history = slice.map(r => ({ role: r.role, content: r.content }));
   totalMsgCount = arc.messages.length;
+  chatEpoch++;  // 古い会話用の maybeUpdateSummary が完走してこの会話を上書きしないように世代を進める
   savedHistory = [];
   savedMsgsHTML = '';
   isViewingHistory = false;
@@ -3421,13 +3540,17 @@ async function deleteArchive(id) {
 // ================================================================
 function formatLearnSection(raw) {
   if (!raw || !raw.trim()) return null;
-  return raw.trim().split('\n').map(line => {
+  // XSS対策: 全ての行で esc() を通す（見出しも含む）。
+  // また、以前の </div><div> ハックは外側の learn-section-body を早期に閉じてしまい
+  // DOM がアンバランスになっていた。フラットな構造にして browser の補正に頼らない。
+  const out = [];
+  for (const line of raw.trim().split('\n')) {
     const t = line.trim();
-    if (!t) return '';
-    if (t.startsWith('【') && t.endsWith('】')) return `</div><div class="learn-section-title">${t}</div><div>`;
-    if (t.startsWith('【')) return `</div><div class="learn-section-title">${t}</div><div>`;
-    return `<div class="learn-item">${esc(t)}</div>`;
-  }).join('');
+    if (!t) continue;
+    if (t.startsWith('【')) out.push(`<div class="learn-section-subtitle">${esc(t)}</div>`);
+    else out.push(`<div class="learn-item">${esc(t)}</div>`);
+  }
+  return out.join('');
 }
 
 function openLearnModal() {
@@ -3448,27 +3571,24 @@ function openLearnModal() {
   if (!ripiWords && !adoptedWords && !behaviorFeedback && !emotionLog) {
     html += '<div class="learn-empty">まだ学習データがありません<br>会話を続けると自動で学習します</div>';
   } else {
-    // りぴ語録
+    // りぴ語録（バッジは見出し行を除いた項目数）
     if (ripiWords.trim()) {
-      const lines = ripiWords.trim().split('\n').filter(l => l.trim());
       html += `<div class="learn-section">
-        <div class="learn-section-title">💬 りぴ語録 <span class="count-badge">${lines.length}</span></div>
+        <div class="learn-section-title">💬 りぴ語録 <span class="count-badge">${g.words}</span></div>
         <div class="learn-section-body">${formatLearnSection(ripiWords)}</div>
       </div>`;
     }
     // 使い始めた言葉
     if (adoptedWords.trim()) {
-      const lines = adoptedWords.trim().split('\n').filter(l => l.trim());
       html += `<div class="learn-section">
-        <div class="learn-section-title">🌱 ももが学習した言葉 <span class="count-badge">${lines.length}</span></div>
+        <div class="learn-section-title">🌱 ももが学習した言葉 <span class="count-badge">${g.adopted}</span></div>
         <div class="learn-section-body">${formatLearnSection(adoptedWords)}</div>
       </div>`;
     }
     // フィードバック
     if (behaviorFeedback.trim()) {
-      const lines = behaviorFeedback.trim().split('\n').filter(l => l.trim());
       html += `<div class="learn-section">
-        <div class="learn-section-title">📝 行動フィードバック <span class="count-badge">${lines.length}</span></div>
+        <div class="learn-section-title">📝 行動フィードバック <span class="count-badge">${g.feedback}</span></div>
         <div class="learn-section-body">${formatLearnSection(behaviorFeedback)}</div>
       </div>`;
     }
@@ -3653,6 +3773,9 @@ function copyText(btn, text) {
 function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 function fmtInline(s) {
+  // XSS対策: マークダウンを適用する前に必ずエスケープする。
+  // markdown記号 ` * ** はエスケープに影響しないので、その後でタグ化してOK。
+  s = esc(s);
   s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
   s = s.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
   s = s.replace(/\*(.*?)\*/g, '<em>$1</em>');
@@ -3704,7 +3827,8 @@ function fmt(text) {
   }
   function flushPara() {
     if (paraBuffer.length > 0) {
-      html += `<p>${fmtInline(paraBuffer.join('<br>'))}</p>`;
+      // fmtInline がエスケープするようになったので、改行は外側で結合する
+      html += `<p>${paraBuffer.map(l => fmtInline(l)).join('<br>')}</p>`;
       paraBuffer = [];
     }
   }
@@ -4123,10 +4247,18 @@ ${srcList}`
   }
   msgs.push(...histCopy);
 
+  // ストリーム開始時の世代と AbortController を記録。
+  // 会話切替時に abort されると fetch / reader が reject して、
+  // この sendMessage の catch に流れて、isLoading は finally でリセットされる
+  const myEpoch = chatEpoch;
+  const ac = new AbortController();
+  currentStreamAbort = ac;
+
   try {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      signal: ac.signal,
       body: JSON.stringify({
         model: MODEL, messages: msgs, stream: true, max_completion_tokens: 4096,
         store: true,
@@ -4152,6 +4284,7 @@ ${srcList}`
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
+      if (myEpoch !== chatEpoch) { try { reader.cancel(); } catch {} break; }
       sseBuffer += decoder.decode(value, { stream: true });
       const lines = sseBuffer.split('\n');
       sseBuffer = lines.pop() || '';
@@ -4178,6 +4311,14 @@ ${srcList}`
     // ── 完了: 残rAFをキャンセルしてからMarkdown整形 ──
     if (rafId) cancelAnimationFrame(rafId);
     rafPending = false;
+
+    // 会話切替されていたら、bubble は detached、history/MSG_STORE も別の会話のもの。
+    // 部分応答を別会話に紛れ込ませないため、書き込みも UI 整形もスキップする
+    if (myEpoch !== chatEpoch) {
+      console.log('[もも] ストリーム中に会話が切り替わったので保存スキップ');
+      return;
+    }
+
     bubble.innerHTML = fmt(fullText);
     makeQuestionsClickable(bubble);
     makeTapCopyable(bubble);
@@ -4204,12 +4345,17 @@ ${srcList}`
 
   } catch (err) {
     removeTyping();
+    // abort されたエラーはUIに出さない（会話切替の正常動作）
+    if (err && (err.name === 'AbortError' || ac.signal.aborted)) {
+      return;
+    }
     const div = document.createElement('div');
     div.className = 'message-row ai';
     div.innerHTML = `<div class="avatar">m</div><div class="bubble error-msg">⚠ エラー: ${esc(err.message)}</div>`;
     document.getElementById('messages').appendChild(div);
     document.getElementById('messages').scrollTop = 999999;
   } finally {
+    if (currentStreamAbort === ac) currentStreamAbort = null;
     isLoading = false;
     document.getElementById('sendBtn').disabled = false;
     input.focus();
@@ -4740,17 +4886,20 @@ async function showJournalHistory() {
       list.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">まだ日記がありません</p>';
       return;
     }
-    // 新しい順で表示
-    list.innerHTML = all.slice().reverse().map(e => `
-      <div class="jrn-entry" onclick="viewJournalEntry(${e.id})">
+    // 新しい順で表示（ID は数値で interpolate）
+    list.innerHTML = all.slice().reverse().map(e => {
+      const id = Number(e.id) | 0;
+      return `
+      <div class="jrn-entry" onclick="viewJournalEntry(${id})">
         <div class="jrn-entry-date">${esc(e.date)}</div>
         <div class="jrn-entry-preview">${esc(e.input)}</div>
         ${e.mood ? `<div class="jrn-entry-mood">${esc(e.mood)}</div>` : ''}
         <div class="jrn-entry-actions">
-          <button class="jrn-del-btn" onclick="event.stopPropagation();deleteJournalEntry(${e.id})">削除</button>
+          <button class="jrn-del-btn" onclick="event.stopPropagation();deleteJournalEntry(${id})">削除</button>
         </div>
       </div>
-    `).join('');
+    `;
+    }).join('');
   } catch {
     list.innerHTML = '<p style="color:var(--text-muted);font-size:13px;">読み込みに失敗しました</p>';
   }
