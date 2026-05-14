@@ -807,6 +807,34 @@ header {
   position: absolute; top: 6px; right: 6px;
 }
 
+/* ── バブル全体コピーボタン（AI返信の末尾に常設） ── */
+.bubble-copy-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  margin-top: 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: rgba(232,232,226,0.55);
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, border-color 0.2s, transform 0.15s;
+  user-select: none;
+}
+.bubble-copy-btn:hover {
+  background: rgba(200,240,160,0.12);
+  color: var(--accent);
+  border-color: rgba(200,240,160,0.2);
+}
+.bubble-copy-btn:active { transform: scale(0.94); }
+.bubble-copy-btn.copied {
+  background: rgba(200,240,160,0.15);
+  color: var(--accent);
+  border-color: rgba(200,240,160,0.25);
+}
+
 /* ── コードブロック ── */
 .bubble pre {
   background: rgba(255,255,255,0.03); border: 1px solid var(--border);
@@ -3671,37 +3699,83 @@ function makeQuestionsClickable(bubble) {
 // ================================================================
 // TAP-TO-COPY — AI発言のテキスト要素をタップでコピー
 // ================================================================
+// バブルからプレーンテキストを取り出すヘルパー
+// （Markdown記号 ** * ` ### を除去、コピーボタン自身は除外）
+function _extractBubbleText(node) {
+  const clone = node.cloneNode(true);
+  clone.querySelectorAll('.bubble-copy-btn, .copy-btn, .choice-btn').forEach(b => b.remove());
+  return clone.textContent.trim()
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/^#{1,4}\s+/gm, '');
+}
+
+// 共通のコピー処理（navigator.clipboard → execCommand フォールバック）
+function _copyToClipboard(text) {
+  return new Promise((resolve) => {
+    const fallback = () => {
+      const tmp = document.createElement('textarea');
+      tmp.value = text;
+      document.body.appendChild(tmp);
+      tmp.select();
+      try { document.execCommand('copy'); } catch {}
+      document.body.removeChild(tmp);
+      resolve();
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(resolve).catch(fallback);
+    } else { fallback(); }
+  });
+}
+
+// バブル全体に「⧉ コピー」ボタンを末尾に追加（短い返答にはつけない）
+function addBubbleCopyButton(bubble) {
+  if (!bubble) return;
+  if (bubble.querySelector(':scope > .bubble-copy-btn')) return;  // 重複防止（再アタッチ時）
+  // 中身が少ない返答（挨拶や短い相槌）にはボタンをつけない
+  const probe = _extractBubbleText(bubble);
+  if (probe.length < 30) return;
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'bubble-copy-btn';
+  btn.textContent = '⧉ コピー';
+  btn.setAttribute('aria-label', 'メッセージをコピー');
+  btn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const raw = _extractBubbleText(bubble);
+    if (!raw) return;
+    await _copyToClipboard(raw);
+    btn.textContent = '✓ コピー済';
+    btn.classList.add('copied');
+    showToast('✓ コピーしました');
+    setTimeout(() => { btn.textContent = '⧉ コピー'; btn.classList.remove('copied'); }, 1500);
+  });
+  bubble.appendChild(btn);
+}
+
 function makeTapCopyable(bubble) {
-  // 対象: 引用ブロックのみ（AIが提示した文書スタイル）
+  // 既存: 引用ブロック単独でもタップでコピーできる
   const targets = bubble.querySelectorAll('blockquote');
   targets.forEach(el => {
     el.addEventListener('click', (e) => {
       // コピーボタンや選択肢ボタンのクリックは除外
-      if (e.target.closest('.copy-btn, .choice-btn, .q-chip')) return;
-      // テキスト取得（Markdown記号除去）
-      const raw = el.textContent.trim()
+      if (e.target.closest('.copy-btn, .choice-btn, .q-chip, .bubble-copy-btn')) return;
+      const raw = (el.textContent || '').trim()
         .replace(/\*\*(.*?)\*\*/g, '$1')
         .replace(/\*(.*?)\*/g, '$1')
         .replace(/`([^`]+)`/g, '$1');
       if (!raw) return;
-      navigator.clipboard.writeText(raw).then(() => {
-        el.classList.add('copy-flash');
-        showToast('✓ コピーしました');
-        setTimeout(() => el.classList.remove('copy-flash'), 600);
-      }).catch(() => {
-        // fallback
-        const tmp = document.createElement('textarea');
-        tmp.value = raw;
-        document.body.appendChild(tmp);
-        tmp.select();
-        document.execCommand('copy');
-        document.body.removeChild(tmp);
+      _copyToClipboard(raw).then(() => {
         el.classList.add('copy-flash');
         showToast('✓ コピーしました');
         setTimeout(() => el.classList.remove('copy-flash'), 600);
       });
     });
   });
+  // 追加: バブル全体にもコピーボタンを設置（ワンタップで全文コピー）
+  addBubbleCopyButton(bubble);
 }
 
 function selectQChip(chip, text) {
