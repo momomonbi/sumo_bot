@@ -3371,9 +3371,6 @@ async function startChat() {
       document.getElementById('messages').scrollTop = 999999;
       document.getElementById('input').focus();
     }, 100);
-
-    // ももから自発的にあいさつ（1日1回・しばらくぶりに開いたとき）
-    setTimeout(maybeProactiveGreeting, 1400);
   });
 }
 
@@ -4034,7 +4031,7 @@ document.addEventListener('keydown', e => {
 });
 
 // ================================================================
-// 今日のハイライト ＆ ももから先に話しかける
+// 今日のハイライト
 // ================================================================
 
 // 今日の会話を振り返って、あたたかい3行＋ひと褒めを生成
@@ -4089,76 +4086,6 @@ async function runTodayHighlight() {
   } catch (e) {
     removeTyping();
     showToast('⚠ ハイライト生成に失敗したよ: ' + e.message);
-  } finally {
-    isLoading = false;
-    document.getElementById('sendBtn').disabled = false;
-  }
-}
-
-// アプリを開いたとき、ももの方から自然に話しかける（1日1回・しばらくぶりのときだけ）
-async function maybeProactiveGreeting() {
-  if (!db || !apiKey || isLoading || isViewingHistory) return;
-  try {
-    const d = new Date();
-    const todayKey = `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`;
-    if (localStorage.getItem('momo_last_greet') === todayKey) return;  // 今日はもう声かけ済み
-
-    // ももから話しかけるのは「予定がある時だけ」。スケジュール系の記憶が無ければしない
-    const scheduleMemo = `${importantMemories || ''}\n${longSummary || ''}`.trim();
-    if (!scheduleMemo) return;
-
-    const all = await idbAll();
-    const lastTs = all.length ? (all[all.length - 1].ts || 0) : 0;
-    // 最後の会話から3時間以上ぶりに開いた時だけ（連続使用中はしない）
-    if (all.length > 0 && (Date.now() - lastTs) < 3 * 60 * 60 * 1000) return;
-
-    // 本来ももから話しかける事はほとんど無い → 条件を満たしても大半は見送り、超ごくまれに
-    if (Math.random() > 0.25) return;
-
-    isLoading = true;
-    document.getElementById('sendBtn').disabled = true;
-    showTyping();
-
-    const instruction = `今りぴがアプリを開いた。あなた（もも）は普段、自分から話しかけることはほとんどない。
-ただし下の【予定メモ】に「今日、または今の時間帯に関係する予定・約束・行事」がある時だけ、それにそっと触れて先に一言だけ声をかけてよい。
-ルール：
-・該当する予定が無ければ、必ず「NONE」とだけ出力し、他の文字は一切出さない。
-・該当する予定がある時だけ、その予定に軽く触れる短い一言（1〜2文）。さりげなく、重くしない。
-【予定メモ】
-${scheduleMemo}`;
-
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: MODEL, max_completion_tokens: 200,
-        messages: [
-          { role: 'system', content: buildSystemPrompt() },
-          { role: 'system', content: buildTimePrompt() },
-          { role: 'user', content: instruction }
-        ]
-      })
-    });
-    removeTyping();
-    if (res.ok) {
-      const data = await res.json();
-      const reply = (data.choices?.[0]?.message?.content || '').trim();
-      // 該当予定なし(NONE)や空なら何もしない（その日の枠も消費しない＝後で予定が近づけば出る可能性を残す）
-      if (reply && !reply.toUpperCase().includes('NONE')) {
-        localStorage.setItem('momo_last_greet', todayKey);
-        const bubble = renderMessage('ai', '');
-        bubble.innerHTML = fmt(reply);
-        makeQuestionsClickable(bubble);
-        makeTapCopyable(bubble);
-        history.push({ role: 'assistant', content: reply });
-        if (db) await persistMessage('assistant', reply);
-        document.getElementById('messages').scrollTop = 999999;
-        updateMemoryUI();
-      }
-    }
-  } catch (e) {
-    removeTyping();
-    console.warn('[もも] 自発あいさつ失敗:', e?.message);
   } finally {
     isLoading = false;
     document.getElementById('sendBtn').disabled = false;
