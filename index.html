@@ -1529,9 +1529,6 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
 <!-- APP -->
 <div id="app">
   <header>
-    <div class="header-left">
-      <span class="model-badge" id="modelBadge">gpt-5.4</span>
-    </div>
     <div class="header-right">
       <div class="growth-badge" id="growthBadge" title="学習データを見る" onclick="openLearnModal()">
         <span class="growth-lv" id="growthLv">Lv.0</span>
@@ -2856,7 +2853,7 @@ function runSplash(onDone) {
   const dots   = [document.getElementById('d1'), document.getElementById('d2'), document.getElementById('d3')];
 
   // バージョン情報を最初のタイトル（スプラッシュ）に表示
-  if (sub) sub.textContent = `sumo0612 · always here · ${APP_VERSION}`;
+  if (sub) sub.textContent = `sumo0612 · always here · ${MODEL} · ${APP_VERSION}`;
 
   // Show splash layer
   splash.style.opacity  = '1';
