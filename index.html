@@ -626,9 +626,11 @@ header {
 .gallery-header h2 { font-family: 'DM Serif Display', serif; font-size: 18px; font-weight: 400; color: var(--text); letter-spacing: -0.3px; }
 .gallery-header h2 em { color: var(--accent); font-style: italic; }
 .gallery-grid {
-  flex: 1; overflow-y: auto; padding: 14px;
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px;
-  align-content: start;
+  flex: 1; min-height: 0; overflow-y: auto; padding: 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 96px);
+  grid-auto-rows: 96px;            /* 行の高さを固定 → つぶれない・必ず縦スクロール */
+  gap: 8px; align-content: start; justify-content: center;
 }
 .gallery-grid::-webkit-scrollbar { width: 4px; }
 .gallery-grid::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
@@ -637,16 +639,13 @@ header {
   height: 200px; color: var(--text-muted); font-size: 13px;
 }
 .gallery-tile {
-  position: relative; border-radius: 10px; overflow: hidden; min-width: 0;
+  position: relative; border-radius: 10px; overflow: hidden;
   cursor: pointer; border: 1px solid var(--border); background: rgba(255,255,255,0.02);
   animation: elemFadeIn 0.3s ease both;
 }
-/* 正方形タイルを全ブラウザ（旧iOS Safari等のaspect-ratio非対応含む）で確保。
-   ::before が高さを作るので、遅延読み込み中でも場所が確保され、画像が重ならない */
-.gallery-tile::before { content: ''; display: block; padding-top: 100%; }
+/* タイルは grid-auto-rows の 96px 固定セルにフィット（全ブラウザで潰れ・重なり無し） */
 .gallery-tile img {
-  position: absolute; inset: 0; width: 100%; height: 100%;
-  object-fit: cover; display: block; transition: transform 0.25s;
+  width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.25s;
 }
 .gallery-tile:hover img { transform: scale(1.06); }
 .gallery-tile-date {
@@ -2081,9 +2080,10 @@ const META_STORE    = 'meta';
 const ARCHIVE_STORE = 'archives';  // 会話アーカイブ
 const JOURNAL_STORE = 'journal';   // 愚痴聞きジャーナル
 const MODEL         = 'gpt-5.4';
-// アプリのバージョン。新機能を追加したらここを上げてね（最初のタイトル＝スプラッシュ画面に表示される）
+// アプリのバージョン。更新したら必ず上げる（最初のタイトル＝スプラッシュ画面に表示される）
 // v2.1.0: 送信画像の保存・画像ギャラリー一覧・会話検索・拡大時のAI画像解説＆会話ジャンプ・メニュー文字を白寄りに
-const APP_VERSION   = 'v2.1.0';
+// v2.1.1: 画像ギャラリーのタイルを固定正方形セル化（縦つぶれ・重なり・スクロール不可を修正）
+const APP_VERSION   = 'v2.1.1';
 const SUMMARY_EVERY = 10;
 // 重要記憶キー（削除されない永続情報）
 const KEY_SUMMARY   = 'summary';
