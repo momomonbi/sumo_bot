@@ -422,6 +422,8 @@ header {
 .btn-header:hover { border-color: rgba(255,255,255,0.2); color: var(--text); }
 .btn-header.accent { border-color: rgba(200,240,160,0.25); color: var(--accent); }
 .btn-header.accent:hover { background: rgba(200,240,160,0.08); }
+/* アイコンボタン（🔒 📦 🔍 🖼）は絵文字を少し大きめに */
+.btn-header.icon { font-size: 16px; line-height: 1; padding: 5px 9px; }
 
 /* ═══════════════════════════════════════
    HISTORY PANEL (slide-over)
@@ -1518,7 +1520,6 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
 <div id="app">
   <header>
     <div class="header-left">
-      <h1>もも<em>.</em></h1>
       <span class="model-badge" id="modelBadge">gpt-5.5</span>
     </div>
     <div class="header-right">
@@ -1527,10 +1528,10 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
         <span class="growth-title" id="growthTitle">はじまり</span>
         <div class="growth-bar"><div class="growth-fill" id="growthFill"></div></div>
       </div>
-      <button class="btn-header" onclick="openPwdSettings()" title="パスワード設定" aria-label="パスワード設定">🔒</button>
-      <button class="btn-header" onclick="openBackupModal()" title="バックアップ・機種変引継ぎ" aria-label="バックアップ">📦</button>
-      <button class="btn-header" onclick="openSearch()" title="会話を検索" aria-label="会話を検索">🔍</button>
-      <button class="btn-header" onclick="openGallery()" title="画像一覧" aria-label="画像一覧">🖼</button>
+      <button class="btn-header icon" onclick="openPwdSettings()" title="パスワード設定" aria-label="パスワード設定">🔒</button>
+      <button class="btn-header icon" onclick="openBackupModal()" title="バックアップ・機種変引継ぎ" aria-label="バックアップ">📦</button>
+      <button class="btn-header icon" onclick="openSearch()" title="会話を検索" aria-label="会話を検索">🔍</button>
+      <button class="btn-header icon" onclick="openGallery()" title="画像一覧" aria-label="画像一覧">🖼</button>
       <button class="btn-header accent" onclick="openHistory()">履歴</button>
       <button class="btn-header" onclick="newChat()">New</button>
     </div>
