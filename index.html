@@ -422,6 +422,8 @@ header {
 .btn-header:hover { border-color: rgba(255,255,255,0.2); color: var(--text); }
 .btn-header.accent { border-color: rgba(200,240,160,0.25); color: var(--accent); }
 .btn-header.accent:hover { background: rgba(200,240,160,0.08); }
+/* アイコンボタン（🔒 📦 🔍 🖼）は絵文字を少し大きめに */
+.btn-header.icon { font-size: 16px; line-height: 1; padding: 5px 9px; }
 
 /* ═══════════════════════════════════════
    HISTORY PANEL (slide-over)
@@ -658,7 +660,7 @@ header {
 }
 .lightbox-overlay.open { opacity: 1; pointer-events: auto; }
 .lightbox-img {
-  max-width: 100%; max-height: calc(100vh - 120px);
+  max-width: 100%; max-height: calc(100vh - 200px);
   border-radius: 12px; object-fit: contain;
   box-shadow: 0 20px 60px rgba(0,0,0,0.5);
   transform: scale(0.95); transition: transform 0.3s cubic-bezier(.22,1,.36,1);
@@ -673,6 +675,16 @@ header {
 }
 .lightbox-btn:hover { background: rgba(255,255,255,0.16); }
 .lightbox-btn.accent { background: var(--accent); color: #0d0d0f; border-color: var(--accent); }
+.lightbox-meta { margin-top: 14px; text-align: center; max-width: min(560px, 90vw); }
+.lightbox-caption {
+  color: #fff; font-family: 'Syne', sans-serif; font-size: 14px; line-height: 1.5;
+  margin-bottom: 6px; min-height: 1.1em;
+}
+.lightbox-caption.loading { color: rgba(255,255,255,0.55); font-style: italic; }
+.lightbox-date {
+  font-family: 'DM Mono', monospace; font-size: 11px; letter-spacing: 0.04em;
+  color: rgba(255,255,255,0.6);
+}
 
 /* 検索ジャンプ時のメッセージ強調 */
 @keyframes bubbleFlash {
@@ -1518,8 +1530,7 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
 <div id="app">
   <header>
     <div class="header-left">
-      <h1>もも<em>.</em></h1>
-      <span class="model-badge" id="modelBadge">gpt-5.5</span>
+      <span class="model-badge" id="modelBadge">gpt-5.4</span>
     </div>
     <div class="header-right">
       <div class="growth-badge" id="growthBadge" title="学習データを見る" onclick="openLearnModal()">
@@ -1527,10 +1538,10 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
         <span class="growth-title" id="growthTitle">はじまり</span>
         <div class="growth-bar"><div class="growth-fill" id="growthFill"></div></div>
       </div>
-      <button class="btn-header" onclick="openPwdSettings()" title="パスワード設定" aria-label="パスワード設定">🔒</button>
-      <button class="btn-header" onclick="openBackupModal()" title="バックアップ・機種変引継ぎ" aria-label="バックアップ">📦</button>
-      <button class="btn-header" onclick="openSearch()" title="会話を検索" aria-label="会話を検索">🔍</button>
-      <button class="btn-header" onclick="openGallery()" title="画像一覧" aria-label="画像一覧">🖼</button>
+      <button class="btn-header icon" onclick="openPwdSettings()" title="パスワード設定" aria-label="パスワード設定">🔒</button>
+      <button class="btn-header icon" onclick="openBackupModal()" title="バックアップ・機種変引継ぎ" aria-label="バックアップ">📦</button>
+      <button class="btn-header icon" onclick="openSearch()" title="会話を検索" aria-label="会話を検索">🔍</button>
+      <button class="btn-header icon" onclick="openGallery()" title="画像一覧" aria-label="画像一覧">🖼</button>
       <button class="btn-header accent" onclick="openHistory()">履歴</button>
       <button class="btn-header" onclick="newChat()">New</button>
     </div>
@@ -2021,7 +2032,12 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
 <!-- LIGHTBOX -->
 <div class="lightbox-overlay" id="lightboxOverlay" onclick="closeLightbox()">
   <img class="lightbox-img" id="lightboxImg" src="" alt="画像" onclick="event.stopPropagation()">
+  <div class="lightbox-meta" onclick="event.stopPropagation()">
+    <div class="lightbox-caption" id="lightboxCaption"></div>
+    <div class="lightbox-date" id="lightboxDate"></div>
+  </div>
   <div class="lightbox-bar" onclick="event.stopPropagation()">
+    <button class="lightbox-btn" id="lightboxJump" onclick="jumpToImageConversation()">💬 この会話へ</button>
     <a class="lightbox-btn accent" id="lightboxDownload" download="momo_image.jpg" href="#">⬇ 保存</a>
     <button class="lightbox-btn" onclick="closeLightbox()">閉じる</button>
   </div>
@@ -2038,9 +2054,9 @@ const MSG_STORE     = 'messages';
 const META_STORE    = 'meta';
 const ARCHIVE_STORE = 'archives';  // 会話アーカイブ
 const JOURNAL_STORE = 'journal';   // 愚痴聞きジャーナル
-const MODEL         = 'gpt-5.5';
+const MODEL         = 'gpt-5.4';
 // アプリのバージョン。新機能を追加したらここを上げてね（最初のタイトル＝スプラッシュ画面に表示される）
-// v2.1.0: 送信画像の保存・画像ギャラリー一覧・会話検索・モデルをgpt-5.5へ更新・メニュー文字を白寄りに
+// v2.1.0: 送信画像の保存・画像ギャラリー一覧・会話検索・拡大時のAI画像解説＆会話ジャンプ・メニュー文字を白寄りに
 const APP_VERSION   = 'v2.1.0';
 const SUMMARY_EVERY = 10;
 // 重要記憶キー（削除されない永続情報）
@@ -3626,7 +3642,11 @@ function closeHistory() {
 // 会話検索 ＆ 画像ギャラリー ＆ ライトボックス
 // ================================================================
 let _searchTimer = null;
-let _galleryUrls = [];
+let _galleryItems = [];          // ギャラリー: [{url, ts}]
+let _lightboxCurrentUrl = null;  // 現在拡大中の画像（解説の取り違え防止）
+let _lightboxJump = null;        // 拡大中画像の会話ジャンプ情報 {url, archiveId}
+const KEY_IMG_CAPTIONS = 'imgCaptions';
+let _imgCaptions = null;          // {hash: 解説} 遅延ロード＆永続化
 
 // 現在の会話(MSG_STORE)とすべてのアーカイブ(ARCHIVE_STORE)を1配列に集約
 async function gatherAllMessages() {
@@ -3764,7 +3784,7 @@ async function openGallery() {
   const all  = await gatherAllMessages();
   const imgs = [];
   for (const m of all) {
-    for (const url of sanitizeImageUrls(m.images)) imgs.push({ url, ts: m.ts });
+    for (const url of sanitizeImageUrls(m.images)) imgs.push({ url, ts: m.ts, archiveId: m.archiveId });
   }
   imgs.sort((a, b) => b.ts - a.ts);
 
@@ -3773,7 +3793,7 @@ async function openGallery() {
     return;
   }
   // dataURL を onclick に直書きすると巨大になるので、配列に保持してインデックス参照
-  _galleryUrls = imgs.map(x => x.url);
+  _galleryItems = imgs.map(x => ({ url: x.url, ts: x.ts, archiveId: x.archiveId }));
   grid.innerHTML = imgs.map((x, i) => `
     <div class="gallery-tile" onclick="openLightboxIdx(${i})">
       <img src="${x.url}" alt="" loading="lazy">
@@ -3785,22 +3805,138 @@ function closeGallery() {
 }
 
 // ── ライトボックス（拡大表示・端末への保存） ──
-function openLightboxIdx(i) {
-  const url = _galleryUrls[i];
-  if (url) openLightbox(url);
+// 画像の軽量ハッシュ（解説キャッシュのキー。dataURL全体は長いので間引いて計算）
+function _imgHash(url) {
+  let h = 5381;
+  const step = Math.max(1, Math.floor(url.length / 512));
+  for (let i = 0; i < url.length; i += step) h = ((h << 5) + h + url.charCodeAt(i)) | 0;
+  return `${url.length.toString(36)}_${(h >>> 0).toString(36)}`;
 }
-function openLightbox(url) {
+async function _ensureCaptionsLoaded() {
+  if (_imgCaptions) return;
+  _imgCaptions = {};
+  try {
+    if (db) { const raw = await idbGetM(KEY_IMG_CAPTIONS); if (raw) _imgCaptions = JSON.parse(raw) || {}; }
+  } catch { _imgCaptions = {}; }
+}
+async function _saveCaptions() {
+  try { if (db) await idbSetM(KEY_IMG_CAPTIONS, JSON.stringify(_imgCaptions)); } catch {}
+}
+// 画像を1行で説明（OpenAI Vision）。結果はハッシュでキャッシュ＆永続化して再課金を防ぐ
+async function describeImage(url) {
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: MODEL, max_completion_tokens: 100,
+      messages: [
+        { role: 'system', content: '送られた画像を見て、日本語で1行（30文字程度まで）の簡潔な説明だけを返してください。前置き・記号・かぎ括弧は不要。説明文のみ。' },
+        { role: 'user', content: [
+          { type: 'text', text: 'この画像を1行で説明して。' },
+          { type: 'image_url', image_url: { url, detail: 'low' } }
+        ] }
+      ]
+    })
+  });
+  if (!res.ok) throw new Error('caption HTTP ' + res.status);
+  const d = await res.json();
+  return (d.choices?.[0]?.message?.content || '').trim().replace(/\s+/g, ' ');
+}
+
+function openLightboxIdx(i) {
+  const item = _galleryItems[i];
+  if (item) openLightbox(item.url, { ts: item.ts, archiveId: item.archiveId, jumpable: true });
+}
+async function openLightbox(url, opts = {}) {
   if (typeof url !== 'string' || !DATA_IMG_RE.test(url)) return;
   document.getElementById('lightboxImg').src = url;
   const dl = document.getElementById('lightboxDownload');
-  dl.href = url;
-  dl.download = `momo_${Date.now()}.jpg`;
+  dl.href = url; dl.download = `momo_${Date.now()}.jpg`;
+
+  // 日付（ギャラリー経由で開いたときだけ表示）
+  const dateEl = document.getElementById('lightboxDate');
+  if (opts.ts) { dateEl.textContent = fmtDateShort(opts.ts); dateEl.style.display = 'block'; }
+  else { dateEl.textContent = ''; dateEl.style.display = 'none'; }
+
+  // 「この会話へ飛ぶ」ボタン（ギャラリー経由で開いたときだけ）
+  const jumpBtn = document.getElementById('lightboxJump');
+  if (opts.jumpable) { _lightboxJump = { url, archiveId: opts.archiveId ?? null }; jumpBtn.style.display = ''; }
+  else { _lightboxJump = null; jumpBtn.style.display = 'none'; }
+
   document.getElementById('lightboxOverlay').classList.add('open');
+
+  // AIによる1行解説（読み込み中に別画像へ切替わったら結果は破棄）
+  _lightboxCurrentUrl = url;
+  const capEl = document.getElementById('lightboxCaption');
+  capEl.style.display = 'block';
+  await _ensureCaptionsLoaded();
+  const key = _imgHash(url);
+  if (_imgCaptions[key]) {
+    if (_lightboxCurrentUrl !== url) return;
+    capEl.classList.remove('loading');
+    capEl.textContent = '✨ ' + _imgCaptions[key];
+    return;
+  }
+  if (!apiKey) { capEl.style.display = 'none'; return; }
+  capEl.classList.add('loading');
+  capEl.textContent = '✨ 解説を生成中…';
+  try {
+    const caption = await describeImage(url);
+    if (_lightboxCurrentUrl !== url) return;
+    if (caption) {
+      _imgCaptions[key] = caption; _saveCaptions();
+      capEl.classList.remove('loading');
+      capEl.textContent = '✨ ' + caption;
+    } else {
+      capEl.style.display = 'none';
+    }
+  } catch (e) {
+    if (_lightboxCurrentUrl !== url) return;
+    capEl.classList.remove('loading');
+    capEl.textContent = '（解説を取得できなかったよ）';
+    console.warn('[もも] 画像解説の生成失敗:', e?.message);
+  }
 }
 function closeLightbox() {
   document.getElementById('lightboxOverlay').classList.remove('open');
-  // src を遅延クリアしてメモリを解放（フェードアウトを見せてから）
-  setTimeout(() => { document.getElementById('lightboxImg').src = ''; }, 250);
+  _lightboxCurrentUrl = null;
+  // src・解説を遅延クリア（フェードアウトを見せてから）
+  setTimeout(() => {
+    document.getElementById('lightboxImg').src = '';
+    const cap = document.getElementById('lightboxCaption');
+    if (cap) { cap.textContent = ''; cap.classList.remove('loading'); }
+  }, 250);
+}
+
+// 画像から、その画像を送った会話へジャンプ
+function flashMatchingImage(url) {
+  const imgs = document.querySelectorAll('#messages .message-row .bubble-img');
+  for (const img of imgs) {
+    if (img.src === url) {
+      const row = img.closest('.message-row');
+      if (row) {
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        row.classList.add('flash');
+        setTimeout(() => row.classList.remove('flash'), 1900);
+        return true;
+      }
+    }
+  }
+  showToast('🔍 この画像のメッセージが見つからなかったよ（古い履歴かも）');
+  return false;
+}
+function jumpToImageConversation() {
+  if (!_lightboxJump) return;
+  const { url, archiveId } = _lightboxJump;
+  closeLightbox();
+  closeGallery();
+  if (archiveId === null || archiveId === undefined) {
+    setTimeout(() => flashMatchingImage(url), 140);
+  } else {
+    Promise.resolve(viewArchive(Number(archiveId) | 0))
+      .then(() => setTimeout(() => flashMatchingImage(url), 420))
+      .catch(() => {});
+  }
 }
 
 // インライン画像タップで拡大、Escで各オーバーレイを閉じる
