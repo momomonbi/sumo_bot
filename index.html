@@ -534,6 +534,145 @@ header {
 }
 .btn-resume-chat:hover { background: rgba(200,240,160,0.12); }
 
+/* ═══ SEARCH PANEL (会話検索) ═══ */
+.search-overlay {
+  position: fixed; inset: 0; z-index: 320;
+  background: rgba(0,0,0,0.5); backdrop-filter: blur(4px);
+  opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
+}
+.search-overlay.open { opacity: 1; pointer-events: auto; }
+.search-panel {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 321;
+  width: min(440px, 92vw); background: var(--surface);
+  border-left: 1px solid var(--border);
+  transform: translateX(100%); transition: transform 0.35s cubic-bezier(.22,1,.36,1);
+  display: flex; flex-direction: column;
+}
+.search-panel.open { transform: translateX(0); }
+.search-top {
+  display: flex; align-items: center; gap: 8px;
+  padding: 16px 18px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.search-input {
+  flex: 1; background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+  border-radius: 8px; padding: 9px 12px; color: var(--text);
+  font-family: 'Syne', sans-serif; font-size: 15px; outline: none;
+  transition: border-color 0.2s;
+}
+.search-input:focus { border-color: rgba(200,240,160,0.3); }
+.search-results {
+  flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px;
+}
+.search-results::-webkit-scrollbar { width: 3px; }
+.search-results::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+.search-hint {
+  display: flex; align-items: center; justify-content: center; text-align: center;
+  min-height: 60%; color: var(--text-muted); font-size: 13px; padding: 0 24px; line-height: 1.7;
+}
+.search-count {
+  font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-muted);
+  padding: 2px 4px 4px; flex-shrink: 0;
+}
+.search-result {
+  background: rgba(255,255,255,0.025); border: 1px solid var(--border);
+  border-radius: 10px; padding: 11px 13px; cursor: pointer;
+  transition: background 0.2s, border-color 0.2s; animation: elemFadeIn 0.25s ease both;
+}
+.search-result:hover { background: rgba(200,240,160,0.04); border-color: rgba(200,240,160,0.15); }
+.search-result-head {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 5px;
+  font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-muted);
+}
+.search-result-who { color: var(--accent); }
+.search-result-who.ai { color: var(--text-muted); }
+.search-result-src {
+  margin-left: auto; max-width: 45%; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; opacity: 0.7;
+}
+.search-result-snippet { font-size: 13px; color: var(--text); line-height: 1.5; word-break: break-word; }
+.search-result-snippet mark { background: rgba(200,240,160,0.85); color: #0d0d0f; border-radius: 2px; padding: 0 1px; }
+
+/* ═══ IMAGE GALLERY (画像一覧) ═══ */
+.gallery-overlay {
+  position: fixed; inset: 0; z-index: 420;
+  background: rgba(0,0,0,0.6); backdrop-filter: blur(6px);
+  opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.gallery-overlay.open { opacity: 1; pointer-events: auto; }
+.gallery-modal {
+  width: min(720px, 100%); max-height: 86vh;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; overflow: hidden;
+  transform: translateY(20px) scale(0.96); transition: transform 0.35s cubic-bezier(.22,1,.36,1);
+  display: flex; flex-direction: column;
+}
+.gallery-overlay.open .gallery-modal { transform: translateY(0) scale(1); }
+.gallery-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.gallery-header h2 { font-family: 'DM Serif Display', serif; font-size: 18px; font-weight: 400; color: var(--text); letter-spacing: -0.3px; }
+.gallery-header h2 em { color: var(--accent); font-style: italic; }
+.gallery-grid {
+  flex: 1; overflow-y: auto; padding: 14px;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px;
+  align-content: start;
+}
+.gallery-grid::-webkit-scrollbar { width: 4px; }
+.gallery-grid::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+.gallery-empty {
+  grid-column: 1 / -1; display: flex; align-items: center; justify-content: center;
+  height: 200px; color: var(--text-muted); font-size: 13px;
+}
+.gallery-tile {
+  position: relative; aspect-ratio: 1; border-radius: 10px; overflow: hidden;
+  cursor: pointer; border: 1px solid var(--border); background: rgba(255,255,255,0.02);
+  animation: elemFadeIn 0.3s ease both;
+}
+.gallery-tile img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.25s; }
+.gallery-tile:hover img { transform: scale(1.06); }
+.gallery-tile-date {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  font-family: 'DM Mono', monospace; font-size: 9px; color: #fff;
+  background: linear-gradient(transparent, rgba(0,0,0,0.65)); padding: 12px 6px 4px;
+  opacity: 0; transition: opacity 0.2s; pointer-events: none;
+}
+.gallery-tile:hover .gallery-tile-date { opacity: 1; }
+
+/* ═══ LIGHTBOX (画像拡大) ═══ */
+.lightbox-overlay {
+  position: fixed; inset: 0; z-index: 500;
+  background: rgba(0,0,0,0.9); backdrop-filter: blur(3px);
+  opacity: 0; pointer-events: none; transition: opacity 0.25s ease;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px;
+}
+.lightbox-overlay.open { opacity: 1; pointer-events: auto; }
+.lightbox-img {
+  max-width: 100%; max-height: calc(100vh - 120px);
+  border-radius: 12px; object-fit: contain;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  transform: scale(0.95); transition: transform 0.3s cubic-bezier(.22,1,.36,1);
+}
+.lightbox-overlay.open .lightbox-img { transform: scale(1); }
+.lightbox-bar { display: flex; align-items: center; gap: 12px; margin-top: 18px; }
+.lightbox-btn {
+  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+  color: #fff; text-decoration: none; font-family: 'Syne', sans-serif; font-size: 13px;
+  padding: 8px 18px; border-radius: 8px; cursor: pointer; transition: background 0.2s;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.lightbox-btn:hover { background: rgba(255,255,255,0.16); }
+.lightbox-btn.accent { background: var(--accent); color: #0d0d0f; border-color: var(--accent); }
+
+/* 検索ジャンプ時のメッセージ強調 */
+@keyframes bubbleFlash {
+  0%   { box-shadow: 0 0 0 0 rgba(200,240,160,0); }
+  20%  { box-shadow: 0 0 0 3px rgba(200,240,160,0.65); }
+  100% { box-shadow: 0 0 0 0 rgba(200,240,160,0); }
+}
+.message-row.flash .bubble { animation: bubbleFlash 1.8s ease; border-radius: 14px; }
+
 /* ── messages ── */
 #messages {
   flex: 1; overflow-y: auto; padding: 24px 0;
@@ -1381,6 +1520,8 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
       </div>
       <button class="btn-header" onclick="openPwdSettings()" title="パスワード設定" aria-label="パスワード設定">🔒</button>
       <button class="btn-header" onclick="openBackupModal()" title="バックアップ・機種変引継ぎ" aria-label="バックアップ">📦</button>
+      <button class="btn-header" onclick="openSearch()" title="会話を検索" aria-label="会話を検索">🔍</button>
+      <button class="btn-header" onclick="openGallery()" title="画像一覧" aria-label="画像一覧">🖼</button>
       <button class="btn-header accent" onclick="openHistory()">履歴</button>
       <button class="btn-header" onclick="newChat()">New</button>
     </div>
@@ -1844,6 +1985,39 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
   </div>
 </div>
 
+<!-- SEARCH PANEL -->
+<div class="search-overlay" id="searchOverlay" onclick="closeSearch()"></div>
+<div class="search-panel" id="searchPanel">
+  <div class="search-top">
+    <input type="search" class="search-input" id="searchInput" placeholder="会話を検索..."
+           enterkeyhint="search" oninput="onSearchInput()" autocomplete="off">
+    <button class="btn-close-hist" onclick="closeSearch()">✕</button>
+  </div>
+  <div class="search-results" id="searchResults">
+    <div class="search-hint">キーワードを入力すると、これまでの会話（過去の履歴も含む）から検索できるよ。</div>
+  </div>
+</div>
+
+<!-- IMAGE GALLERY -->
+<div class="gallery-overlay" id="galleryOverlay" onclick="closeGallery()">
+  <div class="gallery-modal" onclick="event.stopPropagation()">
+    <div class="gallery-header">
+      <h2>画像一覧<em>.</em></h2>
+      <button class="btn-close-hist" onclick="closeGallery()">✕</button>
+    </div>
+    <div class="gallery-grid" id="galleryGrid"></div>
+  </div>
+</div>
+
+<!-- LIGHTBOX -->
+<div class="lightbox-overlay" id="lightboxOverlay" onclick="closeLightbox()">
+  <img class="lightbox-img" id="lightboxImg" src="" alt="画像" onclick="event.stopPropagation()">
+  <div class="lightbox-bar" onclick="event.stopPropagation()">
+    <a class="lightbox-btn accent" id="lightboxDownload" download="momo_image.jpg" href="#">⬇ 保存</a>
+    <button class="lightbox-btn" onclick="closeLightbox()">閉じる</button>
+  </div>
+</div>
+
 <script>
 // ================================================================
 // CONSTANTS
@@ -1856,6 +2030,9 @@ const META_STORE    = 'meta';
 const ARCHIVE_STORE = 'archives';  // 会話アーカイブ
 const JOURNAL_STORE = 'journal';   // 愚痴聞きジャーナル
 const MODEL         = 'gpt-5.4';
+// アプリのバージョン。新機能を追加したらここを上げてね（最初のタイトル＝スプラッシュ画面に表示される）
+// v1.1.0: 送信画像の保存・画像ギャラリー一覧・会話検索を追加
+const APP_VERSION   = 'v1.1.0';
 const SUMMARY_EVERY = 10;
 // 重要記憶キー（削除されない永続情報）
 const KEY_SUMMARY   = 'summary';
@@ -2222,10 +2399,32 @@ const jrnAdd  = (rec)   => new Promise((res,rej) => { const r = idbTx(JOURNAL_ST
 const jrnAll  = ()       => new Promise((res,rej) => { const r = idbTx(JOURNAL_STORE,'readonly').index('ts').getAll(); r.onsuccess=e=>res(e.target.result); r.onerror=e=>rej(e.target.error); });
 const jrnDel  = (id)    => new Promise((res,rej) => { const r = idbTx(JOURNAL_STORE,'readwrite').delete(id); r.onsuccess=()=>res(); r.onerror=e=>rej(e.target.error); });
 
-// メッセージを保存（テキストのみ。画像はbase64が大きすぎるため除外）
-async function persistMessage(role, textContent) {
-  if (!textContent.trim()) return;
-  await idbAdd({ role, content: textContent, ts: Date.now() });
+// 画像 dataURL の検証（改ざんバックアップ等から不正な src が混入するのを防ぐ）
+const DATA_IMG_RE = /^data:image\/(?:png|jpe?g|gif|webp);base64,[A-Za-z0-9+/=]+$/i;
+function sanitizeImageUrls(arr) {
+  if (!Array.isArray(arr)) return [];
+  return arr.filter(u => typeof u === 'string' && u.length < 12000000 && DATA_IMG_RE.test(u));
+}
+
+// メッセージを保存（テキスト＋画像。画像は圧縮済みdataURLをそのまま保持し、後で見返せるようにする）
+async function persistMessage(role, textContent, images = []) {
+  const text = textContent || '';
+  const imgs = sanitizeImageUrls(images);
+  if (!text.trim() && !imgs.length) return;
+  const rec = { role, content: text, ts: Date.now() };
+  if (imgs.length) rec.images = imgs;
+  try {
+    await idbAdd(rec);
+  } catch (e) {
+    // 画像つきで容量超過(QuotaExceeded)した場合は、画像を諦めてテキストだけでも残す
+    if (imgs.length) {
+      console.warn('[もも] 画像つき保存に失敗。テキストのみで再試行:', e?.message);
+      try { await idbAdd({ role, content: text, ts: Date.now() }); }
+      catch (e2) { console.error('[もも] 保存失敗:', e2?.message); }
+    } else {
+      console.error('[もも] 保存失敗:', e?.message);
+    }
+  }
   totalMsgCount++;
 }
 
@@ -2630,6 +2829,9 @@ function runSplash(onDone) {
   const greet  = document.getElementById('splashGreet');
   const sub    = document.getElementById('splashSub');
   const dots   = [document.getElementById('d1'), document.getElementById('d2'), document.getElementById('d3')];
+
+  // バージョン情報を最初のタイトル（スプラッシュ）に表示
+  if (sub) sub.textContent = `sumo0612 · always here · ${APP_VERSION}`;
 
   // Show splash layer
   splash.style.opacity  = '1';
@@ -3108,7 +3310,7 @@ async function startChat() {
     updateJournalCount();
 
     if (slice.length > 0) {
-      slice.forEach(r => renderMessage(r.role === 'assistant' ? 'ai' : r.role, r.content, false));
+      slice.forEach(r => renderMessage(r.role === 'assistant' ? 'ai' : r.role, r.content, false, r.images || []));
       showToast(`💾 ${stored.length}件の会話を記憶しています`);
     }
     if (longSummary) setTimeout(() => showToast('🧠 長期記憶あり'), 2600);
@@ -3216,7 +3418,7 @@ async function newChat() {
   // アーカイブに保存
   await arcAdd({
     title,
-    messages: all.map(r => ({ role: r.role, content: r.content, ts: r.ts })),
+    messages: all.map(r => ({ role: r.role, content: r.content, ts: r.ts, ...(r.images && r.images.length ? { images: r.images } : {}) })),
     msgCount: all.length,
     firstTs, lastTs,
     ts: Date.now()
@@ -3411,6 +3613,200 @@ function closeHistory() {
   document.getElementById('histPanel').classList.remove('open');
 }
 
+// ================================================================
+// 会話検索 ＆ 画像ギャラリー ＆ ライトボックス
+// ================================================================
+let _searchTimer = null;
+let _galleryUrls = [];
+
+// 現在の会話(MSG_STORE)とすべてのアーカイブ(ARCHIVE_STORE)を1配列に集約
+async function gatherAllMessages() {
+  const out = [];
+  try {
+    const active = await idbAll();
+    for (const r of active) {
+      out.push({ role: r.role, content: r.content || '', ts: r.ts || 0,
+                 images: r.images || [], source: '現在の会話', archiveId: null });
+    }
+  } catch (e) { console.warn('[もも] 現在会話の読込失敗', e?.message); }
+  try {
+    const archives = await arcAll();
+    for (const a of archives) {
+      const aid = Number(a.id) | 0;
+      for (const r of (a.messages || [])) {
+        out.push({ role: r.role, content: r.content || '', ts: r.ts || a.lastTs || 0,
+                   images: r.images || [], source: a.title || '会話', archiveId: aid });
+      }
+    }
+  } catch (e) { console.warn('[もも] アーカイブの読込失敗', e?.message); }
+  return out;
+}
+
+function fmtDateShort(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}/${p(d.getMonth()+1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+// ── 会話検索 ──
+function openSearch() {
+  document.getElementById('searchOverlay').classList.add('open');
+  document.getElementById('searchPanel').classList.add('open');
+  const inp = document.getElementById('searchInput');
+  setTimeout(() => inp.focus(), 120);
+  if (inp.value.trim()) runSearch(inp.value);
+}
+function closeSearch() {
+  document.getElementById('searchOverlay').classList.remove('open');
+  document.getElementById('searchPanel').classList.remove('open');
+}
+function onSearchInput() {
+  clearTimeout(_searchTimer);
+  const q = document.getElementById('searchInput').value;
+  _searchTimer = setTimeout(() => runSearch(q), 220);
+}
+async function runSearch(query) {
+  const box = document.getElementById('searchResults');
+  const q = (query || '').trim();
+  if (!q) {
+    box.innerHTML = '<div class="search-hint">キーワードを入力すると、これまでの会話（過去の履歴も含む）から検索できるよ。</div>';
+    return;
+  }
+  const all = await gatherAllMessages();
+  const ql = q.toLowerCase();
+  const hits = [];
+  for (const m of all) {
+    if (!m.content) continue;
+    const idx = m.content.toLowerCase().indexOf(ql);
+    if (idx !== -1) hits.push({ ...m, idx });
+  }
+  hits.sort((a, b) => b.ts - a.ts);
+
+  if (hits.length === 0) {
+    box.innerHTML = `<div class="search-hint">「${esc(q)}」に一致する会話は見つからなかったよ。</div>`;
+    return;
+  }
+
+  const MAX = 200;
+  const shown = hits.slice(0, MAX);
+  let html = `<div class="search-count">${hits.length}件ヒット${hits.length > MAX ? `（上位${MAX}件を表示）` : ''}</div>`;
+  for (const m of shown) {
+    const who = m.role === 'user' ? 'りぴ' : 'もも';
+    const raw = m.content;
+    const i0  = m.idx;
+    const start = Math.max(0, i0 - 28);
+    const before = (start > 0 ? '…' : '') + raw.slice(start, i0);
+    const match  = raw.slice(i0, i0 + q.length);
+    const aEnd   = Math.min(raw.length, i0 + q.length + 70);
+    const after  = raw.slice(i0 + q.length, aEnd) + (aEnd < raw.length ? '…' : '');
+    const snippet = esc(before) + '<mark>' + esc(match) + '</mark>' + esc(after);
+    const arg = m.archiveId === null ? 'null' : (Number(m.archiveId) | 0);
+    html += `<div class="search-result" onclick="gotoSearchResult(${arg})">
+      <div class="search-result-head">
+        <span class="search-result-who ${m.role === 'user' ? 'user' : 'ai'}">${who}</span>
+        <span>${fmtDateShort(m.ts)}</span>
+        <span class="search-result-src">${esc(m.source)}</span>
+      </div>
+      <div class="search-result-snippet">${snippet}</div>
+    </div>`;
+  }
+  box.innerHTML = html;
+}
+
+function gotoSearchResult(archiveId) {
+  const q = document.getElementById('searchInput').value.trim();
+  closeSearch();
+  if (archiveId === null || archiveId === undefined) {
+    // 現在の会話 → 画面に出ていればスクロール＆ハイライト
+    setTimeout(() => flashMatchingBubble(q), 80);
+  } else {
+    // アーカイブ → その会話を開いてからハイライト
+    Promise.resolve(viewArchive(Number(archiveId) | 0))
+      .then(() => setTimeout(() => flashMatchingBubble(q), 350))
+      .catch(() => {});
+  }
+}
+
+function flashMatchingBubble(q) {
+  if (!q) return false;
+  const ql = q.toLowerCase();
+  const rows = document.querySelectorAll('#messages .message-row');
+  for (const row of rows) {
+    const b = row.querySelector('.bubble');
+    if (b && b.textContent.toLowerCase().includes(ql)) {
+      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      row.classList.add('flash');
+      setTimeout(() => row.classList.remove('flash'), 1900);
+      return true;
+    }
+  }
+  showToast('🔍 この会話の中には表示されてないみたい（古い履歴かも）');
+  return false;
+}
+
+// ── 画像ギャラリー（LINE/ディスコ風の一覧） ──
+async function openGallery() {
+  if (!db) return;
+  const grid = document.getElementById('galleryGrid');
+  grid.innerHTML = '<div class="gallery-empty">読み込み中...</div>';
+  document.getElementById('galleryOverlay').classList.add('open');
+
+  const all  = await gatherAllMessages();
+  const imgs = [];
+  for (const m of all) {
+    for (const url of sanitizeImageUrls(m.images)) imgs.push({ url, ts: m.ts });
+  }
+  imgs.sort((a, b) => b.ts - a.ts);
+
+  if (imgs.length === 0) {
+    grid.innerHTML = '<div class="gallery-empty">まだ送った画像はないよ📷</div>';
+    return;
+  }
+  // dataURL を onclick に直書きすると巨大になるので、配列に保持してインデックス参照
+  _galleryUrls = imgs.map(x => x.url);
+  grid.innerHTML = imgs.map((x, i) => `
+    <div class="gallery-tile" onclick="openLightboxIdx(${i})">
+      <img src="${x.url}" alt="" loading="lazy">
+      <div class="gallery-tile-date">${fmtDateShort(x.ts)}</div>
+    </div>`).join('');
+}
+function closeGallery() {
+  document.getElementById('galleryOverlay').classList.remove('open');
+}
+
+// ── ライトボックス（拡大表示・端末への保存） ──
+function openLightboxIdx(i) {
+  const url = _galleryUrls[i];
+  if (url) openLightbox(url);
+}
+function openLightbox(url) {
+  if (typeof url !== 'string' || !DATA_IMG_RE.test(url)) return;
+  document.getElementById('lightboxImg').src = url;
+  const dl = document.getElementById('lightboxDownload');
+  dl.href = url;
+  dl.download = `momo_${Date.now()}.jpg`;
+  document.getElementById('lightboxOverlay').classList.add('open');
+}
+function closeLightbox() {
+  document.getElementById('lightboxOverlay').classList.remove('open');
+  // src を遅延クリアしてメモリを解放（フェードアウトを見せてから）
+  setTimeout(() => { document.getElementById('lightboxImg').src = ''; }, 250);
+}
+
+// インライン画像タップで拡大、Escで各オーバーレイを閉じる
+document.getElementById('messages')?.addEventListener('click', e => {
+  const img = e.target.closest('.bubble-img');
+  if (img) openLightbox(img.src);
+});
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  const lb = document.getElementById('lightboxOverlay');
+  if (lb && lb.classList.contains('open')) { closeLightbox(); return; }
+  closeGallery();
+  closeSearch();
+});
+
 // アーカイブを閲覧
 async function viewArchive(id) {
   if (!db) return;
@@ -3442,7 +3838,7 @@ async function viewArchive(id) {
   // メッセージ描画
   const msgs = document.getElementById('messages');
   msgs.innerHTML = '';
-  arc.messages.forEach(r => renderMessage(r.role === 'assistant' ? 'ai' : r.role, r.content, false));
+  arc.messages.forEach(r => renderMessage(r.role === 'assistant' ? 'ai' : r.role, r.content, false, r.images || []));
   msgs.scrollTop = 0;
 
   // 入力無効化
@@ -3500,7 +3896,7 @@ async function resumeArchive() {
       const title   = await generateTitle(fullActive) || `会話 (${fullActive.length}通)`;
       await arcAdd({
         title,
-        messages: fullActive.map(r => ({ role: r.role, content: r.content, ts: r.ts })),
+        messages: fullActive.map(r => ({ role: r.role, content: r.content, ts: r.ts, ...(r.images && r.images.length ? { images: r.images } : {}) })),
         msgCount: fullActive.length,
         firstTs, lastTs, ts: Date.now()
       });
@@ -3515,7 +3911,8 @@ async function resumeArchive() {
     await idbAdd({
       role: m.role,
       content: m.content,
-      ts: m.ts || (baseTs + i * 1000)
+      ts: m.ts || (baseTs + i * 1000),
+      ...(m.images && m.images.length ? { images: m.images } : {})
     });
   }
 
@@ -3544,7 +3941,7 @@ async function resumeArchive() {
   // UIを再描画（直近 API_CONTEXT 件のみ）
   const msgs = document.getElementById('messages');
   msgs.innerHTML = '';
-  slice.forEach(r => renderMessage(r.role === 'assistant' ? 'ai' : r.role, r.content, false));
+  slice.forEach(r => renderMessage(r.role === 'assistant' ? 'ai' : r.role, r.content, false, r.images || []));
 
   // 閲覧バーを閉じて入力を有効化
   document.getElementById('viewingBar').classList.remove('show');
@@ -4007,8 +4404,8 @@ function renderMessage(role, content, animate = true, imageDataUrls = []) {
   row.className = `message-row ${role}` + (animate ? '' : ' instant');
 
   let imgHtml = '';
-  for (const url of imageDataUrls) {
-    imgHtml += `<img class="bubble-img" src="${url}" alt="添付画像">`;
+  for (const url of sanitizeImageUrls(imageDataUrls)) {
+    imgHtml += `<img class="bubble-img" src="${url}" alt="添付画像" loading="lazy">`;
   }
 
   // animate=false は DB復元時 → AI・userともにcontentを描画
@@ -4265,8 +4662,8 @@ async function sendMessage() {
   history.push({ role: 'user', content: historyContent });
   if (history.length > API_CONTEXT) history = history.slice(-API_CONTEXT);
 
-  // DB: テキストのみ保存（画像base64は容量大のため除外）
-  if (db) await persistMessage('user', historyContent);
+  // DB: テキスト＋送信画像を保存（後でギャラリーや履歴から見返せるように）
+  if (db) await persistMessage('user', historyContent, sentImgs.map(i => i.dataUrl));
   updateMemoryUI();
   showTyping();
 
