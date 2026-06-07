@@ -12,7 +12,7 @@
 :root {
   --bg: #0d0d0f; --surface: #141417; --border: rgba(255,255,255,0.07);
   --accent: #c8f0a0; --accent-dim: rgba(200,240,160,0.12);
-  --text: #e8e8e2; --text-muted: rgba(232,232,226,0.38);
+  --text: #e8e8e2; --text-muted: rgba(232,232,226,0.75);
   --user-bg: #1e1e24; --radius: 16px; --radius-sm: 10px;
 }
 
@@ -281,8 +281,17 @@ header {
 .header-left h1 { font-family: 'DM Serif Display', serif; font-size: 19px; font-weight: 400; letter-spacing: -0.3px; white-space: nowrap; }
 .header-left h1 em { color: var(--accent); font-style: italic; }
 .model-badge {
-  font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text-muted);
-  background: rgba(255,255,255,0.04); padding: 2px 7px; border-radius: 4px; border: 1px solid var(--border);
+  font-family: 'DM Mono', monospace; font-size: 10px; font-weight: 600;
+  letter-spacing: 0.05em; color: #0d0d0f;
+  background: linear-gradient(135deg, #d8f7ab, var(--accent) 45%, #a6e070);
+  padding: 2px 9px; border-radius: 999px; white-space: nowrap;
+  border: 1px solid rgba(200,240,160,0.55);
+  box-shadow: 0 0 10px rgba(200,240,160,0.35), inset 0 1px 0 rgba(255,255,255,0.35);
+  animation: badgeGlow 2.8s ease-in-out infinite;
+}
+@keyframes badgeGlow {
+  0%, 100% { box-shadow: 0 0 8px rgba(200,240,160,0.3), inset 0 1px 0 rgba(255,255,255,0.35); }
+  50%      { box-shadow: 0 0 16px rgba(200,240,160,0.6), inset 0 1px 0 rgba(255,255,255,0.35); }
 }
 .header-right {
   display: flex; align-items: center; gap: 6px;
@@ -1406,7 +1415,7 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
     <input type="password" id="apiKey" placeholder="sk-..." autocomplete="off" spellcheck="false" inputmode="text">
     <p id="savedKeyNote" style="display:none;margin-top:8px;font-size:11px;color:var(--accent);opacity:0.7;letter-spacing:0.04em;">✓ 保存済みのAPIキーを読み込みました</p>
     <button class="btn-start" onclick="startChat()">ももと話す →</button>
-    <p style="margin-top:14px;font-size:10.5px;color:rgba(232,232,226,0.4);line-height:1.7;letter-spacing:0.02em;text-align:center;">
+    <p style="margin-top:14px;font-size:10.5px;color:rgba(232,232,226,0.7);line-height:1.7;letter-spacing:0.02em;text-align:center;">
       ⚠ iOS Safari をお使いの場合、7日間アクセスしないと<br>
       ブラウザが会話データ・記憶を自動削除することがあります。<br>
       <span style="color:rgba(200,240,160,0.5);">ホーム画面に追加</span> すると削除されにくくなります。
@@ -1510,7 +1519,7 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
   <header>
     <div class="header-left">
       <h1>もも<em>.</em></h1>
-      <span class="model-badge" id="modelBadge">gpt-5.4</span>
+      <span class="model-badge" id="modelBadge">gpt-5.5</span>
     </div>
     <div class="header-right">
       <div class="growth-badge" id="growthBadge" title="学習データを見る" onclick="openLearnModal()">
@@ -2029,10 +2038,10 @@ const MSG_STORE     = 'messages';
 const META_STORE    = 'meta';
 const ARCHIVE_STORE = 'archives';  // 会話アーカイブ
 const JOURNAL_STORE = 'journal';   // 愚痴聞きジャーナル
-const MODEL         = 'gpt-5.4';
+const MODEL         = 'gpt-5.5';
 // アプリのバージョン。新機能を追加したらここを上げてね（最初のタイトル＝スプラッシュ画面に表示される）
-// v1.1.0: 送信画像の保存・画像ギャラリー一覧・会話検索を追加
-const APP_VERSION   = 'v1.1.0';
+// v2.1.0: 送信画像の保存・画像ギャラリー一覧・会話検索・モデルをgpt-5.5へ更新・メニュー文字を白寄りに
+const APP_VERSION   = 'v2.1.0';
 const SUMMARY_EVERY = 10;
 // 重要記憶キー（削除されない永続情報）
 const KEY_SUMMARY   = 'summary';
@@ -2778,7 +2787,7 @@ function showHeavyWarning() {
       <span style="font-size:20px;line-height:1;">💬</span>
       <div style="flex:1;">
         <div style="font-size:13px;font-weight:500;color:#e8e8e2;margin-bottom:5px;">会話がだいぶ長くなってきたよ 📮</div>
-        <div style="font-size:11px;color:rgba(232,232,226,0.55);line-height:1.6;">今の会話を履歴にしっかり記憶してから、新しいチャットを始めよう。もも の頭もスッキリするよ。</div>
+        <div style="font-size:11px;color:rgba(232,232,226,0.74);line-height:1.6;">今の会話を履歴にしっかり記憶してから、新しいチャットを始めよう。もも の頭もスッキリするよ。</div>
         <div style="display:flex;gap:8px;margin-top:12px;">
           <button onclick="newChat();document.getElementById('heavyBanner')?.remove();" style="
             flex:1;padding:8px 12px;background:var(--accent);color:#0d0d0f;
@@ -2787,7 +2796,7 @@ function showHeavyWarning() {
             アーカイブして New へ ✦
           </button>
           <button onclick="document.getElementById('heavyBanner')?.remove();" style="
-            padding:8px 14px;background:none;color:rgba(232,232,226,0.45);
+            padding:8px 14px;background:none;color:rgba(232,232,226,0.72);
             border:1px solid rgba(255,255,255,0.1);border-radius:8px;
             font-family:'Syne',sans-serif;font-size:12px;cursor:pointer;">
             このまま続ける
