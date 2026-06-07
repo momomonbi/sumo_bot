@@ -637,11 +637,17 @@ header {
   height: 200px; color: var(--text-muted); font-size: 13px;
 }
 .gallery-tile {
-  position: relative; aspect-ratio: 1; border-radius: 10px; overflow: hidden;
+  position: relative; border-radius: 10px; overflow: hidden; min-width: 0;
   cursor: pointer; border: 1px solid var(--border); background: rgba(255,255,255,0.02);
   animation: elemFadeIn 0.3s ease both;
 }
-.gallery-tile img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.25s; }
+/* 正方形タイルを全ブラウザ（旧iOS Safari等のaspect-ratio非対応含む）で確保。
+   ::before が高さを作るので、遅延読み込み中でも場所が確保され、画像が重ならない */
+.gallery-tile::before { content: ''; display: block; padding-top: 100%; }
+.gallery-tile img {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; display: block; transition: transform 0.25s;
+}
 .gallery-tile:hover img { transform: scale(1.06); }
 .gallery-tile-date {
   position: absolute; left: 0; right: 0; bottom: 0;
