@@ -648,8 +648,20 @@ header {
   font-family: 'DM Mono', monospace; font-size: 9px; color: #fff;
   background: linear-gradient(transparent, rgba(0,0,0,0.65)); padding: 12px 6px 4px;
   opacity: 0; transition: opacity 0.2s; pointer-events: none;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .gallery-tile:hover .gallery-tile-date { opacity: 1; }
+/* ギャラリー内の画像「意味検索」バー */
+.gallery-search { display: flex; gap: 8px; padding: 0 14px 12px; flex-shrink: 0; }
+.gallery-search .search-input { flex: 1; }
+.gallery-index-btn {
+  flex-shrink: 0; background: rgba(200,240,160,0.1); color: var(--accent);
+  border: 1px solid rgba(200,240,160,0.3); border-radius: 8px;
+  font-family: 'Syne', sans-serif; font-size: 12px; padding: 0 12px; cursor: pointer;
+  white-space: nowrap; transition: background 0.2s;
+}
+.gallery-index-btn:hover { background: rgba(200,240,160,0.18); }
+.gallery-index-btn:disabled { opacity: 0.5; cursor: default; }
 
 /* ═══ LIGHTBOX (画像拡大) ═══ */
 .lightbox-overlay {
@@ -1640,6 +1652,13 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
         <div class="tool-card-desc">スキル・稼働時間・子どもの帰宅時間を考慮した在宅ワークを自動ピックアップ</div>
       </div>
     </div>
+    <div class="tool-card" onclick="runTodayHighlight()">
+      <div class="tool-card-icon">✨</div>
+      <div class="tool-card-body">
+        <div class="tool-card-title">今日のハイライト</div>
+        <div class="tool-card-desc">今日の会話をももが3行で振り返り、最後に「今日のりぴ、ここ偉かった」を1つ褒める</div>
+      </div>
+    </div>
   </div>
 
   <div class="tool-cat-label">子どもの学習・学校生活</div>
@@ -2021,6 +2040,10 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
     <div class="gallery-header">
       <h2>画像一覧<em>.</em></h2>
       <button class="btn-close-hist" onclick="closeGallery()">✕</button>
+    </div>
+    <div class="gallery-search">
+      <input type="search" id="gallerySearchInput" class="search-input" placeholder="画像を意味で検索（例: 青い服）..." oninput="filterGallery()" autocomplete="off">
+      <button class="gallery-index-btn" id="galleryIndexBtn" onclick="indexAllImages()" style="display:none"></button>
     </div>
     <div class="gallery-grid" id="galleryGrid"></div>
   </div>
@@ -3348,6 +3371,9 @@ async function startChat() {
       document.getElementById('messages').scrollTop = 999999;
       document.getElementById('input').focus();
     }, 100);
+
+    // ももから自発的にあいさつ（1日1回・しばらくぶりに開いたとき）
+    setTimeout(maybeProactiveGreeting, 1400);
   });
 }
 
@@ -3776,26 +3802,83 @@ async function openGallery() {
   if (!db) return;
   const grid = document.getElementById('galleryGrid');
   grid.innerHTML = '<div class="gallery-empty">読み込み中...</div>';
+  const si = document.getElementById('gallerySearchInput');
+  if (si) si.value = '';
   document.getElementById('galleryOverlay').classList.add('open');
 
+  await _ensureCaptionsLoaded();
   const all  = await gatherAllMessages();
   const imgs = [];
   for (const m of all) {
     for (const url of sanitizeImageUrls(m.images)) imgs.push({ url, ts: m.ts, archiveId: m.archiveId });
   }
   imgs.sort((a, b) => b.ts - a.ts);
+  // dataURL を onclick に直書きすると巨大になるので、配列に保持してインデックス参照
+  // caption は拡大時/索引作成で付くAI解説（意味検索のキー）
+  _galleryItems = imgs.map(x => ({ url: x.url, ts: x.ts, archiveId: x.archiveId, caption: _imgCaptions[_imgHash(x.url)] || '' }));
+  _updateGalleryIndexBtn();
+  renderGalleryGrid('');
+}
 
-  if (imgs.length === 0) {
+// 解説（caption）で絞り込んでグリッド描画
+function renderGalleryGrid(filter = '') {
+  const grid = document.getElementById('galleryGrid');
+  if (_galleryItems.length === 0) {
     grid.innerHTML = '<div class="gallery-empty">まだ送った画像はないよ📷</div>';
     return;
   }
-  // dataURL を onclick に直書きすると巨大になるので、配列に保持してインデックス参照
-  _galleryItems = imgs.map(x => ({ url: x.url, ts: x.ts, archiveId: x.archiveId }));
-  grid.innerHTML = imgs.map((x, i) => `
-    <div class="gallery-tile" onclick="openLightboxIdx(${i})">
-      <img src="${x.url}" alt="" loading="lazy">
-      <div class="gallery-tile-date">${fmtDateShort(x.ts)}</div>
+  const q = (filter || '').trim().toLowerCase();
+  const shown = [];
+  for (let i = 0; i < _galleryItems.length; i++) {
+    const it = _galleryItems[i];
+    if (q && !(it.caption || '').toLowerCase().includes(q)) continue;
+    shown.push({ it, i });
+  }
+  if (shown.length === 0) {
+    const uncap = _galleryItems.filter(it => !it.caption).length;
+    grid.innerHTML = `<div class="gallery-empty">「${esc(filter)}」に合う画像は見つからなかったよ` +
+      (uncap ? `<br><span style="font-size:11px;opacity:0.75">未解説の画像が${uncap}枚あるよ。「🔎 解説をつける」で検索できるようになるよ</span>` : '') + `</div>`;
+    return;
+  }
+  grid.innerHTML = shown.map(({ it, i }) => `
+    <div class="gallery-tile" onclick="openLightboxIdx(${i})" title="${esc(it.caption || '')}">
+      <img src="${it.url}" alt="" loading="lazy">
+      <div class="gallery-tile-date">${it.caption ? '✨ ' + esc(it.caption) + ' · ' : ''}${fmtDateShort(it.ts)}</div>
     </div>`).join('');
+}
+function filterGallery() {
+  renderGalleryGrid(document.getElementById('gallerySearchInput').value);
+}
+function _updateGalleryIndexBtn() {
+  const btn = document.getElementById('galleryIndexBtn');
+  if (!btn) return;
+  const uncap = _galleryItems.filter(it => !it.caption).length;
+  if (uncap > 0) { btn.style.display = ''; btn.textContent = `🔎 解説をつける（${uncap}）`; }
+  else { btn.style.display = 'none'; }
+}
+// 未解説の画像にまとめてAI解説をつけて、意味検索の対象にする
+async function indexAllImages() {
+  if (!apiKey) { showToast('APIキーが必要だよ'); return; }
+  const todo = _galleryItems.filter(it => !it.caption);
+  if (todo.length === 0) { showToast('全部の画像に解説がついてるよ✨'); return; }
+  if (!confirm(`未解説の画像 ${todo.length}枚にAIで解説をつけます。\n1枚ずつ生成するので、少し時間と通信費がかかります。\n実行する？`)) return;
+  await _ensureCaptionsLoaded();
+  const btn = document.getElementById('galleryIndexBtn');
+  if (btn) btn.disabled = true;
+  let done = 0;
+  for (const it of todo) {
+    showToast(`🔎 解説生成中… ${done + 1}/${todo.length}`);
+    try {
+      const cap = await describeImage(it.url);
+      if (cap) { _imgCaptions[_imgHash(it.url)] = cap; it.caption = cap; }
+    } catch (e) { console.warn('[もも] 索引生成失敗', e?.message); }
+    done++;
+  }
+  await _saveCaptions();
+  if (btn) btn.disabled = false;
+  _updateGalleryIndexBtn();
+  showToast(`✅ ${done}枚に解説をつけたよ`);
+  filterGallery();
 }
 function closeGallery() {
   document.getElementById('galleryOverlay').classList.remove('open');
@@ -3882,6 +3965,7 @@ async function openLightbox(url, opts = {}) {
     if (_lightboxCurrentUrl !== url) return;
     if (caption) {
       _imgCaptions[key] = caption; _saveCaptions();
+      for (const it of _galleryItems) { if (it.url === url) it.caption = caption; }
       capEl.classList.remove('loading');
       capEl.textContent = '✨ ' + caption;
     } else {
@@ -3948,6 +4032,131 @@ document.addEventListener('keydown', e => {
   closeGallery();
   closeSearch();
 });
+
+// ================================================================
+// 今日のハイライト ＆ ももから先に話しかける
+// ================================================================
+
+// 今日の会話を振り返って、あたたかい3行＋ひと褒めを生成
+async function runTodayHighlight() {
+  if (!db) { showToast('準備中だよ'); return; }
+  if (isLoading) return;
+  closeToolPanel();
+  const all = await idbAll();
+  const now = new Date();
+  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const today = all.filter(r => (r.ts || 0) >= startOfDay && (r.content || '').trim());
+  if (today.length < 2) { showToast('今日の会話がまだ少ないみたい☺️ もう少し話してからどうぞ'); return; }
+
+  isLoading = true;
+  document.getElementById('sendBtn').disabled = true;
+  renderMessage('user', '✨ 今日のハイライト', true);
+  history.push({ role: 'user', content: '[今日のハイライト]' });
+  if (db) await persistMessage('user', '[今日のハイライト]');
+  showTyping();
+
+  const logsText = today.map(r => `${r.role === 'user' ? 'りぴ' : 'もも'}: ${r.content}`).join('\n');
+  const prompt = `今日（${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日）のりぴとの会話を振り返って、「今日のハイライト」を作って。
+形式：
+・今日のできごとや気持ちを、ももの口調で3行くらいにやさしくまとめる
+・最後に必ず「今日のりぴ、〇〇できて偉かったよ」のように、具体的なことを1つだけ褒める
+注意：説教や「次はこうしよう」等の課題出しはしない。重くしすぎず、あたたかく。絵文字は控えめに。`;
+
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: MODEL, max_completion_tokens: 600,
+        messages: [
+          { role: 'system', content: buildSystemPrompt() },
+          { role: 'user', content: `${prompt}\n\n【今日の会話ログ】\n${logsText}` }
+        ]
+      })
+    });
+    removeTyping();
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    const reply = (data.choices?.[0]?.message?.content || '').trim() || 'うまくまとめられなかった…ごめんね';
+    const bubble = renderMessage('ai', '');
+    bubble.innerHTML = fmt(reply);
+    makeQuestionsClickable(bubble);
+    makeTapCopyable(bubble);
+    history.push({ role: 'assistant', content: reply });
+    if (db) await persistMessage('assistant', reply);
+    document.getElementById('messages').scrollTop = 999999;
+    updateMemoryUI();
+  } catch (e) {
+    removeTyping();
+    showToast('⚠ ハイライト生成に失敗したよ: ' + e.message);
+  } finally {
+    isLoading = false;
+    document.getElementById('sendBtn').disabled = false;
+  }
+}
+
+// アプリを開いたとき、ももの方から自然に話しかける（1日1回・しばらくぶりのときだけ）
+async function maybeProactiveGreeting() {
+  if (!db || !apiKey || isLoading || isViewingHistory) return;
+  try {
+    const d = new Date();
+    const todayKey = `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`;
+    if (localStorage.getItem('momo_last_greet') === todayKey) return;  // 今日はもう挨拶済み
+
+    const all = await idbAll();
+    const lastTs = all.length ? (all[all.length - 1].ts || 0) : 0;
+    const gap = Date.now() - lastTs;
+    // 既に会話があるのに、最後の会話から3時間未満なら「久しぶり」感が無いのでしない
+    if (all.length > 0 && gap < 3 * 60 * 60 * 1000) return;
+
+    localStorage.setItem('momo_last_greet', todayKey);
+
+    isLoading = true;
+    document.getElementById('sendBtn').disabled = true;
+    showTyping();
+
+    const recent = all.slice(-8).map(r => `${r.role === 'user' ? 'りぴ' : 'もも'}: ${r.content}`).join('\n');
+    const ctx = recent ? `【最近の会話】\n${recent}\n\n` : '（まだ会話履歴はほとんど無い）\n\n';
+    const instruction = `今、りぴがアプリを開いたところ。ももの方から自然に先に話しかけて。
+・今の時間帯（朝/昼/夕方/夜）に合うひとこと（おはよう／おかえり／お疲れさま 等）
+・記憶や予定（バレー、子どもの帰宅・習い事、最近の悩みなど）で思い当たることがあれば、さりげなく一つだけ触れる
+・短く2〜3文。重くしすぎない。最後に会話を始めやすい問いかけをひとつ添える。`;
+
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: MODEL, max_completion_tokens: 300,
+        messages: [
+          { role: 'system', content: buildSystemPrompt() },
+          { role: 'system', content: buildTimePrompt() },
+          { role: 'user', content: ctx + instruction }
+        ]
+      })
+    });
+    removeTyping();
+    if (res.ok) {
+      const data = await res.json();
+      const reply = (data.choices?.[0]?.message?.content || '').trim();
+      if (reply) {
+        const bubble = renderMessage('ai', '');
+        bubble.innerHTML = fmt(reply);
+        makeQuestionsClickable(bubble);
+        makeTapCopyable(bubble);
+        history.push({ role: 'assistant', content: reply });
+        if (db) await persistMessage('assistant', reply);
+        document.getElementById('messages').scrollTop = 999999;
+        updateMemoryUI();
+      }
+    }
+  } catch (e) {
+    removeTyping();
+    console.warn('[もも] 自発あいさつ失敗:', e?.message);
+  } finally {
+    isLoading = false;
+    document.getElementById('sendBtn').disabled = false;
+  }
+}
 
 // アーカイブを閲覧
 async function viewArchive(id) {
