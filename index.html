@@ -2129,7 +2129,8 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 // v2.1.0: 送信画像の保存・画像ギャラリー一覧・会話検索・拡大時のAI画像解説＆会話ジャンプ・メニュー文字を白寄りに
 // v2.1.1: 画像ギャラリーのタイルを固定正方形セル化（縦つぶれ・重なり・スクロール不可を修正）
 // v2.2.0: GPT Image 2 による画像生成・合成（専用ツール＋チャット自然文）を追加
-const APP_VERSION   = 'v2.2.0';
+// v2.2.1: 画像生成を /v1/responses の image_generation ツール経由に変更（ブラウザのLoad failed対策）
+const APP_VERSION   = 'v2.2.1';
 const SUMMARY_EVERY = 10;
 // 重要記憶キー（削除されない永続情報）
 const KEY_SUMMARY   = 'summary';
@@ -5489,16 +5490,6 @@ function clearChips(groupId) {
 // ================================================================
 let imggenImages = []; // [{dataUrl, mediaType}] 添付（合成・編集用）
 
-// dataURL → Blob（edits の multipart 用）
-function dataUrlToBlob(dataUrl) {
-  const [head, b64] = dataUrl.split(',');
-  const mime = (head.match(/data:([^;]+)/) || [, 'image/png'])[1];
-  const bin = atob(b64);
-  const arr = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-  return new Blob([arr], { type: mime });
-}
-
 // 生成結果（PNG b64等）を保存・表示用に jpeg へ圧縮（容量節約）
 function compressDataUrl(dataUrl) {
   return new Promise((resolve, reject) => {
@@ -5520,40 +5511,32 @@ function compressDataUrl(dataUrl) {
   });
 }
 
-// GPT Image 2 で生成/合成。images が空ならテキスト→画像、あれば編集・合成
+// GPT Image 2 で生成/合成。
+// ※ /v1/images/* はブラウザからCORSで弾かれる（＝Load failed）ため、Web検索と同じ
+//    /v1/responses の image_generation ツール経由で生成する（images があれば参照として渡す）。
 async function generateImage({ prompt, images = [], quality = IMAGE_DEFAULT_QUALITY }) {
   if (!apiKey) throw new Error('APIキーが必要');
-  let res;
-  if (!images.length) {
-    res = await fetch('https://api.openai.com/v1/images/generations', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: IMAGE_MODEL, prompt, size: '1024x1024', quality, n: 1 })
-    });
-  } else {
-    const fd = new FormData();
-    fd.append('model', IMAGE_MODEL);
-    fd.append('prompt', prompt);
-    fd.append('quality', quality);
-    fd.append('size', '1024x1024');
-    fd.append('n', '1');
-    images.forEach((u, i) => fd.append('image[]', dataUrlToBlob(u), `src${i}.jpg`));
-    res = await fetch('https://api.openai.com/v1/images/edits', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${apiKey}` }, // Content-Type は FormData が境界込みで自動設定
-      body: fd
-    });
-  }
+  const content = [{ type: 'input_text', text: prompt }];
+  for (const u of images) content.push({ type: 'input_image', image_url: u });
+  const res = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: MODEL,
+      input: [{ role: 'user', content }],
+      tools: [{ type: 'image_generation', model: IMAGE_MODEL, size: '1024x1024', quality }]
+    })
+  });
   if (!res.ok) {
     let msg = 'HTTP ' + res.status;
     try { const e = await res.json(); msg = e.error?.message || msg; } catch {}
     throw new Error(msg);
   }
   const data = await res.json();
-  const item = data.data && data.data[0];
-  const raw = item?.b64_json ? `data:image/png;base64,${item.b64_json}` : item?.url;
-  if (!raw) throw new Error('画像が返ってこなかった');
-  return await compressDataUrl(raw);
+  const call = (data.output || []).find(o => o.type === 'image_generation_call');
+  const b64 = call && call.result;
+  if (!b64) throw new Error('画像が返ってこなかった（image_generationツール未対応の可能性）');
+  return await compressDataUrl(`data:image/png;base64,${b64}`);
 }
 
 // 生成フロー共通：ユーザー側を保存 → 生成 → チャット表示＋ギャラリー保存
