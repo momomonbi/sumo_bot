@@ -2130,7 +2130,8 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 // v2.1.1: 画像ギャラリーのタイルを固定正方形セル化（縦つぶれ・重なり・スクロール不可を修正）
 // v2.2.0: GPT Image 2 による画像生成・合成（専用ツール＋チャット自然文）を追加
 // v2.2.1: 画像生成を /v1/responses の image_generation ツール経由に変更（ブラウザのLoad failed対策）
-const APP_VERSION   = 'v2.2.1';
+// v2.2.2: image_generation ツールを tool_choice で強制（テキスト応答で空振りする問題を修正）＋失敗時の詳細表示
+const APP_VERSION   = 'v2.2.2';
 const SUMMARY_EVERY = 10;
 // 重要記憶キー（削除されない永続情報）
 const KEY_SUMMARY   = 'summary';
@@ -5524,7 +5525,8 @@ async function generateImage({ prompt, images = [], quality = IMAGE_DEFAULT_QUAL
     body: JSON.stringify({
       model: MODEL,
       input: [{ role: 'user', content }],
-      tools: [{ type: 'image_generation', model: IMAGE_MODEL, size: '1024x1024', quality }]
+      tools: [{ type: 'image_generation', model: IMAGE_MODEL, size: '1024x1024', quality }],
+      tool_choice: { type: 'image_generation' }   // ツールを必ず呼ばせる（テキスト応答だけで終わらせない）
     })
   });
   if (!res.ok) {
@@ -5534,9 +5536,12 @@ async function generateImage({ prompt, images = [], quality = IMAGE_DEFAULT_QUAL
   }
   const data = await res.json();
   const call = (data.output || []).find(o => o.type === 'image_generation_call');
-  const b64 = call && call.result;
-  if (!b64) throw new Error('画像が返ってこなかった（image_generationツール未対応の可能性）');
-  return await compressDataUrl(`data:image/png;base64,${b64}`);
+  if (call && call.result) return await compressDataUrl(`data:image/png;base64,${call.result}`);
+  // 失敗時の手がかりを集める（次の切り分け用）
+  let detail;
+  if (call) detail = `（生成ステータス: ${call.status || '不明'}）`;
+  else { const note = (data.output_text || '').trim(); detail = note ? '：' + note.slice(0, 140) : '（image_generation_call が無い）'; }
+  throw new Error('画像が返ってこなかった' + detail);
 }
 
 // 生成フロー共通：ユーザー側を保存 → 生成 → チャット表示＋ギャラリー保存
