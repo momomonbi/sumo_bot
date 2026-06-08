@@ -710,6 +710,17 @@ header {
   100% { box-shadow: 0 0 0 0 rgba(200,240,160,0); }
 }
 .message-row.flash .bubble { animation: bubbleFlash 1.8s ease; border-radius: 14px; }
+/* 画像生成の進捗表示（所要が長いので経過時間つきで安心させる） */
+.imggen-progress { padding: 6px 0; max-width: min(340px, 76vw); }
+.imggen-progress-label { font-size: 14px; color: var(--text); margin-bottom: 8px; font-family: 'DM Mono', monospace; letter-spacing: 0.02em; }
+.imggen-progress-bar { height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; }
+.imggen-progress-fill {
+  height: 100%; width: 40%; border-radius: 3px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  animation: imggenSlide 1.3s ease-in-out infinite;
+}
+@keyframes imggenSlide { 0% { transform: translateX(-120%); } 100% { transform: translateX(320%); } }
+.imggen-progress-note { font-size: 11px; color: var(--text-muted); margin-top: 8px; line-height: 1.5; }
 
 /* ── messages ── */
 #messages {
@@ -2131,7 +2142,8 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 // v2.2.0: GPT Image 2 による画像生成・合成（専用ツール＋チャット自然文）を追加
 // v2.2.1: 画像生成を /v1/responses の image_generation ツール経由に変更（ブラウザのLoad failed対策）
 // v2.2.2: image_generation ツールを tool_choice で強制（テキスト応答で空振りする問題を修正）＋失敗時の詳細表示
-const APP_VERSION   = 'v2.2.2';
+// v2.2.3: 画像生成中に経過時間つきの進捗バーを表示
+const APP_VERSION   = 'v2.2.3';
 const SUMMARY_EVERY = 10;
 // 重要記憶キー（削除されない永続情報）
 const KEY_SUMMARY   = 'summary';
@@ -5545,6 +5557,36 @@ async function generateImage({ prompt, images = [], quality = IMAGE_DEFAULT_QUAL
 }
 
 // 生成フロー共通：ユーザー側を保存 → 生成 → チャット表示＋ギャラリー保存
+// 画像生成の進捗表示（経過時間つき。生成は時間がかかるので待ち時間を可視化）
+let _imgGenTimer = null;
+function showImageGenProgress() {
+  removeImageGenProgress();
+  removeTyping();
+  const msgs = document.getElementById('messages');
+  document.getElementById('emptyState')?.remove();
+  const row = document.createElement('div');
+  row.id = 'imgGenProgress';
+  row.className = 'message-row ai instant';
+  row.innerHTML = `<div class="avatar">m</div>
+    <div class="bubble"><div class="imggen-progress">
+      <div class="imggen-progress-label">🎨 画像を生成中… <span id="imgGenTime">0:00</span></div>
+      <div class="imggen-progress-bar"><div class="imggen-progress-fill"></div></div>
+      <div class="imggen-progress-note">高品質だと1分前後かかることがあるよ。そのまま待っててね</div>
+    </div></div>`;
+  msgs.appendChild(row);
+  msgs.scrollTop = 999999;
+  const start = Date.now();
+  _imgGenTimer = setInterval(() => {
+    const s = Math.floor((Date.now() - start) / 1000);
+    const el = document.getElementById('imgGenTime');
+    if (el) el.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  }, 1000);
+}
+function removeImageGenProgress() {
+  if (_imgGenTimer) { clearInterval(_imgGenTimer); _imgGenTimer = null; }
+  document.getElementById('imgGenProgress')?.remove();
+}
+
 async function runImageGeneration(prompt, images, quality) {
   const p = (prompt || '').trim();
   const userLabel = p || (images.length ? '[画像の合成をお願い]' : '[画像生成をお願い]');
@@ -5557,11 +5599,11 @@ async function runImageGeneration(prompt, images, quality) {
   if (db) await persistMessage('user', userLabel, images);
   updateMemoryUI();
 
-  showTyping();
+  showImageGenProgress();
   showToast(`🎨 画像を生成中…（gpt-image-2 / ${quality}）`);
   try {
     const resultUrl = await generateImage({ prompt: genPrompt, images, quality });
-    removeTyping();
+    removeImageGenProgress();
     const caption = images.length ? 'はい、合成してみたよ✨' : 'はい、作ってみたよ✨';
     renderMessage('ai', caption, false, [resultUrl]);
     history.push({ role: 'assistant', content: caption });
@@ -5569,7 +5611,7 @@ async function runImageGeneration(prompt, images, quality) {
     document.getElementById('messages').scrollTop = 999999;
     updateMemoryUI();
   } catch (e) {
-    removeTyping();
+    removeImageGenProgress();
     const msg = `ごめん、画像を作れなかった…（${esc(e.message || 'エラー')}）\nアカウントが gpt-image-2 に未対応の可能性があるよ。その時は教えてね。`;
     renderMessage('ai', msg, false);
     if (db) await persistMessage('assistant', '[画像生成エラー]');
