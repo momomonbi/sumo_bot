@@ -721,6 +721,7 @@ header {
 }
 @keyframes imggenSlide { 0% { transform: translateX(-120%); } 100% { transform: translateX(320%); } }
 .imggen-progress-note { font-size: 11px; color: var(--text-muted); margin-top: 8px; line-height: 1.5; }
+.imggen-preview { width: 100%; max-width: 280px; border-radius: 10px; margin-bottom: 10px; display: block; border: 1px solid var(--border); animation: elemFadeIn 0.3s ease; }
 
 /* ── messages ── */
 #messages {
@@ -2143,7 +2144,8 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 // v2.2.1: 画像生成を /v1/responses の image_generation ツール経由に変更（ブラウザのLoad failed対策）
 // v2.2.2: image_generation ツールを tool_choice で強制（テキスト応答で空振りする問題を修正）＋失敗時の詳細表示
 // v2.2.3: 画像生成中に経過時間つきの進捗バーを表示
-const APP_VERSION   = 'v2.2.3';
+// v2.3.0: 画像生成をストリーミング化（partial_images）し、途中プレビューを順次表示
+const APP_VERSION   = 'v2.3.0';
 const SUMMARY_EVERY = 10;
 // 重要記憶キー（削除されない永続情報）
 const KEY_SUMMARY   = 'summary';
@@ -5527,7 +5529,7 @@ function compressDataUrl(dataUrl) {
 // GPT Image 2 で生成/合成。
 // ※ /v1/images/* はブラウザからCORSで弾かれる（＝Load failed）ため、Web検索と同じ
 //    /v1/responses の image_generation ツール経由で生成する（images があれば参照として渡す）。
-async function generateImage({ prompt, images = [], quality = IMAGE_DEFAULT_QUALITY }) {
+async function generateImage({ prompt, images = [], quality = IMAGE_DEFAULT_QUALITY, onPartial = null }) {
   if (!apiKey) throw new Error('APIキーが必要');
   const content = [{ type: 'input_text', text: prompt }];
   for (const u of images) content.push({ type: 'input_image', image_url: u });
@@ -5537,8 +5539,10 @@ async function generateImage({ prompt, images = [], quality = IMAGE_DEFAULT_QUAL
     body: JSON.stringify({
       model: MODEL,
       input: [{ role: 'user', content }],
-      tools: [{ type: 'image_generation', model: IMAGE_MODEL, size: '1024x1024', quality }],
-      tool_choice: { type: 'image_generation' }   // ツールを必ず呼ばせる（テキスト応答だけで終わらせない）
+      // partial_images: 途中プレビューを2枚ストリーミング（だんだん鮮明になる）
+      tools: [{ type: 'image_generation', model: IMAGE_MODEL, size: '1024x1024', quality, partial_images: 2 }],
+      tool_choice: { type: 'image_generation' },   // ツールを必ず呼ばせる
+      stream: true
     })
   });
   if (!res.ok) {
@@ -5546,14 +5550,50 @@ async function generateImage({ prompt, images = [], quality = IMAGE_DEFAULT_QUAL
     try { const e = await res.json(); msg = e.error?.message || msg; } catch {}
     throw new Error(msg);
   }
-  const data = await res.json();
-  const call = (data.output || []).find(o => o.type === 'image_generation_call');
-  if (call && call.result) return await compressDataUrl(`data:image/png;base64,${call.result}`);
-  // 失敗時の手がかりを集める（次の切り分け用）
-  let detail;
-  if (call) detail = `（生成ステータス: ${call.status || '不明'}）`;
-  else { const note = (data.output_text || '').trim(); detail = note ? '：' + note.slice(0, 140) : '（image_generation_call が無い）'; }
-  throw new Error('画像が返ってこなかった' + detail);
+
+  // SSE ストリームを読む（/v1/responses のイベントは data: {type, ...}）
+  const reader  = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '', finalB64 = null, lastPartialB64 = null, errMsg = null;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const lines = buf.split('\n');
+    buf = lines.pop() || '';
+    for (const line of lines) {
+      const t = line.trim();
+      if (!t.startsWith('data:')) continue;
+      const d = t.slice(5).trim();
+      if (!d || d === '[DONE]') continue;
+      let ev; try { ev = JSON.parse(d); } catch { continue; }
+      switch (ev.type) {
+        case 'response.image_generation_call.partial_image':
+          if (ev.partial_image_b64) {
+            lastPartialB64 = ev.partial_image_b64;
+            if (onPartial) { try { onPartial(`data:image/png;base64,${ev.partial_image_b64}`); } catch {} }
+          }
+          break;
+        case 'response.image_generation_call.completed':
+          if (ev.result) finalB64 = ev.result;
+          break;
+        case 'response.completed': {
+          const out = (ev.response && ev.response.output) || [];
+          const call = out.find(o => o.type === 'image_generation_call');
+          if (call && call.result) finalB64 = call.result;
+          break;
+        }
+        case 'error':
+        case 'response.failed':
+          errMsg = (ev.error && ev.error.message) ||
+                   (ev.response && ev.response.error && ev.response.error.message) || '生成に失敗';
+          break;
+      }
+    }
+  }
+  const b64 = finalB64 || lastPartialB64;
+  if (!b64) throw new Error('画像が返ってこなかった' + (errMsg ? '：' + errMsg : ''));
+  return await compressDataUrl(`data:image/png;base64,${b64}`);
 }
 
 // 生成フロー共通：ユーザー側を保存 → 生成 → チャット表示＋ギャラリー保存
@@ -5569,6 +5609,7 @@ function showImageGenProgress() {
   row.className = 'message-row ai instant';
   row.innerHTML = `<div class="avatar">m</div>
     <div class="bubble"><div class="imggen-progress">
+      <img class="imggen-preview" id="imgGenPreview" alt="" style="display:none">
       <div class="imggen-progress-label">🎨 画像を生成中… <span id="imgGenTime">0:00</span></div>
       <div class="imggen-progress-bar"><div class="imggen-progress-fill"></div></div>
       <div class="imggen-progress-note">高品質だと1分前後かかることがあるよ。そのまま待っててね</div>
@@ -5586,6 +5627,14 @@ function removeImageGenProgress() {
   if (_imgGenTimer) { clearInterval(_imgGenTimer); _imgGenTimer = null; }
   document.getElementById('imgGenProgress')?.remove();
 }
+// ストリーミングの途中プレビュー（だんだん鮮明になる）を進捗バブルに反映
+function updateImageGenPreview(dataUrl) {
+  const img = document.getElementById('imgGenPreview');
+  if (img) { img.src = dataUrl; img.style.display = 'block'; }
+  const note = document.querySelector('#imgGenProgress .imggen-progress-note');
+  if (note) note.textContent = 'プレビュー生成中…だんだん鮮明になるよ';
+  document.getElementById('messages').scrollTop = 999999;
+}
 
 async function runImageGeneration(prompt, images, quality) {
   const p = (prompt || '').trim();
@@ -5602,7 +5651,7 @@ async function runImageGeneration(prompt, images, quality) {
   showImageGenProgress();
   showToast(`🎨 画像を生成中…（gpt-image-2 / ${quality}）`);
   try {
-    const resultUrl = await generateImage({ prompt: genPrompt, images, quality });
+    const resultUrl = await generateImage({ prompt: genPrompt, images, quality, onPartial: updateImageGenPreview });
     removeImageGenProgress();
     const caption = images.length ? 'はい、合成してみたよ✨' : 'はい、作ってみたよ✨';
     renderMessage('ai', caption, false, [resultUrl]);
