@@ -1666,6 +1666,17 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
     </div>
   </div>
 
+  <div class="tool-cat-label">創作・画像</div>
+  <div class="tool-cards">
+    <div class="tool-card" onclick="openToolModal('imggen')">
+      <div class="tool-card-icon">🎨</div>
+      <div class="tool-card-body">
+        <div class="tool-card-title">画像生成・合成（GPT Image 2）</div>
+        <div class="tool-card-desc">テキストから画像を生成、または送った画像を合成・編集。結果はチャットとギャラリーに保存</div>
+      </div>
+    </div>
+  </div>
+
   <div class="tool-cat-label">子どもの学習・学校生活</div>
   <div class="tool-cards">
     <div class="tool-card" onclick="openToolModal('homework')">
@@ -2000,6 +2011,38 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
   </div>
 </div>
 
+<!-- TOOL MODAL: 画像生成・合成 (GPT Image 2) -->
+<div class="tool-modal-overlay" id="imggenModal">
+  <div class="tool-modal" onclick="event.stopPropagation()">
+    <div class="tool-modal-header">
+      <span class="tool-modal-icon">🎨</span>
+      <span class="tool-modal-title">画像生成・合成</span>
+      <button class="tool-modal-close" onclick="closeToolModal('imggen')">✕</button>
+    </div>
+    <label>画像を添付（合成・編集したい時。0枚ならテキストから生成）</label>
+    <div class="pta-img-area" id="imggenImgArea" onclick="document.getElementById('imggenFileInput').click()">
+      <div class="pta-img-placeholder" id="imggenImgPlaceholder">
+        <span style="font-size:24px;opacity:0.5;">📷</span>
+        <span>タップして写真を追加（複数OK）</span>
+      </div>
+      <div class="pta-img-thumbs" id="imggenImgThumbs"></div>
+    </div>
+    <input type="file" id="imggenFileInput" accept="image/*" multiple onchange="handleImggenFileSelect(event)" style="display:none">
+
+    <label for="imggenInput">どんな画像にする？</label>
+    <textarea id="imggenInput" placeholder="例：1枚目の服を2枚目の人に着せて／背景を青空に変えて／猫のかわいいアイコンを作って"></textarea>
+
+    <label>品質（コスト）</label>
+    <div class="scene-chips" id="imggenQualityChips">
+      <span class="scene-chip" data-val="low" onclick="selectChipIn(this,'imggenQualityChips')">low（最安）</span>
+      <span class="scene-chip" data-val="medium" onclick="selectChipIn(this,'imggenQualityChips')">medium</span>
+      <span class="scene-chip selected" data-val="high" onclick="selectChipIn(this,'imggenQualityChips')">high（高品質）</span>
+    </div>
+    <p class="tool-modal-hint">GPT Image 2 で生成します。high は1枚あたり約33円〜（合成は50〜100円目安）。結果はチャットとギャラリーに保存されます。</p>
+    <button class="btn-tool-exec" id="imggenExecBtn" onclick="execImageGen()">生成する →</button>
+  </div>
+</div>
+
 <!-- HISTORY PANEL -->
 <div class="history-overlay" id="histOverlay" onclick="closeHistory()"></div>
 <div class="history-panel" id="histPanel">
@@ -2080,10 +2123,13 @@ const META_STORE    = 'meta';
 const ARCHIVE_STORE = 'archives';  // 会話アーカイブ
 const JOURNAL_STORE = 'journal';   // 愚痴聞きジャーナル
 const MODEL         = 'gpt-5.4';
+const IMAGE_MODEL   = 'gpt-image-2';      // 画像生成・合成（GPT Image 2）
+const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/high）
 // アプリのバージョン。更新したら必ず上げる（最初のタイトル＝スプラッシュ画面に表示される）
 // v2.1.0: 送信画像の保存・画像ギャラリー一覧・会話検索・拡大時のAI画像解説＆会話ジャンプ・メニュー文字を白寄りに
 // v2.1.1: 画像ギャラリーのタイルを固定正方形セル化（縦つぶれ・重なり・スクロール不可を修正）
-const APP_VERSION   = 'v2.1.1';
+// v2.2.0: GPT Image 2 による画像生成・合成（専用ツール＋チャット自然文）を追加
+const APP_VERSION   = 'v2.2.0';
 const SUMMARY_EVERY = 10;
 // 重要記憶キー（削除されない永続情報）
 const KEY_SUMMARY   = 'summary';
@@ -4929,6 +4975,16 @@ async function sendMessage() {
   // ── render user message ──
   renderMessage('user', sentText, true, sentImgs.map(i => i.dataUrl));
 
+  // ── 画像生成・合成の自然文トリガー（「作って」「組み合わせて」等を検知） ──
+  // コスト保護のため自然文トリガー時は確認を挟む（キャンセルなら通常チャットとして続行）
+  if (detectImageIntent(sentText, sentImgs.length) &&
+      confirm(`画像を生成する？（gpt-image-2 / ${IMAGE_DEFAULT_QUALITY}・課金あり）\n\n「${sentText}」`)) {
+    await runImageGeneration(sentText, sentImgs.map(i => i.dataUrl), IMAGE_DEFAULT_QUALITY);
+    isLoading = false;
+    document.getElementById('sendBtn').disabled = false;
+    return;
+  }
+
   // ── build content for OpenAI API ──
   let userContent;
   if (sentImgs.length > 0) {
@@ -5426,6 +5482,179 @@ function selectHwMode(el) {
 }
 function clearChips(groupId) {
   document.querySelectorAll('#' + groupId + ' .scene-chip').forEach(c => c.classList.remove('selected'));
+}
+
+// ================================================================
+// 画像生成・合成（GPT Image 2）
+// ================================================================
+let imggenImages = []; // [{dataUrl, mediaType}] 添付（合成・編集用）
+
+// dataURL → Blob（edits の multipart 用）
+function dataUrlToBlob(dataUrl) {
+  const [head, b64] = dataUrl.split(',');
+  const mime = (head.match(/data:([^;]+)/) || [, 'image/png'])[1];
+  const bin = atob(b64);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
+
+// 生成結果（PNG b64等）を保存・表示用に jpeg へ圧縮（容量節約）
+function compressDataUrl(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const MAX_PX = 1024, QUALITY = 0.85;
+    const img = new Image();
+    img.onerror = () => reject(new Error('画像デコード失敗'));
+    img.onload = () => {
+      let { width, height } = img;
+      if (width > MAX_PX || height > MAX_PX) {
+        if (width >= height) { height = Math.round(height * MAX_PX / width); width = MAX_PX; }
+        else { width = Math.round(width * MAX_PX / height); height = MAX_PX; }
+      }
+      const c = document.createElement('canvas');
+      c.width = width; c.height = height;
+      c.getContext('2d').drawImage(img, 0, 0, width, height);
+      resolve(c.toDataURL('image/jpeg', QUALITY));
+    };
+    img.src = dataUrl;
+  });
+}
+
+// GPT Image 2 で生成/合成。images が空ならテキスト→画像、あれば編集・合成
+async function generateImage({ prompt, images = [], quality = IMAGE_DEFAULT_QUALITY }) {
+  if (!apiKey) throw new Error('APIキーが必要');
+  let res;
+  if (!images.length) {
+    res = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({ model: IMAGE_MODEL, prompt, size: '1024x1024', quality, n: 1 })
+    });
+  } else {
+    const fd = new FormData();
+    fd.append('model', IMAGE_MODEL);
+    fd.append('prompt', prompt);
+    fd.append('quality', quality);
+    fd.append('size', '1024x1024');
+    fd.append('n', '1');
+    images.forEach((u, i) => fd.append('image[]', dataUrlToBlob(u), `src${i}.jpg`));
+    res = await fetch('https://api.openai.com/v1/images/edits', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}` }, // Content-Type は FormData が境界込みで自動設定
+      body: fd
+    });
+  }
+  if (!res.ok) {
+    let msg = 'HTTP ' + res.status;
+    try { const e = await res.json(); msg = e.error?.message || msg; } catch {}
+    throw new Error(msg);
+  }
+  const data = await res.json();
+  const item = data.data && data.data[0];
+  const raw = item?.b64_json ? `data:image/png;base64,${item.b64_json}` : item?.url;
+  if (!raw) throw new Error('画像が返ってこなかった');
+  return await compressDataUrl(raw);
+}
+
+// 生成フロー共通：ユーザー側を保存 → 生成 → チャット表示＋ギャラリー保存
+async function runImageGeneration(prompt, images, quality) {
+  const p = (prompt || '').trim();
+  const userLabel = p || (images.length ? '[画像の合成をお願い]' : '[画像生成をお願い]');
+  const genPrompt = p || (images.length
+    ? 'これらの画像を自然に組み合わせて、まとまりのある1枚の画像にしてください。'
+    : 'かわいい画像を1枚作ってください。');
+
+  history.push({ role: 'user', content: userLabel });
+  if (history.length > API_CONTEXT) history = history.slice(-API_CONTEXT);
+  if (db) await persistMessage('user', userLabel, images);
+  updateMemoryUI();
+
+  showTyping();
+  showToast(`🎨 画像を生成中…（gpt-image-2 / ${quality}）`);
+  try {
+    const resultUrl = await generateImage({ prompt: genPrompt, images, quality });
+    removeTyping();
+    const caption = images.length ? 'はい、合成してみたよ✨' : 'はい、作ってみたよ✨';
+    renderMessage('ai', caption, false, [resultUrl]);
+    history.push({ role: 'assistant', content: caption });
+    if (db) await persistMessage('assistant', caption, [resultUrl]);
+    document.getElementById('messages').scrollTop = 999999;
+    updateMemoryUI();
+  } catch (e) {
+    removeTyping();
+    const msg = `ごめん、画像を作れなかった…（${esc(e.message || 'エラー')}）\nアカウントが gpt-image-2 に未対応の可能性があるよ。その時は教えてね。`;
+    renderMessage('ai', msg, false);
+    if (db) await persistMessage('assistant', '[画像生成エラー]');
+    console.error('[もも] 画像生成失敗:', e);
+  }
+}
+
+// 自然文から画像生成・合成の意図を検知（誤爆を避けるため条件は厳しめ）
+function detectImageIntent(text, numImages) {
+  const t = text || '';
+  if (!t) return null;
+  if (numImages > 0 && /(合成|組み合わせ|くっつけ|混ぜて|加工して|編集して|背景を?変え|着せ|足して|入れ替え)/.test(t)) return 'combine';
+  if (/(画像|イラスト|絵|写真|ロゴ|アイコン|壁紙|スタンプ)[をで]?.{0,12}(作っ|つくっ|生成|描い|かい|出して|ちょうだい|ほしい)/.test(t)) return 'create';
+  if (/(イラスト化|画像化|生成して)/.test(t) && /(画像|イラスト|絵)/.test(t)) return 'create';
+  return null;
+}
+
+// ── 画像生成ツール（モーダル） ──
+async function handleImggenFileSelect(e) {
+  const files = Array.from(e.target.files || []);
+  if (!files.length) return;
+  e.target.value = '';
+  for (const file of files) {
+    if (!file.type.startsWith('image/')) continue;
+    try { showToast('🖼 画像を圧縮中...'); imggenImages.push(await compressImage(file)); }
+    catch (err) { showToast('⚠ 画像の読み込みに失敗しました'); }
+  }
+  updateImggenPreview();
+}
+function updateImggenPreview() {
+  const area = document.getElementById('imggenImgArea');
+  const placeholder = document.getElementById('imggenImgPlaceholder');
+  const thumbs = document.getElementById('imggenImgThumbs');
+  thumbs.innerHTML = '';
+  if (!imggenImages.length) { placeholder.style.display = 'flex'; area.classList.remove('has-images'); return; }
+  placeholder.style.display = 'none'; area.classList.add('has-images');
+  imggenImages.forEach((img, i) => {
+    const w = document.createElement('div');
+    w.className = 'pta-thumb-wrap';
+    w.innerHTML = `<img class="pta-thumb" src="${img.dataUrl}" alt=""><div class="pta-thumb-del" onclick="event.stopPropagation();removeImggenImage(${i})">✕</div>`;
+    thumbs.appendChild(w);
+  });
+  const addBtn = document.createElement('div');
+  addBtn.className = 'pta-img-add';
+  addBtn.textContent = '＋';
+  addBtn.onclick = (ev) => { ev.stopPropagation(); document.getElementById('imggenFileInput').click(); };
+  thumbs.appendChild(addBtn);
+}
+function removeImggenImage(i) { imggenImages.splice(i, 1); updateImggenPreview(); }
+
+async function execImageGen() {
+  if (isLoading) return;
+  const prompt = document.getElementById('imggenInput').value.trim();
+  const images = imggenImages.map(i => i.dataUrl);
+  if (!prompt && !images.length) { showToast('指示文か画像を入れてね'); return; }
+  const quality = getSingleChip('imggenQualityChips') || IMAGE_DEFAULT_QUALITY;
+
+  isLoading = true;
+  document.getElementById('sendBtn').disabled = true;
+  document.getElementById('imggenExecBtn').disabled = true;
+
+  const label = prompt || (images.length ? '画像の合成をお願い' : '画像生成をお願い');
+  closeToolModal('imggen');
+  document.getElementById('imggenInput').value = '';
+  imggenImages = [];
+  updateImggenPreview();
+
+  renderMessage('user', '🎨 ' + label, true, images);
+  await runImageGeneration(prompt, images, quality);
+
+  isLoading = false;
+  document.getElementById('sendBtn').disabled = false;
+  document.getElementById('imggenExecBtn').disabled = false;
 }
 
 // ── すきま時間マッチング実行（Web検索付き） ──
