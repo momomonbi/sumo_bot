@@ -627,31 +627,41 @@ header {
 .gallery-header h2 em { color: var(--accent); font-style: italic; }
 .gallery-grid {
   flex: 1; min-height: 0; overflow-y: auto; padding: 14px;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, 96px);
-  grid-auto-rows: 96px;            /* 行の高さを固定 → つぶれない・必ず縦スクロール */
-  gap: 8px; align-content: start; justify-content: center;
+  display: flex; flex-wrap: wrap; gap: 8px; align-content: flex-start;
 }
 .gallery-grid::-webkit-scrollbar { width: 4px; }
 .gallery-grid::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
 .gallery-empty {
-  grid-column: 1 / -1; display: flex; align-items: center; justify-content: center;
-  height: 200px; color: var(--text-muted); font-size: 13px;
+  width: 100%; display: flex; align-items: center; justify-content: center;
+  height: 200px; color: var(--text-muted); font-size: 13px; text-align: center;
 }
+/* 1行3枚・左右いっぱい（flex+calcで等幅、padding-hackで正方形＝gridの行潰れを回避） */
 .gallery-tile {
-  position: relative; border-radius: 10px; overflow: hidden;
+  position: relative; width: calc((100% - 18px) / 3);
+  border-radius: 10px; overflow: hidden; box-sizing: border-box;
   cursor: pointer; border: 1px solid var(--border); background: rgba(255,255,255,0.02);
   animation: elemFadeIn 0.3s ease both;
 }
-/* タイルは grid-auto-rows の 96px 固定セルにフィット（全ブラウザで潰れ・重なり無し） */
+.gallery-tile::before { content: ''; display: block; padding-top: 100%; }
 .gallery-tile img {
-  width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.25s;
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; display: block; transition: transform 0.25s;
 }
-.gallery-tile:hover img { transform: scale(1.06); }
+.gallery-tile:hover img { transform: scale(1.04); }
+/* 個別削除ボタン（スマホでも押せるよう常時表示） */
+.gallery-tile-del {
+  position: absolute; top: 6px; right: 6px; z-index: 3;
+  width: 26px; height: 26px; border-radius: 50%; padding: 0;
+  background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.25); color: #fff;
+  font-size: 13px; line-height: 1; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.2s, transform 0.15s;
+}
+.gallery-tile-del:hover { background: #ff5a5a; transform: scale(1.1); }
 .gallery-tile-date {
   position: absolute; left: 0; right: 0; bottom: 0;
-  font-family: 'DM Mono', monospace; font-size: 9px; color: #fff;
-  background: linear-gradient(transparent, rgba(0,0,0,0.65)); padding: 12px 6px 4px;
+  font-family: 'DM Mono', monospace; font-size: 10px; color: #fff;
+  background: linear-gradient(transparent, rgba(0,0,0,0.7)); padding: 16px 8px 5px;
   opacity: 0; transition: opacity 0.2s; pointer-events: none;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
@@ -2145,7 +2155,8 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 // v2.2.2: image_generation ツールを tool_choice で強制（テキスト応答で空振りする問題を修正）＋失敗時の詳細表示
 // v2.2.3: 画像生成中に経過時間つきの進捗バーを表示
 // v2.3.0: 画像生成をストリーミング化（partial_images）し、途中プレビューを順次表示
-const APP_VERSION   = 'v2.3.0';
+// v2.4.0: 画像一覧を1行3枚・左右いっぱい表示に＋画像の個別削除を追加
+const APP_VERSION   = 'v2.4.0';
 const SUMMARY_EVERY = 10;
 // 重要記憶キー（削除されない永続情報）
 const KEY_SUMMARY   = 'summary';
@@ -3863,14 +3874,7 @@ function flashMatchingBubble(q) {
 }
 
 // ── 画像ギャラリー（LINE/ディスコ風の一覧） ──
-async function openGallery() {
-  if (!db) return;
-  const grid = document.getElementById('galleryGrid');
-  grid.innerHTML = '<div class="gallery-empty">読み込み中...</div>';
-  const si = document.getElementById('gallerySearchInput');
-  if (si) si.value = '';
-  document.getElementById('galleryOverlay').classList.add('open');
-
+async function loadGalleryItems() {
   await _ensureCaptionsLoaded();
   const all  = await gatherAllMessages();
   const imgs = [];
@@ -3878,9 +3882,17 @@ async function openGallery() {
     for (const url of sanitizeImageUrls(m.images)) imgs.push({ url, ts: m.ts, archiveId: m.archiveId });
   }
   imgs.sort((a, b) => b.ts - a.ts);
-  // dataURL を onclick に直書きすると巨大になるので、配列に保持してインデックス参照
   // caption は拡大時/索引作成で付くAI解説（意味検索のキー）
   _galleryItems = imgs.map(x => ({ url: x.url, ts: x.ts, archiveId: x.archiveId, caption: _imgCaptions[_imgHash(x.url)] || '' }));
+}
+async function openGallery() {
+  if (!db) return;
+  const grid = document.getElementById('galleryGrid');
+  grid.innerHTML = '<div class="gallery-empty">読み込み中...</div>';
+  const si = document.getElementById('gallerySearchInput');
+  if (si) si.value = '';
+  document.getElementById('galleryOverlay').classList.add('open');
+  await loadGalleryItems();
   _updateGalleryIndexBtn();
   renderGalleryGrid('');
 }
@@ -3908,11 +3920,73 @@ function renderGalleryGrid(filter = '') {
   grid.innerHTML = shown.map(({ it, i }) => `
     <div class="gallery-tile" onclick="openLightboxIdx(${i})" title="${esc(it.caption || '')}">
       <img src="${it.url}" alt="" loading="lazy">
+      <button class="gallery-tile-del" onclick="event.stopPropagation();removeGalleryImage(${i})" title="削除" aria-label="削除">✕</button>
       <div class="gallery-tile-date">${it.caption ? '✨ ' + esc(it.caption) + ' · ' : ''}${fmtDateShort(it.ts)}</div>
     </div>`).join('');
 }
 function filterGallery() {
   renderGalleryGrid(document.getElementById('gallerySearchInput').value);
+}
+
+// ギャラリーから個別画像を削除（保存元のメッセージ/アーカイブ記録から該当URLを除去）
+function deleteGalleryImage(url, archiveId) {
+  return new Promise((resolve, reject) => {
+    const isArc = !(archiveId === null || archiveId === undefined);
+    const storeName = isArc ? ARCHIVE_STORE : MSG_STORE;
+    const tx = db.transaction(storeName, 'readwrite');
+    const store = tx.objectStore(storeName);
+    if (isArc) {
+      const r = store.get(Number(archiveId) | 0);
+      r.onsuccess = e => {
+        const arc = e.target.result;
+        if (arc && Array.isArray(arc.messages)) {
+          for (const m of arc.messages) {
+            if (Array.isArray(m.images) && m.images.includes(url)) {
+              m.images = m.images.filter(u => u !== url);
+              if (!m.images.length) delete m.images;
+            }
+          }
+          store.put(arc);
+        }
+      };
+      r.onerror = e => reject(e.target.error);
+    } else {
+      const r = store.getAll();
+      r.onsuccess = e => {
+        for (const rec of (e.target.result || [])) {
+          if (Array.isArray(rec.images) && rec.images.includes(url)) {
+            rec.images = rec.images.filter(u => u !== url);
+            if (!rec.images.length) delete rec.images;
+            store.put(rec);
+          }
+        }
+      };
+      r.onerror = e => reject(e.target.error);
+    }
+    tx.oncomplete = () => resolve();
+    tx.onerror = e => reject(e.target.error);
+    tx.onabort  = e => reject(e.target.error);
+  });
+}
+
+async function removeGalleryImage(i) {
+  const item = _galleryItems[i];
+  if (!item || !db) return;
+  if (!confirm('この画像を削除する？（元に戻せないよ）')) return;
+  try {
+    await deleteGalleryImage(item.url, item.archiveId);
+    // 解説キャッシュとチャット内の表示も掃除
+    if (_imgCaptions) { delete _imgCaptions[_imgHash(item.url)]; _saveCaptions(); }
+    document.querySelectorAll('#messages .bubble-img').forEach(img => { if (img.src === item.url) img.remove(); });
+    showToast('🗑 画像を削除したよ');
+    const filter = document.getElementById('gallerySearchInput')?.value || '';
+    await loadGalleryItems();
+    _updateGalleryIndexBtn();
+    renderGalleryGrid(filter);
+  } catch (e) {
+    showToast('⚠ 削除に失敗したよ');
+    console.error('[もも] 画像削除失敗:', e);
+  }
 }
 function _updateGalleryIndexBtn() {
   const btn = document.getElementById('galleryIndexBtn');
