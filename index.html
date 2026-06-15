@@ -2156,7 +2156,8 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 // v2.2.3: 画像生成中に経過時間つきの進捗バーを表示
 // v2.3.0: 画像生成をストリーミング化（partial_images）し、途中プレビューを順次表示
 // v2.4.0: 画像一覧を1行3枚・左右いっぱい表示に＋画像の個別削除を追加
-const APP_VERSION   = 'v2.4.0';
+// v2.4.1: 画像生成を store:false に（巨大ログでOpenAIのLogsが開けなくなる問題の対策）
+const APP_VERSION   = 'v2.4.1';
 const SUMMARY_EVERY = 10;
 // 重要記憶キー（削除されない永続情報）
 const KEY_SUMMARY   = 'summary';
@@ -5616,6 +5617,7 @@ async function generateImage({ prompt, images = [], quality = IMAGE_DEFAULT_QUAL
       // partial_images: 途中プレビューを2枚ストリーミング（だんだん鮮明になる）
       tools: [{ type: 'image_generation', model: IMAGE_MODEL, size: '1024x1024', quality, partial_images: 2 }],
       tool_choice: { type: 'image_generation' },   // ツールを必ず呼ばせる
+      store: false,   // 巨大なbase64画像をダッシュボードLogsに保存しない（Logsが重くて開けない問題の対策。課金はUsageに残る）
       stream: true
     })
   });
