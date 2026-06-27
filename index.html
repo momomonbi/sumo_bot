@@ -1133,6 +1133,56 @@ footer { border-top: 1px solid var(--border); padding: 12px 18px 16px; flex-shri
 .btn-attach svg { width: 15px; height: 15px; }
 #fileInput { display: none; }
 
+/* ── voice: mic (push-to-talk) button ── */
+.btn-mic {
+  width: 32px; height: 32px; background: none;
+  border: 1px solid var(--border); border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; flex-shrink: 0; align-self: flex-end;
+  transition: border-color 0.2s, background 0.2s, color 0.2s; color: var(--text-muted);
+}
+.btn-mic:hover { border-color: rgba(200,240,160,0.3); background: rgba(200,240,160,0.06); color: var(--accent); }
+.btn-mic svg { width: 15px; height: 15px; }
+.btn-mic.recording {
+  border-color: #ff7b7b; color: #ff7b7b;
+  animation: micPulse 1.1s ease-in-out infinite;
+}
+.btn-mic.busy { opacity: 0.45; pointer-events: none; }
+@keyframes micPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255,123,123,0.45); }
+  50%      { box-shadow: 0 0 0 5px rgba(255,123,123,0); }
+}
+/* header voice-mode toggle active state */
+.btn-header.voice-on { border-color: var(--accent); color: var(--accent); background: rgba(200,240,160,0.08); }
+/* per-message replay (もも声) button */
+.btn-replay {
+  display: inline-block; margin: 8px 0 0 0; padding: 4px 10px;
+  background: none; border: 1px solid var(--border); border-radius: 12px;
+  color: var(--text-muted); font-family: 'DM Mono', monospace; font-size: 11px;
+  cursor: pointer; transition: border-color 0.2s, color 0.2s, background 0.2s;
+}
+.btn-replay:hover { border-color: rgba(200,240,160,0.3); color: var(--accent); background: rgba(200,240,160,0.06); }
+.btn-replay.playing { border-color: var(--accent); color: var(--accent); }
+.btn-replay.busy { opacity: 0.5; pointer-events: none; }
+/* toggle row inside the voice settings modal */
+.voice-toggle-row {
+  display: flex; align-items: center; justify-content: space-between;
+  margin: 14px 0 4px; gap: 12px;
+}
+.voice-toggle-row span { font-size: 12px; color: var(--text); }
+.voice-switch {
+  position: relative; width: 42px; height: 24px; flex-shrink: 0;
+  background: rgba(255,255,255,0.1); border: 1px solid var(--border);
+  border-radius: 13px; cursor: pointer; transition: background 0.2s, border-color 0.2s;
+}
+.voice-switch::after {
+  content: ''; position: absolute; top: 2px; left: 2px;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--text-muted); transition: transform 0.2s, background 0.2s;
+}
+.voice-switch.on { background: var(--accent-dim); border-color: var(--accent); }
+.voice-switch.on::after { transform: translateX(18px); background: var(--accent); }
+
 textarea {
   flex: 1; background: none; border: none; outline: none; color: var(--text);
   font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 300;
@@ -1516,6 +1566,44 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
   </div>
 </div>
 
+<!-- VOICE (もも声) SETTINGS MODAL -->
+<div id="voiceOverlay" class="pwd-overlay" onclick="closeVoiceSettings()"></div>
+<div id="voiceModal" class="pwd-modal">
+  <div class="pwd-modal-head">
+    <h3>🎙 ボイスモード設定</h3>
+    <button class="pwd-close" onclick="closeVoiceSettings()">×</button>
+  </div>
+  <div class="pwd-modal-body">
+    <p class="pwd-desc">
+      返答を「もも本人の声」で読み上げるよ。声はこのアプリの外で用意した
+      <b>もも声サービス</b>（Style-Bert-VITS2 等）に取りに行くから、まずそのURLを入れてね。
+      未設定の間は音声は鳴らさず文字だけ表示するよ（OpenAIの声は使わない）。<br>
+      ⚠️ もも本人の声を学習するのは、必ず<b>もも本人の同意</b>を得てからにしてね。
+    </p>
+
+    <label>もも声サービスのURL</label>
+    <input type="text" id="voiceUrl" placeholder="https://例: your-tunnel.example.com" autocomplete="off" spellcheck="false" inputmode="url">
+
+    <label>スタイル（任意・モデルに合わせて）</label>
+    <input type="text" id="voiceStyle" placeholder="Neutral" autocomplete="off" spellcheck="false">
+
+    <label>話す速さ（0.5〜2.0・1.0が標準）</label>
+    <input type="text" id="voiceSpeed" placeholder="1.0" autocomplete="off" spellcheck="false" inputmode="decimal">
+
+    <div class="voice-toggle-row">
+      <span>返答を自動で読み上げる</span>
+      <div class="voice-switch" id="voiceAutoSwitch" onclick="toggleAutoSpeakSwitch()"></div>
+    </div>
+
+    <p id="voiceMsg" class="pwd-msg"></p>
+
+    <div class="pwd-actions">
+      <button class="btn-pwd-save" onclick="saveVoiceSettings()">保存</button>
+      <button class="btn-pwd-remove" id="voiceTestBtn" onclick="testVoice()">テスト再生</button>
+    </div>
+  </div>
+</div>
+
 <!-- BACKUP / RESTORE MODAL — 機種変対応 -->
 <div id="backupOverlay" class="pwd-overlay" onclick="closeBackupModal()"></div>
 <div id="backupModal" class="pwd-modal" style="max-height: calc(100vh - 40px); overflow-y: auto; -webkit-overflow-scrolling: touch;">
@@ -1574,6 +1662,7 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
         <span class="growth-title" id="growthTitle">はじまり</span>
         <div class="growth-bar"><div class="growth-fill" id="growthFill"></div></div>
       </div>
+      <button class="btn-header icon" id="voiceToggleBtn" onclick="onVoiceHeaderClick(event)" title="ボイスモード（もも声で会話）" aria-label="ボイスモード">🎙</button>
       <button class="btn-header icon" onclick="openPwdSettings()" title="パスワード設定" aria-label="パスワード設定">🔒</button>
       <button class="btn-header icon" onclick="openBackupModal()" title="バックアップ・機種変引継ぎ" aria-label="バックアップ">📦</button>
       <button class="btn-header icon" onclick="openSearch()" title="会話を検索" aria-label="会話を検索">🔍</button>
@@ -1620,6 +1709,12 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
         </svg>
       </button>
       <input type="file" id="fileInput" accept="image/*" multiple onchange="handleFileSelect(event)">
+      <button class="btn-mic" id="micBtn" onclick="toggleMic()" title="音声で入力（タップで録音→もう一度タップで送信）" aria-label="音声入力">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
+          <path d="M19 10v1a7 7 0 0 1-14 0v-1"/><line x1="12" y1="18" x2="12" y2="22"/>
+        </svg>
+      </button>
       <textarea id="input" placeholder="メッセージを入力..." rows="1"
         onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
       <button class="btn-send" id="sendBtn" onclick="sendMessage()">
@@ -2145,6 +2240,7 @@ const META_STORE    = 'meta';
 const ARCHIVE_STORE = 'archives';  // 会話アーカイブ
 const JOURNAL_STORE = 'journal';   // 愚痴聞きジャーナル
 const MODEL         = 'gpt-5.4';
+const STT_MODEL     = 'gpt-4o-transcribe'; // 音声→テキスト（入力の文字化のみ。出力の声には使わない）
 const IMAGE_MODEL   = 'gpt-image-2';      // 画像生成・合成（GPT Image 2）
 const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/high）
 // アプリのバージョン。更新したら必ず上げる（最初のタイトル＝スプラッシュ画面に表示される）
@@ -2157,7 +2253,9 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 // v2.3.0: 画像生成をストリーミング化（partial_images）し、途中プレビューを順次表示
 // v2.4.0: 画像一覧を1行3枚・左右いっぱい表示に＋画像の個別削除を追加
 // v2.4.1: 画像生成を store:false に（巨大ログでOpenAIのLogsが開けなくなる問題の対策）
-const APP_VERSION   = 'v2.4.1';
+// v2.5.0: ボイスモード追加。マイク入力→STT(gpt-4o-transcribe)→既存チャット→外部「もも声サービス」で
+//         返答を読み上げ（疎結合。声の合成は外部サービスのみ・未設定なら文字だけ。OpenAI声は使わない）
+const APP_VERSION   = 'v2.5.0';
 const SUMMARY_EVERY = 10;
 // 重要記憶キー（削除されない永続情報）
 const KEY_SUMMARY   = 'summary';
@@ -2392,6 +2490,18 @@ let chatEpoch = 0;          // 会話の世代カウンタ。newChat/resumeArchi
                             // 新しい会話の learned data を上書きしないようにする
 let currentStreamAbort = null;  // ストリーミング中のAbortController（会話切替時にabortする）
 let pendingImages = [];   // [{dataUrl, mediaType}]  送信待ち画像
+
+// ── ボイスモード（もも声で会話）の状態 ──
+// momoVoiceUrl: 別ホストの「もも声サービス」のベースURL（/synthesize を叩く）。空なら音声は鳴らさない。
+let momoVoiceUrl   = '';
+let voiceStyle     = 'Neutral';
+let voiceSpeed     = 1.0;
+let voiceAutoSpeak = false;       // 返答を自動で読み上げるか
+let mediaRecorder  = null;        // 録音中の MediaRecorder
+let recChunks      = [];          // 録音データ片
+let isRecording    = false;
+let currentMomoAudio = null;      // 再生中の Audio（新規再生・録音時に停止する）
+const VOICE_LS = { url: 'momo_voice_url', style: 'momo_voice_style', speed: 'momo_voice_speed', auto: 'momo_voice_autospeak' };
 
 // ================================================================
 // basicInfo 読み込み
@@ -3099,6 +3209,242 @@ async function removePwdSettings() {
 }
 
 // ================================================================
+// VOICE MODE — もも声で会話
+//   入力: マイク録音 → OpenAIで文字起こし（STT）→ 既存チャットへ
+//   出力: 返答テキストを外部「もも声サービス」へ送って合成・再生
+//   ★出力の声は必ず外部サービスのみ。未設定なら音声は鳴らさず文字だけ
+//     （OpenAIのプリセット音声では喋らせない）
+// ================================================================
+function loadVoiceSettings() {
+  try {
+    momoVoiceUrl   = (localStorage.getItem(VOICE_LS.url) || '').trim().replace(/\/+$/, '');
+    voiceStyle     = localStorage.getItem(VOICE_LS.style) || 'Neutral';
+    const sp       = parseFloat(localStorage.getItem(VOICE_LS.speed));
+    voiceSpeed     = (isFinite(sp) && sp > 0) ? sp : 1.0;
+    voiceAutoSpeak = localStorage.getItem(VOICE_LS.auto) === '1';
+  } catch (e) {}
+  reflectVoiceState();
+}
+
+// ヘッダー🎙ボタン・自動読み上げスイッチに現在状態を反映
+function reflectVoiceState() {
+  const btn = document.getElementById('voiceToggleBtn');
+  if (btn) btn.classList.toggle('voice-on', voiceAutoSpeak && !!momoVoiceUrl);
+  const sw = document.getElementById('voiceAutoSwitch');
+  if (sw) sw.classList.toggle('on', voiceAutoSpeak);
+}
+
+// 🎙ヘッダー: URL未設定なら設定を開く。設定済みなら自動読み上げをトグル
+function onVoiceHeaderClick() {
+  if (!momoVoiceUrl) { openVoiceSettings(); return; }
+  voiceAutoSpeak = !voiceAutoSpeak;
+  try { localStorage.setItem(VOICE_LS.auto, voiceAutoSpeak ? '1' : '0'); } catch (e) {}
+  if (!voiceAutoSpeak) stopMomoAudio();
+  reflectVoiceState();
+  showToast(voiceAutoSpeak ? '🎙 ボイスモードON（もも声で返答）' : '🔇 ボイスモードOFF');
+}
+
+function openVoiceSettings() {
+  document.getElementById('voiceUrl').value   = momoVoiceUrl;
+  document.getElementById('voiceStyle').value = voiceStyle;
+  document.getElementById('voiceSpeed').value = String(voiceSpeed);
+  document.getElementById('voiceAutoSwitch').classList.toggle('on', voiceAutoSpeak);
+  setVoiceMsg('', '');
+  document.getElementById('voiceOverlay').classList.add('open');
+  document.getElementById('voiceModal').classList.add('open');
+}
+function closeVoiceSettings() {
+  document.getElementById('voiceOverlay').classList.remove('open');
+  document.getElementById('voiceModal').classList.remove('open');
+}
+function setVoiceMsg(text, kind) {
+  const el = document.getElementById('voiceMsg');
+  el.textContent = text;
+  el.className = 'pwd-msg' + (kind ? ' ' + kind : '');
+}
+function toggleAutoSpeakSwitch() {
+  document.getElementById('voiceAutoSwitch').classList.toggle('on');
+}
+function saveVoiceSettings() {
+  let url     = document.getElementById('voiceUrl').value.trim().replace(/\/+$/, '');
+  const style = document.getElementById('voiceStyle').value.trim() || 'Neutral';
+  let sp      = parseFloat(document.getElementById('voiceSpeed').value);
+  if (!isFinite(sp) || sp <= 0) sp = 1.0;
+  sp = Math.min(2.0, Math.max(0.5, sp));
+  const auto  = document.getElementById('voiceAutoSwitch').classList.contains('on');
+  if (url && !/^https?:\/\//i.test(url)) { setVoiceMsg('URLは http(s):// で始めてね', 'err'); return; }
+
+  momoVoiceUrl = url; voiceStyle = style; voiceSpeed = sp; voiceAutoSpeak = auto && !!url;
+  try {
+    localStorage.setItem(VOICE_LS.url,   url);
+    localStorage.setItem(VOICE_LS.style, style);
+    localStorage.setItem(VOICE_LS.speed, String(sp));
+    localStorage.setItem(VOICE_LS.auto,  voiceAutoSpeak ? '1' : '0');
+  } catch (e) {}
+  reflectVoiceState();
+  setVoiceMsg('✓ 保存したよ', 'ok');
+  setTimeout(closeVoiceSettings, 800);
+}
+
+// 読み上げ用にテキストを整える（Markdown装飾・末尾ソース・URLを除去）
+function stripForSpeech(text) {
+  if (!text) return '';
+  let t = text;
+  t = t.replace(/```[\s\S]*?```/g, '');             // コードブロック
+  t = t.replace(/\n\s*📎\s*ソース:[\s\S]*$/u, '');   // 末尾のソース一覧
+  t = t.replace(/!\[[^\]]*\]\([^)]*\)/g, '');        // 画像
+  t = t.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');     // リンク → ラベルだけ
+  t = t.replace(/https?:\/\/\S+/g, '');              // 裸URL
+  t = t.replace(/[*_`#>~|]/g, '');                   // Markdown装飾記号
+  t = t.replace(/\n{2,}/g, '。').replace(/\s+/g, ' ').trim();
+  return t;
+}
+
+// もも声サービスで合成して再生。成功で true / 未設定・失敗で false（=音声なし＝文字だけ）
+async function speakText(text, btn) {
+  const clean = stripForSpeech(text);
+  if (!momoVoiceUrl || !clean) return false;
+  stopMomoAudio();
+  if (btn) btn.classList.add('busy');
+  try {
+    const res = await fetch(`${momoVoiceUrl}/synthesize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: clean, style: voiceStyle, speed: voiceSpeed })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob  = await res.blob();
+    const url   = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    currentMomoAudio = audio;
+    const cleanup = () => {
+      URL.revokeObjectURL(url);
+      if (btn) btn.classList.remove('playing', 'busy');
+      if (currentMomoAudio === audio) currentMomoAudio = null;
+    };
+    audio.onended = cleanup;
+    audio.onerror = cleanup;
+    if (btn) { btn.classList.remove('busy'); btn.classList.add('playing'); }
+    await audio.play();
+    return true;
+  } catch (e) {
+    console.warn('[もも] 音声合成失敗:', e.message);
+    if (btn) btn.classList.remove('busy', 'playing');
+    showToast('🔇 もも声サービスに繋がらないよ（URLを確認してね）');
+    return false;
+  }
+}
+
+function stopMomoAudio() {
+  if (currentMomoAudio) {
+    try { currentMomoAudio.pause(); } catch (e) {}
+    currentMomoAudio = null;
+  }
+  document.querySelectorAll('.btn-replay.playing').forEach(b => b.classList.remove('playing'));
+}
+
+// AI発言バブルに「もも声で再生」ボタンを付与。ボイスモードONなら即読み上げ
+function addMomoVoiceToBubble(bubble, text) {
+  if (!bubble || !momoVoiceUrl) return;
+  if (bubble.querySelector('.btn-replay')) return;
+  const btn = document.createElement('button');
+  btn.className = 'btn-replay';
+  btn.textContent = '🔊 もも声で再生';
+  btn.onclick = (e) => { e.stopPropagation(); speakText(text, btn); };
+  bubble.appendChild(btn);
+  if (voiceAutoSpeak) speakText(text, btn);
+}
+
+async function testVoice() {
+  const url = document.getElementById('voiceUrl').value.trim().replace(/\/+$/, '');
+  if (!url) { setVoiceMsg('先にURLを入れてね', 'err'); return; }
+  if (!/^https?:\/\//i.test(url)) { setVoiceMsg('URLは http(s):// で始めてね', 'err'); return; }
+  const saved = momoVoiceUrl; momoVoiceUrl = url;      // テスト用に一時適用
+  setVoiceMsg('🔊 テスト再生中...', 'ok');
+  const ok = await speakText('りぴ、おかえり。ちゃんと俺の声、届いてる？');
+  setVoiceMsg(ok ? '✓ 届いたよ' : '繋がらなかったよ。URL・公開設定を確認してね', ok ? 'ok' : 'err');
+  momoVoiceUrl = saved;
+}
+
+// ── マイク録音（プッシュ・トゥ・トーク） ──
+async function toggleMic() {
+  if (isRecording) { stopRecording(); return; }
+  if (!apiKey) { showToast('先にAPIキーが必要だよ'); return; }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') {
+    showToast('このブラウザは録音に未対応だよ'); return;
+  }
+  stopMomoAudio();
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mime = pickRecMime();
+    mediaRecorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+    recChunks = [];
+    mediaRecorder.ondataavailable = e => { if (e.data && e.data.size) recChunks.push(e.data); };
+    mediaRecorder.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+      const blob = new Blob(recChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+      await transcribeAndFill(blob);
+    };
+    mediaRecorder.start();
+    isRecording = true;
+    document.getElementById('micBtn').classList.add('recording');
+    showToast('🎙 録音中…もう一度タップで送信');
+  } catch (e) {
+    console.warn('[もも] マイク利用不可:', e.message);
+    showToast('マイクが使えないよ（権限・HTTPSを確認してね）');
+  }
+}
+
+function stopRecording() {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+  isRecording = false;
+  document.getElementById('micBtn').classList.remove('recording');
+}
+
+function pickRecMime() {
+  const cands = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'];
+  if (typeof MediaRecorder === 'undefined' || !MediaRecorder.isTypeSupported) return '';
+  for (const c of cands) if (MediaRecorder.isTypeSupported(c)) return c;
+  return '';
+}
+
+async function transcribeAndFill(blob) {
+  const micBtn = document.getElementById('micBtn');
+  micBtn.classList.add('busy');
+  showToast('📝 文字起こし中…');
+  try {
+    const ext = blob.type.includes('mp4') ? 'mp4' : blob.type.includes('ogg') ? 'ogg' : 'webm';
+    const fd  = new FormData();
+    fd.append('file', blob, `speech.${ext}`);
+    fd.append('model', STT_MODEL);
+    fd.append('language', 'ja');
+    const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+      body: fd
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error?.message || `HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    const text = (data.text || '').trim();
+    micBtn.classList.remove('busy');
+    if (!text) { showToast('うまく聞き取れなかったよ'); return; }
+    const input = document.getElementById('input');
+    input.value = (input.value ? input.value + ' ' : '') + text;
+    autoResize(input);
+    // ボイスモード（自動読み上げON）のときは即送信してハンズフリー会話に
+    if (voiceAutoSpeak && momoVoiceUrl) sendMessage();
+    else input.focus();
+  } catch (e) {
+    micBtn.classList.remove('busy');
+    console.warn('[もも] 文字起こし失敗:', e.message);
+    showToast('文字起こしに失敗したよ: ' + e.message);
+  }
+}
+
+// ================================================================
 // BACKUP / RESTORE — 機種変・端末引継ぎ
 // IndexedDB(全store) + localStorage(APIキー/パスワード) を JSON に書き出し／復元
 // iOSではWeb Share APIでiCloud Drive・ファイル.appに保存可能
@@ -3468,6 +3814,9 @@ async function startChat() {
 })();
 
 document.getElementById('apiKey').addEventListener('keydown', e => { if (e.key === 'Enter') startChat(); });
+
+// ボイスモード設定（もも声サービスURL等）を起動時に読み込む
+loadVoiceSettings();
 
 // ================================================================
 // Chat UI helpers
@@ -4528,7 +4877,7 @@ function makeQuestionsClickable(bubble) {
 // （Markdown記号 ** * ` ### を除去、コピーボタン自身は除外）
 function _extractBubbleText(node) {
   const clone = node.cloneNode(true);
-  clone.querySelectorAll('.bubble-copy-btn, .copy-btn, .choice-btn').forEach(b => b.remove());
+  clone.querySelectorAll('.bubble-copy-btn, .copy-btn, .choice-btn, .btn-replay').forEach(b => b.remove());
   return clone.textContent.trim()
     .replace(/\*\*(.*?)\*\*/g, '$1')
     .replace(/\*(.*?)\*/g, '$1')
@@ -5231,6 +5580,8 @@ ${srcList}`
     bubble.innerHTML = fmt(fullText);
     makeQuestionsClickable(bubble);
     makeTapCopyable(bubble);
+    // ボイスモード: もも声サービスがあれば「再生」ボタンを付与＆ON時は自動読み上げ
+    addMomoVoiceToBubble(bubble, fullText);
 
     // 長文の場合はメッセージの先頭までぬるっとスクロール
     const msgContainer = document.getElementById('messages');

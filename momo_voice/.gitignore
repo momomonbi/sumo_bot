@@ -1,0 +1,16 @@
+# 秘密の設定・仮想環境・モデル・音声データはコミットしない
+.env
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# もも本人の録音・学習データ・学習済みモデルは絶対にコミットしない（プライバシー）
+data/
+inputs/
+model_assets/
+*.wav
+*.flac
+*.mp3
+*.safetensors
+*.pth
