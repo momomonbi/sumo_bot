@@ -12,6 +12,9 @@ resp  audio/wav （もも声で合成した音声バイナリ）
 この契約さえ満たせば中身のエンジンは何でも差し替え可能です。ここでは
 **無料・日本語が最も自然・声を自分で所有できる** Style-Bert-VITS2（以下 SBV2）を使います。
 
+> 💻 **Windows + NVIDIA GPU で全部ローカルで作る人は → [`WINDOWS_LOCAL.md`](./WINDOWS_LOCAL.md)**
+> （録音整形・学習・合成までローカル完結の具体手順）。本書はOS共通の全体像です。
+
 ```
 [index.html (ブラウザ)] --POST /synthesize--> [adapter.py (このフォルダ)] --/voice--> [Style-Bert-VITS2]
                          <----- audio/wav -----                          <-- wav --
