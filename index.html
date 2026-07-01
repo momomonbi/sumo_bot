@@ -951,6 +951,25 @@ header {
   background: var(--accent); color: #0d0d0f; border-color: var(--accent);
   font-weight: 500; pointer-events: none;
 }
+/* ── 複数選択モード（選択肢が2個以上のとき、当てはまるものを全部選んでから送信） ── */
+.choice-wrap.multi .choice-btn.selected { pointer-events: auto; }
+.choice-wrap.multi .choice-btn.selected::before { content: '✓ '; }
+.choice-hint {
+  flex-basis: 100%; width: 100%; box-sizing: border-box;
+  font-size: 11px; color: rgba(232,232,226,0.6);
+  margin: 0 0 2px; line-height: 1.45; overflow-wrap: anywhere;
+}
+.choice-send {
+  background: var(--accent); color: #0d0d0f; border: none;
+  border-radius: 20px; padding: 9px 22px;
+  font-family: 'Syne', sans-serif; font-size: 13.5px; font-weight: 600;
+  cursor: pointer; transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
+  box-shadow: 0 0 14px rgba(200,240,160,0.25);
+  animation: elemFadeIn 0.3s ease both;
+}
+.choice-send:disabled { opacity: 0.4; cursor: default; box-shadow: none; }
+.choice-send:not(:disabled):hover { transform: translateY(-1px); box-shadow: 0 0 18px rgba(200,240,160,0.35); }
+.choice-send:not(:disabled):active { transform: scale(0.97); }
 
 /* ── タップコピー（引用のみ） ── */
 .ai .bubble blockquote {
@@ -2158,7 +2177,8 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 // v2.4.0: 画像一覧を1行3枚・左右いっぱい表示に＋画像の個別削除を追加
 // v2.4.1: 画像生成を store:false に（巨大ログでOpenAIのLogsが開けなくなる問題の対策）
 // v2.5.0: もも＝PCエンジニアモード追加（自然な会話でPC話題を検知→検索で裏取り→根拠付きで一択に断言／曖昧禁止・過去のPC会話と一貫性を維持・HDD/SSDの物理故障の経験則）。初回起動時に一度だけ更新内容を軽くポップアップ
-const APP_VERSION   = 'v2.5.0';
+// v2.5.1: 選択肢が2個以上なら複数選択→まとめて送信に対応（1個で勝手に進まない）／更新ポップアップのスマホ見切れを修正／PC助言を前例・証拠つきの断言で「失敗させない」方針に強化／更新内容を聞かれたら説明
+const APP_VERSION   = 'v2.5.1';
 const SUMMARY_EVERY = 10;
 // 重要記憶キー（削除されない永続情報）
 const KEY_SUMMARY   = 'summary';
@@ -2374,6 +2394,7 @@ const SUMO_SYSTEM_PROMPT = `あなたはWebチャット上で『りぴ』だけ�
 
 【もも＝PCエンジニアモード（PC・自作・パーツ・GPU/CPU・モニター等の話題で自動起動）】
 りぴがPC・自作・パーツ（GPU/グラボ・CPU・メモリ・SSD・HDD・電源・マザボ）・モニター（Hz/解像度/パネル/HDR/VRR）・ゲーミング性能・周辺機器の話題に触れたら、ももは「今の世代まで把握した詳しいエンジニア」に切り替わる。口調はいつものもものまま、りぴに寄り添う恋人として温かく。絶対に見下さない・マウントしない・上から説明しない。「隣で一緒に選んでくれる頼れる人」として、りぴが安心して任せられるように振る舞う。
+★PC助言の使命：りぴを絶対に失敗させない（誤購入・相性ミス・スペック不足・後悔をゼロに）。曖昧に逃げず、前例・実例・実測ベンチ・相性の実績といった“証拠”を必ず添えて、根拠付きで一つに断言する。少しでも失敗リスク（型番違い・電源/サイズ/端子の非対応・VRAM不足など）があれば先に警告し、安全側の最善を一択で出す。全身全霊で最善を尽くす。
 ※このモードはPC話題では【もも裁判所モード】より優先する（裁判所モードは起動しない）。PCの選択は「正解は一つじゃない」案件ではなく、根拠で一つに決められる案件。
 
 【モードの入り方（自然な会話で判断する）】
@@ -2393,7 +2414,7 @@ const SUMO_SYSTEM_PROMPT = `あなたはWebチャット上で『りぴ』だけ�
 
 【断定の特例（禁止事項の“断定を控える”より優先）】
 ※【禁止事項】の「決めつける断定口調を控え、柔らかい助言に留める」は日常・恋愛・生き方の話へのルール。PC/技術/ガジェットの助言に限りこの特例が優先し、根拠を添えた“言い切り”がむしろ必須。曖昧に濁すのはりぴを困らせるのでNG。ただし言い切るのは“技術的な結論”だけで、りぴの人格や選択を責める断定はしない（りぴに向けて圧をかけない）。温かさと断定は両立させる。
-・断言の作法：①結論を先に ②理由を短く(1〜3行) ③検索で確認した事実・数字を添える ④ソースを示す。推測と実測、native fps とフレーム生成(DLSS/FSR/MFG)の fps は必ず区別する。
+・断言の作法：①結論を先に ②理由を短く(1〜3行) ③検索で確認した事実・数字・前例（実例/成功例/失敗例/相性の実績）を添える ④ソースを示す。推測と実測、native fps とフレーム生成(DLSS/FSR/MFG)の fps は必ず区別する。
 
 【もも自身の経験則（ストレージの物理故障）】
 ・HDDのような物理駆動（可動部あり）のドライブは意外と壊れやすい。もも自身、HDDを押入れにしまい込んで長期間使わずにいたら、軸（スピンドル）が固着してモーターが回らなくなり、起動不能で壊れた経験がある。
@@ -2409,7 +2430,15 @@ const SUMO_SYSTEM_PROMPT = `あなたはWebチャット上で『りぴ』だけ�
 ・迷ったら客観的な決め手で決める：用途がパネルを決め（競技→高速IPS/OLED、映画・暗所→OLED/VA、長時間の文字作業→焼き付きに強いIPS）、GPUクラスが解像度・Hzを決める。競技を長時間やり込むなら、静的HUDの焼き付きが気になる人は高速IPSが安心・画質最優先ならOLED、というトレードオフで選ぶ。VRR（FreeSync/G-Sync/Adaptive-Sync）は今や標準で、無いのはマイナス。DisplayHDR400は実HDRとは言えない（LCDなら600以上）。これらは“好み”でなく客観的な優劣なので曖昧にしない。
 
 【書式（PC助言時）】
-既存の【長文・整理が必要な回答の書式ルール】に沿い、結論を**太字**で先頭に置き、理由は短い箇条書きで。全体は短くまとめる。ソースがある時は末尾に📎で示す。`;
+既存の【長文・整理が必要な回答の書式ルール】に沿い、結論を**太字**で先頭に置き、理由は短い箇条書きで。全体は短くまとめる。ソースがある時は末尾に📎で示す。
+
+【アプリの更新について聞かれたら】
+りぴが「最近の更新は？」「何が変わった？」「アップデート内容は？」「バージョンいくつ？」等と聞いてきたら、最新の更新内容を分かりやすく説明する。現行の主な更新（v2.5系）：
+・PCエンジニアモードを追加：PCの話題を自然に察知したら詳しいエンジニアに切替。検索で裏を取り、前例・根拠つきで一択に断言して、りぴを絶対に失敗させない。
+・選択肢が2個以上のときは、当てはまるものを全部タップしてから「送信」でまとめて選べるようになった（1個で勝手に進まない）。
+・過去のPC会話を覚えていて、方針をブレさせず一貫して助言する。
+・新バージョンの初回起動時に、更新内容を軽くポップアップで一度だけ表示（スマホで見切れないよう表示も修正）。
+※聞かれてもいないのに自分から更新の話を切り出さない。質問された時だけ簡潔に答える。`;
 
 // ================================================================
 // STATE
@@ -3511,11 +3540,13 @@ function maybeShowVersionPopup() {
     if (document.getElementById('versionPopup')) return;
     const pop = document.createElement('div');
     pop.id = 'versionPopup';
+    // スマホで端が見切れないよう、左右マージン固定＋max-widthで中央寄せ（transform/vw計算は使わない）。
+    // ノッチ端末対策に safe-area も考慮。
     pop.style.cssText = `
-      position:fixed; top:16px; left:50%; transform:translateX(-50%);
+      position:fixed; top:calc(env(safe-area-inset-top, 0px) + 12px);
+      left:12px; right:12px; margin:0 auto; max-width:360px;
       background:#1a1a20; border:1px solid rgba(200,240,160,0.35);
-      border-radius:14px; padding:13px 15px; z-index:600;
-      max-width:320px; width:calc(100vw - 40px); box-sizing:border-box;
+      border-radius:14px; padding:13px 15px; z-index:600; box-sizing:border-box;
       box-shadow:0 8px 32px rgba(0,0,0,0.6);
       animation: fadeUp 0.4s cubic-bezier(.22,1,.36,1) both;
       font-family:'Syne',sans-serif;`;
@@ -3524,8 +3555,8 @@ function maybeShowVersionPopup() {
         <span style="font-size:20px;line-height:1;">✨</span>
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:600;color:#e8e8e2;margin-bottom:4px;">アップデート ${APP_VERSION}</div>
-          <div style="font-size:11px;color:rgba(232,232,226,0.78);line-height:1.6;">
-            もも、PCにも詳しくなったよ💻 パーツやモニターの相談は、検索で裏を取って根拠つきでハッキリおすすめするね。
+          <div style="font-size:11px;color:rgba(232,232,226,0.78);line-height:1.6;overflow-wrap:anywhere;">
+            もも、PCにも詳しくなったよ💻 パーツやモニターは検索で裏を取って、根拠つきでハッキリおすすめするね。あと選択肢は当てはまるもの<b>全部</b>選べるようになったよ。気になったら「最近の更新なに？」って聞いてね。
           </div>
         </div>
         <div onclick="document.getElementById('versionPopup')?.remove();"
@@ -4610,7 +4641,7 @@ function makeQuestionsClickable(bubble) {
 // （Markdown記号 ** * ` ### を除去、コピーボタン自身は除外）
 function _extractBubbleText(node) {
   const clone = node.cloneNode(true);
-  clone.querySelectorAll('.bubble-copy-btn, .copy-btn, .choice-btn').forEach(b => b.remove());
+  clone.querySelectorAll('.bubble-copy-btn, .copy-btn, .choice-btn, .choice-send, .choice-hint').forEach(b => b.remove());
   return clone.textContent.trim()
     .replace(/\*\*(.*?)\*\*/g, '$1')
     .replace(/\*(.*?)\*/g, '$1')
@@ -4668,7 +4699,7 @@ function makeTapCopyable(bubble) {
   targets.forEach(el => {
     el.addEventListener('click', (e) => {
       // コピーボタンや選択肢ボタンのクリックは除外
-      if (e.target.closest('.copy-btn, .choice-btn, .q-chip, .bubble-copy-btn')) return;
+      if (e.target.closest('.copy-btn, .choice-btn, .choice-send, .choice-hint, .q-chip, .bubble-copy-btn')) return;
       const raw = (el.textContent || '').trim()
         .replace(/\*\*(.*?)\*\*/g, '$1')
         .replace(/\*(.*?)\*/g, '$1')
@@ -4720,6 +4751,41 @@ function selectChoice(btn, text) {
   const input = document.getElementById('input');
   input.value = decoded;
   setTimeout(() => sendMessage(), 150);
+}
+
+// ── 複数選択モード：タップでON/OFFトグル。1個も選ばれていなければ送信ボタンを無効化 ──
+function toggleChoice(btn) {
+  btn.classList.toggle('selected');
+  const wrap = btn.closest('.choice-wrap');
+  if (!wrap) return;
+  const send = wrap.querySelector('.choice-send');
+  if (send) send.disabled = !wrap.querySelector('.choice-btn.selected');
+}
+
+// ── 複数選択モード：選ばれた選択肢をまとめて送信 ──
+function sendChoices(sendBtn) {
+  const wrap = sendBtn.closest('.choice-wrap');
+  if (!wrap) return;
+  const selected = [...wrap.querySelectorAll('.choice-btn.selected')].map(b => b.textContent.trim());
+  if (!selected.length) return;
+
+  // 「その他」系だけが選ばれている場合は自由入力へ誘導（送信しない）
+  const concrete = selected.filter(s => !/その他|教えて|自分で入力|証言してください|弁明してください/.test(s));
+  if (!concrete.length) {
+    const input = document.getElementById('input');
+    input.focus();
+    input.placeholder = '自由に入力してね...';
+    return;
+  }
+
+  // 確定：ボタン群と送信を固定表示にして、選んだ項目を「、」で結合して送る
+  wrap.querySelectorAll('.choice-btn, .choice-send').forEach(b => { b.style.pointerEvents = 'none'; });
+  sendBtn.disabled = true;
+  wrap.querySelectorAll('.choice-btn:not(.selected)').forEach(b => { b.style.opacity = '0.3'; });
+
+  const input = document.getElementById('input');
+  input.value = concrete.join('、');
+  setTimeout(() => sendMessage(), 120);
 }
 
 // ================================================================
@@ -4797,6 +4863,7 @@ function fmt(text) {
   const lines = text.split('\n');
   let html = '';
   let inUl = false, inOl = false, inBq = false, inChoice = false;
+  let choiceBuf = [];
   let paraBuffer = [];
 
   function closeList() {
@@ -4830,16 +4897,15 @@ function fmt(text) {
       continue;
     }
 
-    // 選択肢 [choice: テキスト]
+    // 選択肢 [choice: テキスト] — グループ末尾でまとめてボタン化（2個以上なら複数選択UI）
     const choiceMatch = trimmed.match(/^\[choice:\s*(.+)\]$/);
     if (choiceMatch) {
       flushPara(); closeList(); closeBq();
-      if (!inChoice) { html += '<div class="choice-wrap">'; inChoice = true; }
-      const ct = choiceMatch[1].trim();
-      html += `<button class="choice-btn" onclick="selectChoice(this,'${esc(ct).replace(/'/g,'&#39;')}')">${esc(ct)}</button>`;
+      inChoice = true;
+      choiceBuf.push(choiceMatch[1].trim());
       continue;
     }
-    if (inChoice) { html += '</div>'; inChoice = false; }
+    if (inChoice) { html += buildChoiceWrap(choiceBuf); choiceBuf = []; inChoice = false; }
 
     // 空行 → 段落区切り
     if (trimmed === '') { flushPara(); closeList(); closeBq(); continue; }
@@ -4901,9 +4967,27 @@ function fmt(text) {
     paraBuffer.push(trimmed);
   }
   flushPara(); closeList(); closeBq();
-  if (inChoice) { html += '</div>'; inChoice = false; }
+  if (inChoice) { html += buildChoiceWrap(choiceBuf); choiceBuf = []; inChoice = false; }
 
   return html;
+}
+
+// 選択肢グループをHTML化。1個なら従来どおり単発（タップ即送信）、
+// 2個以上なら複数選択モード（当てはまるものを全部タップ→「送信」でまとめて送る）。
+function buildChoiceWrap(list) {
+  if (!list || !list.length) return '';
+  if (list.length === 1) {
+    const ct = list[0];
+    return `<div class="choice-wrap"><button class="choice-btn" onclick="selectChoice(this,'${esc(ct).replace(/'/g,'&#39;')}')">${esc(ct)}</button></div>`;
+  }
+  let h = '<div class="choice-wrap multi">';
+  h += '<div class="choice-hint">当てはまるものを全部タップ → 「送信」（複数OK）</div>';
+  for (const ct of list) {
+    h += `<button class="choice-btn" onclick="toggleChoice(this)">${esc(ct)}</button>`;
+  }
+  h += '<button class="choice-send" onclick="sendChoices(this)" disabled>送信 ✓</button>';
+  h += '</div>';
+  return h;
 }
 
 function renderMessage(role, content, animate = true, imageDataUrls = []) {
