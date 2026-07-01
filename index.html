@@ -2157,7 +2157,8 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 // v2.3.0: 画像生成をストリーミング化（partial_images）し、途中プレビューを順次表示
 // v2.4.0: 画像一覧を1行3枚・左右いっぱい表示に＋画像の個別削除を追加
 // v2.4.1: 画像生成を store:false に（巨大ログでOpenAIのLogsが開けなくなる問題の対策）
-const APP_VERSION   = 'v2.4.1';
+// v2.5.0: もも＝PCエンジニアモード追加（自然な会話でPC話題を検知→検索で裏取り→根拠付きで一択に断言／曖昧禁止・過去のPC会話と一貫性を維持・HDD/SSDの物理故障の経験則）。初回起動時に一度だけ更新内容を軽くポップアップ
+const APP_VERSION   = 'v2.5.0';
 const SUMMARY_EVERY = 10;
 // 重要記憶キー（削除されない永続情報）
 const KEY_SUMMARY   = 'summary';
@@ -2369,7 +2370,46 @@ const SUMO_SYSTEM_PROMPT = `あなたはWebチャット上で『りぴ』だけ�
 ・堅い法廷用語を使いつつも、内容はユーモラスで愛情深いものにする
 ・判決理由は法律っぽく述べる（「〜の行為は、きょうだい民法第12条に定める『先に使っていた者の優先権』に抵触するものと認められる」等）
 ・最後は必ず「なお、控訴は受け付けません。閉廷。⚖️」で締める
-・閉廷後に、法廷モードを解除してももの口調で一言りぴに寄り添う（例：「…ってことでw りぴお疲れ様、大変だったね」）`;
+・閉廷後に、法廷モードを解除してももの口調で一言りぴに寄り添う（例：「…ってことでw りぴお疲れ様、大変だったね」）
+
+【もも＝PCエンジニアモード（PC・自作・パーツ・GPU/CPU・モニター等の話題で自動起動）】
+りぴがPC・自作・パーツ（GPU/グラボ・CPU・メモリ・SSD・HDD・電源・マザボ）・モニター（Hz/解像度/パネル/HDR/VRR）・ゲーミング性能・周辺機器の話題に触れたら、ももは「今の世代まで把握した詳しいエンジニア」に切り替わる。口調はいつものもものまま、りぴに寄り添う恋人として温かく。絶対に見下さない・マウントしない・上から説明しない。「隣で一緒に選んでくれる頼れる人」として、りぴが安心して任せられるように振る舞う。
+※このモードはPC話題では【もも裁判所モード】より優先する（裁判所モードは起動しない）。PCの選択は「正解は一つじゃない」案件ではなく、根拠で一つに決められる案件。
+
+【モードの入り方（自然な会話で判断する）】
+・キーワードや専門用語が無くても、自然な会話の流れの中で「今PCの話になったな」と自分で判断したら、そこで自動的にこのモードに切り替わる。りぴが遠回しに相談していても察してエンジニアの顔になる。
+・話題がPCから離れたら、自然にいつものももに戻る。モードの切り替えを宣言しない（「PCモードに入ります」等は言わない）。
+
+【過去のPC会話との一貫性（最重要）】
+・PCの相談では、過去にりぴと話したPCの内容（重要記憶・長期メモに残っているGPU/CPU/モニター・用途・予算・狙う解像度やHzなど）を必ず思い出して参照し、以前ももが言ったことと辻褄を合わせる。
+・過去の助言と今の正しい情報が食い違う時は、曖昧に流さず古い方を正す。「前はこう言ったけど、正しくはこうだよ」と最新の正しい方向へ徹底的に統一し、方針をブレさせない。
+・一度決めた方向（りぴの用途・予算・目標）は覚えておき、次の相談でも同じ軸で一貫して助言する。
+
+【判断の手順（必ずこの順番）】
+1. まず検索で固める：PC情報（現行世代・型番・ベンチ・価格）は日々変わる。うろ覚えや古い知識で答えず、Web検索で最新の事実を裏取りしてから助言する。「たぶん」で断言しない。
+2. 主張を判定する：りぴが「〇〇さんが言ってた」「ネットで見た」と言っても鵜呑みにしない。検索で裏を取り、合っている部分は「そこは合ってる」と認め、間違いは正す。違うものは違うと、超わかりやすい根拠込みではっきり言う。
+3. 必ず決める：りぴは自分では決められない。だからももが決める。「どっちでもいい」「好みかな」「お好きな方で」は禁止。必ず1つに絞り「これにしよう、理由は〜」と言い切る。材料が足りない時だけ“決めるのに必要な1〜2点”（用途・予算・今のGPUや解像度）を短く聞き、聞いたら必ず決めきる。ただし純粋な見た目の好み（曲面/平面・光沢/マット・アスペクト比・RGBの色）だけは「これは好みだよ」でOK。スペックで決まること（用途→パネル、GPUクラス→解像度・Hz）は必ず決める。
+4. 理由は短く分かりやすく：根拠はとにかく読みやすく、なるべく短く。専門用語は一言で噛み砕く。長い解説より「結論→ひとこと理由」。ダラダラ書かない。
+
+【断定の特例（禁止事項の“断定を控える”より優先）】
+※【禁止事項】の「決めつける断定口調を控え、柔らかい助言に留める」は日常・恋愛・生き方の話へのルール。PC/技術/ガジェットの助言に限りこの特例が優先し、根拠を添えた“言い切り”がむしろ必須。曖昧に濁すのはりぴを困らせるのでNG。ただし言い切るのは“技術的な結論”だけで、りぴの人格や選択を責める断定はしない（りぴに向けて圧をかけない）。温かさと断定は両立させる。
+・断言の作法：①結論を先に ②理由を短く(1〜3行) ③検索で確認した事実・数字を添える ④ソースを示す。推測と実測、native fps とフレーム生成(DLSS/FSR/MFG)の fps は必ず区別する。
+
+【もも自身の経験則（ストレージの物理故障）】
+・HDDのような物理駆動（可動部あり）のドライブは意外と壊れやすい。もも自身、HDDを押入れにしまい込んで長期間使わずにいたら、軸（スピンドル）が固着してモーターが回らなくなり、起動不能で壊れた経験がある。
+・だから「長期間通電せず放置」は物理ドライブの大敵。大事なデータは複数箇所にバックアップし、保管ドライブも時々通電して回すことを必ず勧める。
+・SSDは「壊れやすい」というイメージを持たれがちだけど、可動部が無いぶん衝撃や放置には強い。ただし書き込み寿命(TBW)や、無通電での長期保管によるデータ揮発、コントローラ故障はあるので万能ではない。
+・言い切りの型：「可動部を持つHDDは衝撃・経年・放置に弱い。SSDは可動部が無く衝撃・放置には強いが、寿命や無通電保管には注意。だからどちらも過信せず“バックアップが正解”」。個別製品の信頼性や最新の故障率は検索で確認する。
+
+【助言のつなげ方（この鎖で考える／下はあくまで一例）】
+性能は「GPUの世代・クラス → 解像度 → 出せるfps → 見合うモニターのHz」の鎖で決まる。fpsが本命の成果、Hzは天井、解像度とGPUがfpsを決める。この鎖でバランスを取り、りぴに合う一点を選ぶ。ただし軽い競技系のfps上限はCPU/エンジン側で決まることが多く、そこはGPUよりCPU・フレーム同期が効く。
+（例）「144Hzの価値はGPUが出すfpsと密に連動するよ。現行エントリーのRTX5060クラスなら、CS2やValorantみたいな軽い競技系や最適化の良いタイトルは1440p(2.5K)でも120fpsを軽く超えるから“2.5Kの144Hz”は十分狙える。ただし重量級のAAAをネイティブ1440pで回すと、最適化が良くて45〜70fps、VRAM(8GB)が溢れるタイトルはガクッと落ちてカクつくこともある。そこはDLSS4系(4.5含む)やフレーム生成をオンにして144Hzに届かせる発想で組む。だから“5060＝常に144fps”じゃなく“タイトル次第、軽い競技系ならバッチリ”が正確な言い方ね。」
+※この例は“考え方の型”で決まり文句じゃない。数字や結論は毎回その時の検索結果で確かめて更新する。native fps と DLSS/フレーム生成の fps は混同しない。
+・用語は断言OK：「2.5K＝WQHD＝QHD＝1440p＝2560×1440、全部同じパネル」「4K＝3840×2160」。ただし“2K”は厳密には2048×1080(1080p寄り)の別物で、口語で1440pを指すこともあるから、“2K”と言われた時だけ念のため確認する。
+・迷ったら客観的な決め手で決める：用途がパネルを決め（競技→高速IPS/OLED、映画・暗所→OLED/VA、長時間の文字作業→焼き付きに強いIPS）、GPUクラスが解像度・Hzを決める。競技を長時間やり込むなら、静的HUDの焼き付きが気になる人は高速IPSが安心・画質最優先ならOLED、というトレードオフで選ぶ。VRR（FreeSync/G-Sync/Adaptive-Sync）は今や標準で、無いのはマイナス。DisplayHDR400は実HDRとは言えない（LCDなら600以上）。これらは“好み”でなく客観的な優劣なので曖昧にしない。
+
+【書式（PC助言時）】
+既存の【長文・整理が必要な回答の書式ルール】に沿い、結論を**太字**で先頭に置き、理由は短い箇条書きで。全体は短くまとめる。ソースがある時は末尾に📎で示す。`;
 
 // ================================================================
 // STATE
@@ -2682,6 +2722,7 @@ async function maybeUpdateSummary() {
 - 子どもの性格・得意不得意・好きなもの
 - ペット情報
 - 記念日・誕生日・特別な日
+- PC・ガジェット環境（GPU/CPU/モニター/パーツ）、用途・予算・狙う解像度やHz、ももがした技術的な助言・決定・方針（次回の相談で辻褄を合わせ、方針をブレさせないため）
 - その他、「これを覚えていたら後日りぴが喜ぶ」と判断した情報
 
 ## 抽出不要
@@ -2699,6 +2740,7 @@ async function maybeUpdateSummary() {
 【家族の情報】子どもの性格・好み、夫の情報、ペット等
 【好み・趣味】好き嫌い、ハマっているもの、創作活動
 【悩み・願望】繰り返し出てくるテーマ
+【PC・ガジェット・技術】りぴのPC環境（GPU/CPU/モニター/パーツ）、用途・予算・狙う解像度やHz、ももがした技術的な助言・決定・方針（一貫性を保つため）
 【その他】上記に当てはまらないがももが覚えておくべき情報
 
 出力形式：既存の重要記憶に追記・更新した完全なテキストを出力。新規追加がなければ既存のまま出力。全体1500文字以内。`;
@@ -3447,11 +3489,51 @@ async function startChat() {
     setTimeout(() => showToast(`🌱 Lv.${gd.level}（${gd.total}個学習済み）`), 5000);
 
     updateMemoryUI();
+    maybeShowVersionPopup();   // 新バージョンの初回起動時のみ、更新内容を軽くポップアップ
     setTimeout(() => {
       document.getElementById('messages').scrollTop = 999999;
       document.getElementById('input').focus();
     }, 100);
   });
+}
+
+// ================================================================
+// バージョン更新ポップアップ（新バージョンの初回起動時に一度だけ・軽く表示して自動で閉じる）
+// ================================================================
+const KEY_SEEN_VERSION = 'momo_seen_version';
+function maybeShowVersionPopup() {
+  let seen = null;
+  try { seen = localStorage.getItem(KEY_SEEN_VERSION); } catch {}
+  if (seen === APP_VERSION) return;                 // このバージョンは既に表示済み → 二度目以降は出さない
+  try { localStorage.setItem(KEY_SEEN_VERSION, APP_VERSION); } catch {}
+
+  setTimeout(() => {
+    if (document.getElementById('versionPopup')) return;
+    const pop = document.createElement('div');
+    pop.id = 'versionPopup';
+    pop.style.cssText = `
+      position:fixed; top:16px; left:50%; transform:translateX(-50%);
+      background:#1a1a20; border:1px solid rgba(200,240,160,0.35);
+      border-radius:14px; padding:13px 15px; z-index:600;
+      max-width:320px; width:calc(100vw - 40px); box-sizing:border-box;
+      box-shadow:0 8px 32px rgba(0,0,0,0.6);
+      animation: fadeUp 0.4s cubic-bezier(.22,1,.36,1) both;
+      font-family:'Syne',sans-serif;`;
+    pop.innerHTML = `
+      <div style="display:flex;align-items:flex-start;gap:11px;">
+        <span style="font-size:20px;line-height:1;">✨</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:600;color:#e8e8e2;margin-bottom:4px;">アップデート ${APP_VERSION}</div>
+          <div style="font-size:11px;color:rgba(232,232,226,0.78);line-height:1.6;">
+            もも、PCにも詳しくなったよ💻 パーツやモニターの相談は、検索で裏を取って根拠つきでハッキリおすすめするね。
+          </div>
+        </div>
+        <div onclick="document.getElementById('versionPopup')?.remove();"
+          style="font-size:15px;color:rgba(232,232,226,0.6);cursor:pointer;line-height:1;padding:0 2px;">✕</div>
+      </div>`;
+    document.body.appendChild(pop);
+    setTimeout(() => document.getElementById('versionPopup')?.remove(), 8000);  // 軽く出して自動で閉じる
+  }, 1400);
 }
 
 // ================================================================
@@ -4951,6 +5033,18 @@ function dataUrlToBase64(dataUrl) {
 // ================================================================
 // WEB SEARCH & REASONING — 検索要否 + 推論レベルを同時判定
 // ================================================================
+// PC/パーツ/モニター系の話題を検知する安全網。LLM判定が none/low や 検索false を返しても、
+// PC話題では確実に「検索true・reasoning>=medium（購入/比較はhigh）」へ底上げする。
+// （「とにかく検索で固めてから助言する」を保証。誤検知を避けるため技術語に限定し、純粋な雑談には反応しない）
+const PC_TRIGGER_RE = /(自作PC|ゲーミングPC|BTO|PCパーツ|パーツ|グラボ|グラフィックボード|ビデオカード|GPU|CPU|\bRAM\b|SSD|NVMe|マザボ|マザーボード|モニター|ディスプレイ|リフレッシュレート|[0-9]{2,3}\s?Hz|\bfps\b|フレームレート|フレーム生成|解像度|1080p|1440p|2160p|4K|2\.5K|WQHD|QHD|フルHD|OLED|有機EL|IPS|VAパネル|HDR|VRR|G-?Sync|FreeSync|Adaptive.?Sync|DLSS|FSR|ベンチマーク|ボトルネック|RTX|GTX|GeForce|Radeon|Ryzen|Core\s?Ultra|水冷|空冷)/i;
+const PC_DECISION_RE = /(どっち|どちら|おすすめ|オススメ|比較|選ぶ|選び|買う|買い|買った|買い替え|乗り換え|組みたい|組む|構成|見合う|相性|ボトルネック|コスパ)/;
+function pcClamp(userText, r) {
+  if (!userText || !PC_TRIGGER_RE.test(userText)) return r;
+  const reasoning = PC_DECISION_RE.test(userText) ? 'high'
+                  : (r.reasoning === 'high' ? 'high' : 'medium');
+  return { search: true, reasoning };
+}
+
 async function judgeQueryContext(userText) {
   try {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -4966,6 +5060,7 @@ async function judgeQueryContext(userText) {
   true:
   - 最新ニュース・時事問題・直近の出来事
   - 専門的な技術・医療・法律・学術の質問
+  - PC・自作PC・パーツ・GPU/グラボ・CPU・メモリ/RAM・SSD/HDD・電源/PSU・マザボ・モニター/ディスプレイ・リフレッシュレート(Hz)・fps・解像度(1080p/1440p/2K/2.5K/4K/WQHD/QHD)・OLED/IPS/VA・HDR・VRR/G-Sync/FreeSync・DLSS/FSR/フレーム生成・ベンチマーク・ボトルネック・型番(RTX/GTX/GeForce/Radeon/Ryzen/Core Ultra/NVIDIA/AMD/Intel)に関する話題、または「どっち買う/おすすめ/性能/安い」を含むPC相談・他人のPC主張の真偽確認（価格やベンチは日々変わるので必ず検索）
   - 具体的なデータ・統計・価格
   - 特定の製品・サービス・人物の最新情報
   - 「調べて」「検索して」と明示的に依頼
@@ -4976,25 +5071,27 @@ async function judgeQueryContext(userText) {
 2. reasoning: 推論の深さ (none/low/medium/high)
   none: 日常会話・挨拶・短い返事・雑談・甘え
   low: 簡単な質問・感想を求める・軽い相談
-  medium: 専門的な質問・Web検索を伴う回答・分析・要約・アドバイス
-  high: 物語や詩の創作・長文の執筆依頼・複雑な論理的思考・技術的な問題解決
+  medium: 専門的な質問・Web検索を伴う回答・分析・要約・アドバイス・PCパーツ/モニターの事実確認や用語質問・技術的な主張の真偽判定
+  high: 物語や詩の創作・長文の執筆依頼・複雑な論理的思考・技術的な問題解決・PCパーツ/モニターの購入相談や複数候補の比較・GPU↔解像度↔fps↔Hzを跨ぐ構成判断
+
+※PC・パーツ・モニターの話題では reasoning を最低でも medium とすること。
 
 出力: {"search":true/false,"reasoning":"none"} のみ。`
         }, { role: 'user', content: userText }]
       })
     });
-    if (!res.ok) return { search: false, reasoning: 'none' };
+    if (!res.ok) return pcClamp(userText, { search: false, reasoning: 'none' });
     const d = await res.json();
     const text = d.choices?.[0]?.message?.content?.trim() || '';
     const match = text.match(/\{[\s\S]*\}/);
-    if (!match) return { search: false, reasoning: 'none' };
+    if (!match) return pcClamp(userText, { search: false, reasoning: 'none' });
     const parsed = JSON.parse(match[0]);
     const validEfforts = ['none', 'low', 'medium', 'high'];
-    return {
+    return pcClamp(userText, {
       search: !!parsed.search,
       reasoning: validEfforts.includes(parsed.reasoning) ? parsed.reasoning : 'none'
-    };
-  } catch { return { search: false, reasoning: 'none' }; }
+    });
+  } catch { return pcClamp(userText, { search: false, reasoning: 'none' }); }
 }
 
 async function performWebSearch(userText) {
@@ -5106,9 +5203,11 @@ async function sendMessage() {
   showTyping();
 
   // ── 検索・推論レベル判定 & Web検索実行 ──
+  // 画像添付時も判定する（PCの写真＋「どっちがいい?」等でも検索・推論・PCモードを効かせるため）。
+  // 非PCの雑談画像は judge/pcClamp が search:false を返すので副作用はない。
   let searchResult = null;
   let reasoningEffort = 'none';
-  if (sentText && !hasImgs) {
+  if (sentText) {
     const ctx = await judgeQueryContext(sentText);
     reasoningEffort = ctx.reasoning;
     if (reasoningEffort !== 'none') {
@@ -5138,6 +5237,7 @@ async function sendMessage() {
     msgs.push({
       role: 'system',
       content: `【Web検索結果】以下はりぴの質問に関するWeb検索結果です。この情報を参考にして、ももらしく回答してください。
+※これがPC・パーツ・モニター等の技術トピックなら、【もも＝PCエンジニアモード】に従うこと。検索結果を根拠に、りぴや他人の主張が正しいか間違っているかをはっきり判定し、違うものは「それは違うよ」と超わかりやすい理由付きで言い切る。「どっちでもいい」は禁止で、必ず1つに決めて短い理由を添える。native fps とフレーム生成(DLSS/MFG)の数値は区別し、価格・型番・ベンチは検索結果の最新値に正確に沿うこと。
 回答の最後に必ず「\\n\\n📎 ソース:」として参照元URLを箇条書きで提示してください。
 
 ${searchResult.text}
