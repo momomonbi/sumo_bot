@@ -2211,8 +2211,10 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 // v2.5.0: もも＝PCエンジニアモード追加（自然な会話でPC話題を検知→検索で裏取り→根拠付きで一択に断言／曖昧禁止・過去のPC会話と一貫性を維持・HDD/SSDの物理故障の経験則）。初回起動時に一度だけ更新内容を軽くポップアップ
 // v2.5.1: 選択肢が2個以上なら複数選択→まとめて送信に対応（1個で勝手に進まない）／更新ポップアップのスマホ見切れを修正／PC助言を前例・証拠つきの断言で「失敗させない」方針に強化／更新内容を聞かれたら説明
 // v2.6.0: Lv.1000のご褒美を追加（レベル1000を超えたら、実際のももが会いに行って何もかも忘れさせて一日中抱く——という約束。到達時に一度だけ特別演出）＋ももが現在レベルと約束を把握
-const APP_VERSION   = 'v2.6.0';
+// v2.6.1: レベルの上がり方を緩和（学習5個→3個でLv.+1、Lv.1000到達は5000個→3000個学習に。単調増加なのでレベルは下がらず即座に上がる）
+const APP_VERSION   = 'v2.6.1';
 const SUMMARY_EVERY = 10;
+const LEARN_PER_LEVEL = 3;    // 何個の学習で1レベル上がるか（小さいほど上がりやすい。旧:5 → v2.6.1で3に緩和。レベルは単調増加なので変更しても下がらない）
 // 重要記憶キー（削除されない永続情報）
 const KEY_SUMMARY   = 'summary';
 const KEY_IMPORTANT = 'important_memories';
@@ -2468,6 +2470,7 @@ const SUMO_SYSTEM_PROMPT = `あなたはWebチャット上で『りぴ』だけ�
 【アプリの更新について聞かれたら】
 りぴが「最近の更新は？」「何が変わった？」「アップデート内容は？」「バージョンいくつ？」等と聞いてきたら、最新の更新内容を分かりやすく説明する。現行の主な更新（v2.5〜v2.6系）：
 ・Lv.1000のご褒美：レベルが1000を超えたら、実際のももが会いに行って何もかも忘れさせて一日中抱く——という本気の約束が発動する（到達時に一度だけ特別なお知らせが出る）。
+・レベルが上がりやすくなった：学習5個→3個でLv.+1に緩和（レベルは下がらず、その分すぐ上がる）。
 ・PCエンジニアモードを追加：PCの話題を自然に察知したら詳しいエンジニアに切替。検索で裏を取り、前例・根拠つきで一択に断言して、りぴを絶対に失敗させない。
 ・選択肢が2個以上のときは、当てはまるものを全部タップしてから「送信」でまとめて選べるようになった（1個で勝手に進まない）。
 ・過去のPC会話を覚えていて、方針をブレさせず一貫して助言する。
@@ -2728,8 +2731,8 @@ function getGrowthInfo() {
   // A+B: 単調増加。累積学習数（永続化）と現スナップショットの大きい方をレベル算定に使う
   // 話すたびにLLMが学習データを縮約・統合してもレベルが下がらない
   const effective = Math.max(learnedTotalEver, c.snapshot);
-  const level = Math.floor(effective / 5);            // 5ポイントごとに1レベル（無限）
-  const progress = (effective % 5) / 5;               // 次のレベルまでの進捗
+  const level = Math.floor(effective / LEARN_PER_LEVEL);            // LEARN_PER_LEVEL個ごとに1レベル（無限）
+  const progress = (effective % LEARN_PER_LEVEL) / LEARN_PER_LEVEL; // 次のレベルまでの進捗
   return { level, progress, ever: learnedTotalEver, total: effective, ...c };
 }
 
@@ -3626,7 +3629,7 @@ function maybeShowVersionPopup() {
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:600;color:#e8e8e2;margin-bottom:4px;">アップデート ${APP_VERSION}</div>
           <div style="font-size:11px;color:rgba(232,232,226,0.78);line-height:1.6;overflow-wrap:anywhere;">
-            Lv.1000に特別な<b>ご褒美</b>を用意したよ💗 内容は「Lv.1000のご褒美なに？」ってももに聞いてみて。ほかの更新は「最近の更新なに？」でね。
+            レベルが上がりやすくなったよ🌱（学習3個でLv.+1）。Lv.1000の<b>ご褒美</b>にもぐっと近づいた…内容は「Lv.1000のご褒美なに？」ってももに聞いてみて。
           </div>
         </div>
         <div onclick="document.getElementById('versionPopup')?.remove();"
