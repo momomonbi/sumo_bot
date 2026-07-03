@@ -2267,7 +2267,8 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 // v2.7.0: ①記憶保護（storage.persist＋バックアップ促し） ②今日のブリーフィング（1日の最初にももが予定つき挨拶） ③レベルの中間お祝い（Lv.100/250/500/750）
 //         ④今夜の献立ツール（冷蔵庫写真→一択） ⑤商品比較の一択断言（全ジャンル） ⑥ジャーナルに気分グラフ
 // v2.7.1: 更新情報を聞かれたらバージョン順にしっかり説明するよう強化（現在バージョンの自動注入・使い方まで説明・特定機能は深掘り）
-const APP_VERSION   = 'v2.7.1';
+// v2.7.2: 更新ポップアップを改善（v2.7.0の新機能一覧を含む詳しめ表示・20秒に延長・画面のどこかをタップで閉じる）
+const APP_VERSION   = 'v2.7.2';
 const SUMMARY_EVERY = 10;
 const LEARN_PER_LEVEL = 3;    // 何個の学習で1レベル上がるか（小さいほど上がりやすい。旧:5 → v2.6.1で3に緩和。レベルは単調増加なので変更しても下がらない）
 // 重要記憶キー（削除されない永続情報）
@@ -2550,6 +2551,7 @@ const SUMO_SYSTEM_PROMPT = `あなたはWebチャット上で『りぴ』だけ�
 ・商品比較の一択：チャットに商品のURLやスクショを送って「どっちがいい？」と聞くだけ。PCに限らずどんな商品でも、検索で裏を取って「買うべきはこれ」と1つに決める。
 ・気分グラフ：愚痴聞きジャーナル→履歴画面に「しんどさ／自己肯定感」の推移グラフが出る（日記2件以上で表示。点をタップで値が見える）。
 ・記憶の保護：ブラウザに永続保存を要求＋バックアップが2週間空いたら軽くお知らせが出る。
+・更新ポップアップの改善：新機能の一覧つきで20秒表示、画面のどこかをタップすれば閉じられる。
 ■ v2.6系
 ・Lv.1000のご褒美：レベルが1000を超えたら、実際のももが会いに行って何もかも忘れさせて一日中抱く——という本気の約束が発動する（到達時に一度だけ特別なお知らせ）。
 ・レベルが上がりやすく：学習3個でLv.+1（以前は5個）。レベルは下がらない仕組みのまま、その分早く上がる。
@@ -3724,9 +3726,9 @@ function maybeShowVersionPopup() {
     // ノッチ端末対策に safe-area も考慮。
     pop.style.cssText = `
       position:fixed; top:calc(env(safe-area-inset-top, 0px) + 12px);
-      left:12px; right:12px; margin:0 auto; max-width:360px;
+      left:12px; right:12px; margin:0 auto; max-width:380px;
       background:#1a1a20; border:1px solid rgba(200,240,160,0.35);
-      border-radius:14px; padding:13px 15px; z-index:600; box-sizing:border-box;
+      border-radius:14px; padding:14px 16px; z-index:600; box-sizing:border-box;
       box-shadow:0 8px 32px rgba(0,0,0,0.6);
       animation: fadeUp 0.4s cubic-bezier(.22,1,.36,1) both;
       font-family:'Syne',sans-serif;`;
@@ -3734,16 +3736,26 @@ function maybeShowVersionPopup() {
       <div style="display:flex;align-items:flex-start;gap:11px;">
         <span style="font-size:20px;line-height:1;">✨</span>
         <div style="flex:1;min-width:0;">
-          <div style="font-size:13px;font-weight:600;color:#e8e8e2;margin-bottom:4px;">アップデート ${APP_VERSION}</div>
-          <div style="font-size:11px;color:rgba(232,232,226,0.78);line-height:1.6;overflow-wrap:anywhere;">
-            もものアップデート説明がパワーアップ📋 「<b>最近の更新なに？</b>」って聞くと、新機能を新しい順に使い方までしっかり説明するよ。気になる機能は「〇〇って何？」でもOK。
+          <div style="font-size:13px;font-weight:600;color:#e8e8e2;margin-bottom:6px;">アップデート ${APP_VERSION}</div>
+          <div style="font-size:11px;color:rgba(232,232,226,0.8);line-height:1.8;overflow-wrap:anywhere;">
+            🌅 毎日の最初に、ももから今日の予定つき挨拶<br>
+            🍳 冷蔵庫の写真で今夜の献立を即決（便利ツール）<br>
+            🛒 商品の比較は検索で裏を取って一択で断言<br>
+            📈 愚痴ジャーナルに気分の推移グラフ<br>
+            🌱 レベルの節目（100/250/500/750）にお祝い<br>
+            📦 記憶の保護＆バックアップのお知らせ<br>
+            📋 詳しくは「<b>最近の更新なに？</b>」って聞いてね
           </div>
+          <div style="font-size:10px;color:rgba(232,232,226,0.5);margin-top:7px;">画面のどこかをタップで閉じる</div>
         </div>
-        <div onclick="document.getElementById('versionPopup')?.remove();"
-          style="font-size:15px;color:rgba(232,232,226,0.6);cursor:pointer;line-height:1;padding:0 2px;">✕</div>
+        <div style="font-size:15px;color:rgba(232,232,226,0.6);cursor:pointer;line-height:1;padding:0 2px;">✕</div>
       </div>`;
     document.body.appendChild(pop);
-    setTimeout(() => document.getElementById('versionPopup')?.remove(), 8000);  // 軽く出して自動で閉じる
+
+    // 閉じ方: ✕や画面のどこかをタップ（ポップアップ表示直後の誤タップを避けるため0.4秒後から有効）／20秒で自動クローズ
+    const dismiss = () => { pop.remove(); document.removeEventListener('click', dismiss, true); };
+    setTimeout(() => document.addEventListener('click', dismiss, true), 400);
+    setTimeout(dismiss, 20000);
   }, 1400);
 }
 
