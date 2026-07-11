@@ -2385,7 +2385,10 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 //         ／モデル表示タグは8秒後に自動で消える
 // v3.0.1: レビュー指摘の修正（esc()で" 'もエスケープ＝caption経由のXSS対策／思い出Embeddingの
 //         キーを内容ベースにして二重Embed（コスト無駄・重複）を解消／Agent Mode提案の古いクリック無効化・二重起動防止）
-const APP_VERSION   = 'v3.0.1';
+// v3.0.2: 残りのレビュー指摘を修正（produceReply/runAgentModeの世代ガード＝会話切替中の応答混入防止・
+//         Agent Modeの中断対応／DB多重タブ対策(onblocked/onversionchange)／バックアップ復元・アーカイブ削除で
+//         思い出索引も追従）
+const APP_VERSION   = 'v3.0.2';
 const SUMMARY_EVERY = 10;
 const LEARN_PER_LEVEL = 3;    // 何個の学習で1レベル上がるか（小さいほど上がりやすい。旧:5 → v2.6.1で3に緩和。レベルは単調増加なので変更しても下がらない）
 // 重要記憶キー（削除されない永続情報）
@@ -2907,7 +2910,13 @@ function openDB() {
         d.createObjectStore(EMBED_STORE, { keyPath: 'key' });   // key = ts|role|先頭40字
       }
     };
-    req.onsuccess = e => resolve(e.target.result);
+    req.onblocked = () => { showToast('別のタブでアプリが開いてるみたい。他のタブを閉じてね'); };
+    req.onsuccess = e => {
+      const database = e.target.result;
+      // 別タブが新バージョンで開こうとした時、この古い接続を閉じてブロックを解消する
+      database.onversionchange = () => { try { database.close(); } catch {} };
+      resolve(database);
+    };
     req.onerror   = e => reject(e.target.error);
   });
 }
@@ -3740,14 +3749,17 @@ function _validBackupRec(storeName, rec) {
 function restoreAllStores(storesData) {
   return new Promise((resolve, reject) => {
     try {
-      const tx = db.transaction(BACKUP_STORES, 'readwrite');
+      const tx = db.transaction([...BACKUP_STORES, EMBED_STORE], 'readwrite');
       for (const s of BACKUP_STORES) {
         const store = tx.objectStore(s);
         store.clear();
         const recs = Array.isArray(storesData[s]) ? storesData[s] : [];
         for (const rec of recs) if (_validBackupRec(s, rec)) store.put(rec);
       }
-      tx.oncomplete = () => resolve();
+      // 思い出の意味索引は端末ローカル（バックアップ非対象）。復元後の会話と食い違わないよう
+      // 一旦全消去し、次回の背景索引化で作り直す。
+      tx.objectStore(EMBED_STORE).clear();
+      tx.oncomplete = () => { memVecs = []; memKeySet = new Set(); _memBackfillDone = false; resolve(); };
       tx.onerror    = e => reject(e.target.error);
       tx.onabort    = e => reject(e.target.error);
     } catch (e) { reject(e); }
@@ -5244,6 +5256,16 @@ async function resumeArchive() {
 // アーカイブ削除
 async function deleteArchive(id) {
   if (!db) return;
+  // このアーカイブの発言に対応する思い出索引も消す（消したはずの会話を後で思い出さないように）
+  try {
+    const arc = await new Promise((res, rej) => { const r = idbTx(ARCHIVE_STORE, 'readonly').get(Number(id) | 0); r.onsuccess = e => res(e.target.result); r.onerror = e => rej(e.target.error); });
+    if (arc && Array.isArray(arc.messages)) {
+      const keys = new Set();
+      for (const m of arc.messages) if (_memEligible(m)) keys.add(_memKey(m.ts, m.role, m.content));
+      for (const k of keys) { try { await new Promise(res => { const r = idbTx(EMBED_STORE, 'readwrite').delete(k); r.onsuccess = () => res(); r.onerror = () => res(); }); } catch {} }
+      if (keys.size) { memVecs = memVecs.filter(v => !keys.has(v.key)); memKeySet = new Set(memVecs.map(v => v.key)); }
+    }
+  } catch {}
   await arcDel(id);
   showToast('🗑 削除しました');
   openHistory(); // リスト更新
@@ -6059,6 +6081,8 @@ async function sendMessage() {
 async function produceReply(sentText, userContent, sentImgs) {
   const input   = document.getElementById('input');
   const hasImgs = sentImgs.length > 0;
+  const myEpoch = chatEpoch;   // 会話の世代を最初に記録（判定・検索の待ち中に会話が切り替わっても誤混入させない）
+  const bail = () => { removeTyping(); isLoading = false; document.getElementById('sendBtn').disabled = false; };
 
   // ── 検索・推論レベル判定 & 思い出検索 ──
   // 画像添付時も判定する（PCの写真＋「どっちがいい?」等でも検索・推論・PCモードを効かせるため）。
@@ -6082,6 +6106,9 @@ async function produceReply(sentText, userContent, sentImgs) {
     }
   }
 
+  // 判定・思い出検索の待ち中に会話が切り替わっていたら、この応答は破棄する
+  if (myEpoch !== chatEpoch) { bail(); return; }
+
   // ── Agent Mode 提案（検索を要する重い依頼のみ・画像なし） ──
   // 世界観：分身のもも達が総出で調べる。承諾されたら runAgentMode、断られたら通常応答へ。
   if (wantSearch && reasoningEffort === 'high' && !hasImgs && sentText.length >= 16 && !_agentForceNormal) {
@@ -6099,6 +6126,7 @@ async function produceReply(sentText, userContent, sentImgs) {
     searchResult = await performWebSearch(sentText);
     if (searchResult) showToast('✅ 検索完了');
   }
+  if (myEpoch !== chatEpoch) { bail(); return; }   // Web検索の待ち中に会話が切り替わっていたら破棄
 
   // ── ① 内容に応じてモデルを自動切替 ──
   // 挨拶・雑談・一行返信（reasoning=none）は軽量モデル、恋愛・相談・深い話は品質重視のメインモデル。
@@ -6147,10 +6175,8 @@ ${srcList}`
   }
   msgs.push(...histCopy);
 
-  // ストリーム開始時の世代と AbortController を記録。
-  // 会話切替時に abort されると fetch / reader が reject して、
-  // この sendMessage の catch に流れて、isLoading は finally でリセットされる
-  const myEpoch = chatEpoch;
+  // AbortController を記録（会話切替時に abort されると fetch/reader が reject し finally で復帰）。
+  // myEpoch は関数先頭で確定済み。
   const ac = new AbortController();
   currentStreamAbort = ac;
 
@@ -6375,6 +6401,8 @@ async function runAgentMode(p) {
   isLoading = true;
   document.getElementById('sendBtn').disabled = true;
   const myEpoch = chatEpoch;
+  const ac = new AbortController();
+  currentStreamAbort = ac;   // 会話切替(newChat/履歴)時に abort され、代表ももの生成を止める
   const run = { cancelled: false };
   _agentRun = run;
   const cancelPromise = new Promise(res => { run._cancelResolve = res; });
@@ -6491,9 +6519,11 @@ ${reports.join('\n\n')}
     msgs.push({ role: 'system', content: bossSystem });
     msgs.push(...history.map(m => ({ ...m })));
 
+    if (myEpoch !== chatEpoch) return;   // 調査中に会話が切り替わっていたら統合生成に進まない
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      signal: ac.signal,
       body: JSON.stringify({
         model: MODEL, messages: msgs, stream: true, max_completion_tokens: 4096,
         store: true, reasoning_effort: 'high',
@@ -6545,6 +6575,8 @@ ${reports.join('\n\n')}
     document.getElementById('messages').scrollTop = 999999;
   } catch (err) {
     removeTyping();
+    // 会話切替による中断（AbortError／世代不一致）は無言で終了（別会話に紛れ込ませない）
+    if (err?.name === 'AbortError' || ac.signal.aborted || myEpoch !== chatEpoch) return;
     // 世界観を保ったフォールバック：エラー画面は出さず、ももの言葉で伝える
     console.warn('[もも] Agent Mode失敗:', err?.message);
     const bubble = renderMessage('ai', '');
@@ -6553,6 +6585,7 @@ ${reports.join('\n\n')}
   } finally {
     hideAgentPanel(run);
     if (_agentRun === run) _agentRun = null;
+    if (currentStreamAbort === ac) currentStreamAbort = null;
     isLoading = false;
     document.getElementById('sendBtn').disabled = false;
   }
