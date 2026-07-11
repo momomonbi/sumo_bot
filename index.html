@@ -2383,7 +2383,9 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 //         （ギャラリーを日付ごとにまとめ、ももが「この日〜だったね」タイトルを付ける）／🧠Agent Mode
 //         （重い調査は分身のもも達が総出で並列調査→代表ももが統合。進捗パネル・中断可・エラーは世界観で吸収）
 //         ／モデル表示タグは8秒後に自動で消える
-const APP_VERSION   = 'v3.0.0';
+// v3.0.1: レビュー指摘の修正（esc()で" 'もエスケープ＝caption経由のXSS対策／思い出Embeddingの
+//         キーを内容ベースにして二重Embed（コスト無駄・重複）を解消／Agent Mode提案の古いクリック無効化・二重起動防止）
+const APP_VERSION   = 'v3.0.1';
 const SUMMARY_EVERY = 10;
 const LEARN_PER_LEVEL = 3;    // 何個の学習で1レベル上がるか（小さいほど上がりやすい。旧:5 → v2.6.1で3に緩和。レベルは単調増加なので変更しても下がらない）
 // 重要記憶キー（削除されない永続情報）
@@ -2975,7 +2977,9 @@ let memVecs   = [];                   // [{key, ts, role, text, vec(正規化済
 let memKeySet = new Set();
 let _memBackfillDone = false;
 
-function _memKey(ts, role, content) { return `${ts}|${role}|${String(content).slice(0, 40)}`; }
+// キーは内容ベース（tsを含めない）。remember側とbackfill側でtsが異なり同一発言が二重にEmbedされる
+// 問題を防ぐ＝Embeddingコストの無駄と思い出の重複を解消する。
+function _memKey(ts, role, content) { return `${role}|${String(content).trim().slice(0, 60)}`; }
 function _normVec(arr) {
   let s = 0; for (const v of arr) s += v * v;
   const n = Math.sqrt(s) || 1;
@@ -5561,7 +5565,7 @@ function copyText(btn, text) {
   });
 }
 
-function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
 function fmtInline(s) {
   // XSS対策: マークダウンを適用する前に必ずエスケープする。
@@ -5993,6 +5997,7 @@ async function sendMessage() {
 
   if (!text && !hasImgs) return;
   if (isLoading) return;
+  _agentPending = null;   // 未応答のAgent Mode提案があれば無効化（古い依頼での誤発火を防ぐ）
 
   isLoading = true;
   document.getElementById('sendBtn').disabled = true;
@@ -6302,15 +6307,15 @@ function _agentDisableChoices(btn) {
 }
 
 function startAgentMode(btn) {
+  if (isLoading || !_agentPending) return;   // 応答中の二重起動・無効な提案クリックを防ぐ
   _agentDisableChoices(btn);
-  if (!_agentPending) return;
   const p = _agentPending; _agentPending = null;
   runAgentMode(p);
 }
 
 function agentNormalReply(btn) {
+  if (isLoading || !_agentPending) return;
   _agentDisableChoices(btn);
-  if (!_agentPending) return;
   const p = _agentPending; _agentPending = null;
   _agentForceNormal = true;
   isLoading = true;
