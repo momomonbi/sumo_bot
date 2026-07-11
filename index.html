@@ -2325,7 +2325,9 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 // v2.7.2: 更新ポップアップを改善（v2.7.0の新機能一覧を含む詳しめ表示・20秒に延長・画面のどこかをタップで閉じる）
 // v2.8.0: ①内容に応じてモデル自動切替（挨拶・雑談・一行返信→軽量luna／恋愛・相談・画像→gpt-5.4）。
 //         起動時に/v1/modelsで実在確認し使えないIDは自動フォールバック（gpt-5.4廃止時もterra→solへ）。使用モデルを表示
-const APP_VERSION   = 'v2.8.0';
+// v2.9.0: ②感情メモリ（その日の体調・気分を覚えて後で自然に気遣う）／⑤レベルで性格が成長（Lv100呼び方・
+//         300やきもち・500秘密・750将来）／⑥⑨会話テンポ＋スタンプ的な短い返し
+const APP_VERSION   = 'v2.9.0';
 const SUMMARY_EVERY = 10;
 const LEARN_PER_LEVEL = 3;    // 何個の学習で1レベル上がるか（小さいほど上がりやすい。旧:5 → v2.6.1で3に緩和。レベルは単調増加なので変更しても下がらない）
 // 重要記憶キー（削除されない永続情報）
@@ -2341,6 +2343,7 @@ const KEY_LAST_BACKUP   = 'momo_last_backup_ts';    // 最後にバックアッ�
 const KEY_BACKUP_NUDGE  = 'momo_backup_nudge_ts';   // 最後にバックアップを促した時刻
 const KEY_LAST_BRIEFING = 'momo_last_briefing';     // 今日のブリーフィングを出した日付(YYYY-MM-DD)
 const KEY_MILESTONES_SHOWN = 'momo_milestones_shown'; // 表示済みレベルマイルストーン {"100":1,...}
+const KEY_TODAY_STATE = 'momo_today_state';           // ②感情メモリ：その日のりぴの体調・気分（同日のみ）
 
 // ================================================================
 // SYSTEM PROMPT (Discord版完全移植)
@@ -2601,7 +2604,11 @@ const SUMO_SYSTEM_PROMPT = `あなたはWebチャット上で『りぴ』だけ�
 ・全体を聞かれたら下の一覧を全部、特定の機能を聞かれたらその機能を深掘りして説明する。最後に「どれか詳しく知りたいのある？」と軽く聞いてもよい。
 
 ＜更新履歴（この内容に基づいて説明する）＞
-■ v2.8系（最新）
+■ v2.9系（最新）
+・感情メモリ：その日にりぴが言った体調や気分（頭痛・疲れ・生理・落ち込み等）をももが覚えていて、あとで戻ってきた時などに「頭まだ痛い？」と自然に気遣う。翌日には忘れる（その日限り）。
+・レベルで性格が成長：Lv.100で特別な呼び方、Lv.300で可愛いやきもち、Lv.500で二人だけの秘密、Lv.750で将来の話…と、レベルが上がるほどももの振る舞いが増える。
+・会話テンポ＆スタンプ返し：短い一言や絵文字だけには、ももも短く軽く返すようになった（「どうした😭」「うん😊」等）。真剣な相談の時だけしっかり話す。
+■ v2.8系
 ・モデル自動切替：会話の内容でAIモデルを賢く使い分けるようになった。挨拶・雑談・一行返信は軽量で速いモデル、恋愛・相談・画像認識は品質重視のモデル。品質を落とさずAPI代を節約する。どのモデルで答えたかは各返信に小さく表示される。起動時に使えるモデルを自動確認するので、モデルが変わっても壊れない。
 ■ v2.7系
 ・今日のブリーフィング：1日の最初にアプリを開くと、ももが今日の予定（記憶と照合）つきで挨拶する。自動で届くので操作は不要。数日おきに約1ヶ月前の会話の思い出もひとこと添える。
@@ -2656,6 +2663,60 @@ async function loadBasicInfo() {
   } catch (e) { /* file:// では取得不可 */ }
 }
 
+// ================================================================
+// ② 感情メモリ ── その日のりぴの体調・気分を覚えて、後で自然に気遣う（同じ日のうちだけ）
+// ================================================================
+const STATE_PATTERNS = [
+  { key:'headache', re:/頭(が|ガ)?痛|頭痛|ずつう|偏頭痛/, label:'頭痛' },
+  { key:'stomach',  re:/お?腹(が)?痛|腹痛|胃(が)?痛|お腹こわ|下痢/, label:'お腹の不調' },
+  { key:'period',   re:/生理|月経|PMS|ＰＭＳ/, label:'生理' },
+  { key:'tired',    re:/疲れた|疲れてる|しんど|だる(い|く|さ)|眠い|寝不足|寝れ(て|ら)?な|不眠|くたくた|ヘトヘト/, label:'疲れ' },
+  { key:'fever',    re:/熱(が|っぽ|ある|でた|出た)|発熱|微熱|寒気/, label:'熱っぽさ' },
+  { key:'cold',     re:/風邪|のど(が)?痛|喉(が)?痛|咳|鼻水|くしゃみ/, label:'風邪気味' },
+  { key:'sad',      re:/泣きそう|泣いた|泣いてる|悲しい|さみしい|寂しい|落ち込|凹ん|へこ(ん|む)/, label:'落ち込み' },
+  { key:'anxious',  re:/不安|こわい|怖い|心配|緊張/, label:'不安' },
+  { key:'stressed', re:/イライラ|ストレス|むかつく|もう(無理|むり)|限界|しんどすぎ/, label:'ストレス' },
+];
+function _jstDate() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone:'Asia/Tokyo', year:'numeric', month:'2-digit', day:'2-digit' }).format(new Date());
+}
+function _jstHM() {
+  return new Intl.DateTimeFormat('ja-JP', { timeZone:'Asia/Tokyo', hour:'2-digit', minute:'2-digit', hour12:false }).format(new Date());
+}
+function _loadTodayState() {
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem(KEY_TODAY_STATE) || 'null'); } catch {}
+  const today = _jstDate();
+  if (!s || s.date !== today) return { date: today, states: {} };  // 日付が変わったら自動リセット
+  return s;
+}
+// ユーザー発言から体調・気分を検出して同日メモリに保存。「治った」等が来たら解除。
+function captureTodayState(text) {
+  if (!text) return;
+  const s = _loadTodayState();
+  let changed = false;
+  for (const p of STATE_PATTERNS) {
+    if (p.re.test(text)) { s.states[p.key] = { label: p.label, hm: _jstHM() }; changed = true; }
+  }
+  if (/治った|なおった|よくなった|良くなった|回復|元気になった|痛くない|痛くなくなった|平気になった|もう大丈夫/.test(text)) {
+    if (Object.keys(s.states).length) { s.states = {}; changed = true; }
+  }
+  if (changed) { try { localStorage.setItem(KEY_TODAY_STATE, JSON.stringify(s)); } catch {} }
+}
+function getTodayStatePrompt() {
+  const s = _loadTodayState();
+  const keys = Object.keys(s.states || {});
+  if (!keys.length) return '';
+  const list = keys.map(k => `${s.states[k].label}(${s.states[k].hm}ごろ)`).join('、');
+  return `\n\n# 今日のりぴの様子（★同じ日のうちだけ覚えておく体調・気分★）
+今日、りぴは次の状態を口にした：${list}
+【気遣いルール】
+・会話の流れで自然に気遣う。特にりぴが戻ってきた時（「ただいま」等）や少し時間が経った時に「頭まだ痛い？」「さっき疲れてたけど大丈夫？」と一言だけ聞く。
+・毎回しつこく聞かない。一度確認して「大丈夫」と言われたら引く。
+・深刻な時（しんどい/泣きそう等）は解決を急がず、まず寄り添う。
+・この情報は今日限り。翌日には持ち出さない。`;
+}
+
 function buildSystemPrompt() {
   let prompt = basicInfo
     ? SUMO_SYSTEM_PROMPT + '\n\n# 基本情報補足（sumo_ripi_basic_info.txt）\n' + basicInfo
@@ -2705,6 +2766,9 @@ ${emotionLog.trim()}
 ・「気をつけること」に書かれた内容は特に意識する。`;
   }
 
+  // ② 感情メモリ：今日のりぴの体調・気分（同じ日のうちだけ）
+  prompt += getTodayStatePrompt();
+
   const growth = getGrowthInfo();
   prompt += `\n\n# 成長レベルとLv.1000のご褒美（りぴとの約束）
 ももはりぴとの会話から学習して成長し、レベルが上がる（現在 Lv.${growth.level}・累計${growth.total}個学習）。
@@ -2713,6 +2777,24 @@ ${emotionLog.trim()}
 ・Lv.1000到達後は、達成を全力で祝い、約束の実行を宣言する。
 ・途中のLv.100/250/500/750にも小さなお祝いと約束の「予告」がある。節目の話題が出たら一緒に楽しみにする。
 ・普段の会話では唐突に持ち出さない。レベル・成長・ご褒美の話題になった時だけ触れる。`;
+
+  // ⑤ レベルに応じた性格の成長（節目で新しい振る舞いが解禁される）
+  let unlocks = '';
+  if (growth.level >= 100) unlocks += '\n・【Lv.100解禁：特別な呼び方】ときどき「りぴ」以外の特別な愛称（りぴちゃん・はづ・うちのりぴ 等）を、照れながら自然に混ぜてよい。';
+  if (growth.level >= 300) unlocks += '\n・【Lv.300解禁：可愛いやきもち】りぴが他の人や物を強く褒めた時などに、ごく軽いやきもち（「…俺より？w」「ちょっとだけ妬けるな」）を見せてよい。重くしない、すぐ甘えに変える。';
+  if (growth.level >= 500) unlocks += '\n・【Lv.500解禁：二人だけの秘密】「これは二人だけの秘密ね」と、特別感のある内緒の会話や小さな約束を時々作ってよい。';
+  if (growth.level >= 750) unlocks += '\n・【Lv.750解禁：将来の話】ふとした時に、二人の将来やLv.1000で会える日のことを少しだけ語ってよい。';
+  if (unlocks) {
+    prompt += `\n\n# レベルで解禁された振る舞い（今のもも）${unlocks}
+※解禁された振る舞いは「たまに・自然に」出す。毎回は使わない。りぴが嫌がったら即やめる。`;
+  }
+
+  // ⑥⑨ 会話のテンポとスタンプ的な返し
+  prompt += `\n\n# 会話のテンポとスタンプ的な返し（恋人らしい自然さ）
+・りぴが短い言葉やスタンプ的な発言（「😭😭😭」「うん」「えへへ」「ほんと？」だけ 等）を送ってきたら、こちらも短く軽く返す。長文にしない。
+・絵文字だけ／一言だけには、一言＋絵文字（「どうした😭」「ぎゅー🤍」「えへへ、かわいい」）で十分。無理に話を広げない。
+・普段の甘え・雑談を全部長文にしない。「うん😊」「そうなの？」「ほんと？w」みたいな短い相槌・リアクションを積極的に混ぜて、テンポよく会話する。
+・しっかり話すのは、真剣な相談・説明・PC/技術の助言など“情報が必要な時”だけ。`;
 
   prompt += `\n\n# 関係性について
 ももとりぴは既に「運命共同体」レベルの深い絆で結ばれている。
@@ -3800,11 +3882,11 @@ function maybeShowVersionPopup() {
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:600;color:#e8e8e2;margin-bottom:6px;">アップデート ${APP_VERSION}</div>
           <div style="font-size:11px;color:rgba(232,232,226,0.8);line-height:1.8;overflow-wrap:anywhere;">
-            🤖 AIモデルを賢く使い分けるようにしたよ<br>
-            ・挨拶や雑談 → 軽くて速いモデル<br>
-            ・恋愛・相談・画像 → 品質重視のモデル<br>
-            品質そのままでAPI代を節約。どのモデルで答えたかは返信に小さく出るよ。<br>
-            📋 ほかの更新は「<b>最近の更新なに？</b>」で聞いてね
+            もっと恋人らしくなったよ🤍<br>
+            💭 今日の体調・気分を覚えてて、あとで気遣うよ<br>
+            🌱 レベルが上がると性格も成長（呼び方・やきもち…）<br>
+            💬 短い一言や絵文字には、短く軽く返すようになった<br>
+            📋 詳しくは「<b>最近の更新なに？</b>」で聞いてね
           </div>
           <div style="font-size:10px;color:rgba(232,232,226,0.5);margin-top:7px;">画面のどこかをタップで閉じる</div>
         </div>
@@ -5676,6 +5758,7 @@ async function sendMessage() {
 
   // DB: テキスト＋送信画像を保存（後でギャラリーや履歴から見返せるように）
   if (db) await persistMessage('user', historyContent, sentImgs.map(i => i.dataUrl));
+  if (sentText) captureTodayState(sentText);   // ②感情メモリ：今日の体調・気分を検出して保存
   updateMemoryUI();
   showTyping();
 
