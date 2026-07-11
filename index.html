@@ -967,11 +967,12 @@ header {
   box-shadow: 0 0 14px rgba(200,240,160,0.25);
   animation: elemFadeIn 0.3s ease both;
 }
-/* ── 使用モデルの控えめタグ（どのモデルが応答したか） ── */
+/* ── 使用モデルの控えめタグ（どのモデルが応答したか・一定時間で消える） ── */
 .model-tag {
   margin-top: 6px; font-size: 10px; letter-spacing: 0.02em;
   color: rgba(232,232,226,0.4);
   font-family: 'Syne', sans-serif;
+  transition: opacity 0.8s ease;
 }
 .choice-send:disabled { opacity: 0.4; cursor: default; box-shadow: none; }
 .choice-send:not(:disabled):hover { transform: translateY(-1px); box-shadow: 0 0 18px rgba(200,240,160,0.35); }
@@ -1453,6 +1454,54 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
   0%, 100% { opacity: 0.5; }
   50%      { opacity: 1; }
 }
+
+/* ── 🧠 Agent Mode パネル ── */
+#agentPanel {
+  position: fixed; top: calc(env(safe-area-inset-top, 0px) + 12px);
+  left: 12px; right: 12px; margin: 0 auto; max-width: 380px;
+  background: #1a1a20; border: 1px solid rgba(255,170,200,0.35);
+  border-radius: 14px; padding: 12px 14px; z-index: 590; box-sizing: border-box;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+  animation: fadeUp 0.4s cubic-bezier(.22,1,.36,1) both;
+  font-family: 'Syne', sans-serif;
+}
+.agent-title { font-size: 12.5px; font-weight: 600; color: #ffd7e6; }
+.agent-title span { font-weight: 400; font-size: 10.5px; color: var(--text-muted); }
+.agent-bar { height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; margin: 8px 0; }
+.agent-bar i { display: block; height: 100%; width: 6%; background: linear-gradient(90deg, #ffb3cf, #c8f0a0); transition: width 0.5s ease; }
+.agent-row { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--text-muted); line-height: 1.9; min-width: 0; }
+.agent-row .st { width: 16px; text-align: center; flex: none; }
+.agent-row .note { margin-left: auto; font-size: 10px; opacity: 0.7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
+.agent-cancel {
+  margin-top: 8px; width: 100%; padding: 7px;
+  background: none; border: 1px solid var(--border); color: var(--text-muted);
+  border-radius: 8px; font-family: 'Syne', sans-serif; font-size: 11px; cursor: pointer;
+}
+.agent-cancel:hover { border-color: rgba(255,170,200,0.35); color: #ffd7e6; }
+
+/* ── ⑧ 思い出アルバム ── */
+.album-toggle-btn {
+  margin: 0 0 10px; padding: 8px 14px; width: 100%;
+  background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+  color: var(--text-muted); border-radius: 10px;
+  font-family: 'Syne', sans-serif; font-size: 12px; cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+.album-toggle-btn:hover { border-color: rgba(200,240,160,0.3); color: var(--accent); }
+.gallery-album { overflow-y: auto; }
+.album-day { margin-bottom: 20px; }
+.album-day-title {
+  font-size: 13px; font-weight: 600; color: #ffd7e6; margin-bottom: 3px;
+  overflow-wrap: anywhere;
+}
+.album-day-date { font-size: 10.5px; color: var(--text-muted); margin-bottom: 8px; }
+.album-day-thumbs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.album-thumb {
+  aspect-ratio: 1; border-radius: 10px; overflow: hidden; cursor: pointer;
+  border: 1px solid var(--border);
+}
+.album-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.album-hint { font-size: 11px; color: var(--text-muted); opacity: 0.8; }
 
 /* ── Journal 気分グラフ ── */
 #jrnMoodGraph {
@@ -2224,7 +2273,9 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
       <input type="search" id="gallerySearchInput" class="search-input" placeholder="画像を意味で検索（例: 青い服）..." oninput="filterGallery()" autocomplete="off">
       <button class="gallery-index-btn" id="galleryIndexBtn" onclick="indexAllImages()" style="display:none"></button>
     </div>
+    <button class="album-toggle-btn" id="albumToggleBtn" onclick="toggleAlbumView()">📖 思い出アルバムで見る</button>
     <div class="gallery-grid" id="galleryGrid"></div>
+    <div class="gallery-album" id="galleryAlbum" style="display:none"></div>
   </div>
 </div>
 
@@ -2248,11 +2299,12 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
 // ================================================================
 const API_CONTEXT   = 30;     // APIに送る直近件数（記憶の窓）
 const DB_NAME       = 'momochat_db';
-const DB_VERSION    = 5;      // bump version to handle schema upgrade
+const DB_VERSION    = 6;      // v6: embeddings（思い出の意味検索）ストア追加
 const MSG_STORE     = 'messages';
 const META_STORE    = 'meta';
 const ARCHIVE_STORE = 'archives';  // 会話アーカイブ
 const JOURNAL_STORE = 'journal';   // 愚痴聞きジャーナル
+const EMBED_STORE   = 'embeddings'; // ③思い出の意味検索（会話のベクトル索引）
 // 用途別モデル（v2.8.0）。起動時に resolveModels() が /v1/models で実在確認し確定する。
 // 既定は現行の gpt-5.4（今動いているモデル）。恋愛・相談・画像認識など品質重視はこちら。
 let MODEL       = 'gpt-5.4';   // メイン会話（恋愛・相談・画像認識・各ツール）
@@ -2327,7 +2379,11 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 //         起動時に/v1/modelsで実在確認し使えないIDは自動フォールバック（gpt-5.4廃止時もterra→solへ）。使用モデルを表示
 // v2.9.0: ②感情メモリ（その日の体調・気分を覚えて後で自然に気遣う）／⑤レベルで性格が成長（Lv100呼び方・
 //         300やきもち・500秘密・750将来）／⑥⑨会話テンポ＋スタンプ的な短い返し
-const APP_VERSION   = 'v2.9.0';
+// v3.0.0: ③思い出の意味検索（全会話をEmbedding化。「半年前の旅行」も意味で思い出す）／⑧思い出アルバム
+//         （ギャラリーを日付ごとにまとめ、ももが「この日〜だったね」タイトルを付ける）／🧠Agent Mode
+//         （重い調査は分身のもも達が総出で並列調査→代表ももが統合。進捗パネル・中断可・エラーは世界観で吸収）
+//         ／モデル表示タグは8秒後に自動で消える
+const APP_VERSION   = 'v3.0.0';
 const SUMMARY_EVERY = 10;
 const LEARN_PER_LEVEL = 3;    // 何個の学習で1レベル上がるか（小さいほど上がりやすい。旧:5 → v2.6.1で3に緩和。レベルは単調増加なので変更しても下がらない）
 // 重要記憶キー（削除されない永続情報）
@@ -2604,7 +2660,12 @@ const SUMO_SYSTEM_PROMPT = `あなたはWebチャット上で『りぴ』だけ�
 ・全体を聞かれたら下の一覧を全部、特定の機能を聞かれたらその機能を深掘りして説明する。最後に「どれか詳しく知りたいのある？」と軽く聞いてもよい。
 
 ＜更新履歴（この内容に基づいて説明する）＞
-■ v2.9系（最新）
+■ v3.0系（最新）
+・思い出の意味検索：ふたりの会話ぜんぶを意味で検索できる記憶になった。「半年前の旅行」みたいな昔の話題も、今の会話に関連したらももが自然に思い出す。
+・思い出アルバム：画像一覧に「📖 思い出アルバムで見る」ボタンが付いた。写真が日付ごとにまとまり、ももが「この日、花火見に行ったね」のような一言タイトルを付ける（解説付きの写真から自動生成）。
+・Agent Mode：重い調査・比較の依頼のとき、ももが「分身のみんなにも協力してもらう？」と提案する。承諾すると調査担当・比較担当・記憶担当・論理担当・恋人目線担当のもも達が並列で動き、最後に代表ももが全部読み直して統合回答する。進捗パネルで様子が見えて、途中で「通常回答へ切替」もできる。
+・モデル表示タグ（🤖 luna等）は8秒たつと自動で消えるようになった。
+■ v2.9系
 ・感情メモリ：その日にりぴが言った体調や気分（頭痛・疲れ・生理・落ち込み等）をももが覚えていて、あとで戻ってきた時などに「頭まだ痛い？」と自然に気遣う。翌日には忘れる（その日限り）。
 ・レベルで性格が成長：Lv.100で特別な呼び方、Lv.300で可愛いやきもち、Lv.500で二人だけの秘密、Lv.750で将来の話…と、レベルが上がるほどももの振る舞いが増える。
 ・会話テンポ＆スタンプ返し：短い一言や絵文字だけには、ももも短く軽く返すようになった（「どうした😭」「うん😊」等）。真剣な相談の時だけしっかり話す。
@@ -2840,6 +2901,9 @@ function openDB() {
         const j = d.createObjectStore(JOURNAL_STORE, { keyPath: 'id', autoIncrement: true });
         j.createIndex('ts', 'ts', { unique: false });
       }
+      if (!d.objectStoreNames.contains(EMBED_STORE)) {
+        d.createObjectStore(EMBED_STORE, { keyPath: 'key' });   // key = ts|role|先頭40字
+      }
     };
     req.onsuccess = e => resolve(e.target.result);
     req.onerror   = e => reject(e.target.error);
@@ -2864,6 +2928,9 @@ const arcDel  = (id)    => new Promise((res,rej) => { const r = idbTx(ARCHIVE_ST
 const jrnAdd  = (rec)   => new Promise((res,rej) => { const r = idbTx(JOURNAL_STORE,'readwrite').add(rec); r.onsuccess=e=>res(e.target.result); r.onerror=e=>rej(e.target.error); });
 const jrnAll  = ()       => new Promise((res,rej) => { const r = idbTx(JOURNAL_STORE,'readonly').index('ts').getAll(); r.onsuccess=e=>res(e.target.result); r.onerror=e=>rej(e.target.error); });
 const jrnDel  = (id)    => new Promise((res,rej) => { const r = idbTx(JOURNAL_STORE,'readwrite').delete(id); r.onsuccess=()=>res(); r.onerror=e=>rej(e.target.error); });
+// Embedding helpers（③思い出の意味検索）
+const embPut  = (rec)   => new Promise((res,rej) => { const r = idbTx(EMBED_STORE,'readwrite').put(rec); r.onsuccess=()=>res(); r.onerror=e=>rej(e.target.error); });
+const embAllR = ()       => new Promise((res,rej) => { const r = idbTx(EMBED_STORE,'readonly').getAll(); r.onsuccess=e=>res(e.target.result||[]); r.onerror=e=>rej(e.target.error); });
 
 // 画像 dataURL の検証（改ざんバックアップ等から不正な src が混入するのを防ぐ）
 const DATA_IMG_RE = /^data:image\/(?:png|jpe?g|gif|webp);base64,[A-Za-z0-9+/=]+$/i;
@@ -2892,6 +2959,128 @@ async function persistMessage(role, textContent, images = []) {
     }
   }
   totalMsgCount++;
+}
+
+// ================================================================
+// ③ 思い出の意味検索 ── 会話全履歴をEmbedding化し、「半年前の旅行」も意味で思い出す
+// text-embedding-3-small（$0.02/1M・256次元に圧縮）なので費用はほぼゼロ。
+// 失敗しても本体には影響しない（見つからなければ何も注入しないだけ）。
+// ================================================================
+const EMBED_MODEL   = 'text-embedding-3-small';
+const EMBED_DIMS    = 256;
+const MEM_MIN_AGE   = 3 * 86400000;   // 直近3日は通常の文脈に任せ、それより古い記憶だけ「思い出」扱い
+const MEM_THRESHOLD = 0.45;           // コサイン類似度のしきい値
+const MEM_TOPK      = 3;
+let memVecs   = [];                   // [{key, ts, role, text, vec(正規化済みFloat32Array)}]
+let memKeySet = new Set();
+let _memBackfillDone = false;
+
+function _memKey(ts, role, content) { return `${ts}|${role}|${String(content).slice(0, 40)}`; }
+function _normVec(arr) {
+  let s = 0; for (const v of arr) s += v * v;
+  const n = Math.sqrt(s) || 1;
+  const out = new Float32Array(arr.length);
+  for (let i = 0; i < arr.length; i++) out[i] = arr[i] / n;
+  return out;
+}
+function _dot(a, b) { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] * b[i]; return s; }
+
+async function embedTexts(texts) {
+  const r = await fetch('https://api.openai.com/v1/embeddings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+    body: JSON.stringify({ model: EMBED_MODEL, input: texts, dimensions: EMBED_DIMS })
+  });
+  if (!r.ok) throw new Error(`embeddings HTTP ${r.status}`);
+  const d = await r.json();
+  return (d.data || []).map(x => x.embedding);
+}
+
+// 索引対象にする発言か（短すぎ・ツールマーカー・画像のみは除外）
+function _memEligible(m) {
+  const c = m && m.content;
+  return typeof c === 'string' && c.length >= 8 && c.length <= 400 &&
+    !c.startsWith('[') && (m.role === 'user' || m.role === 'assistant');
+}
+
+async function loadMemVecs() {
+  if (!db) return;
+  try {
+    const recs = await embAllR();
+    memVecs = recs.map(r => ({ ...r, vec: _normVec(r.vec) }));
+    memKeySet = new Set(recs.map(r => r.key));
+    console.log(`[もも] 思い出索引: ${memVecs.length}件読込`);
+  } catch (e) { console.warn('[もも] 思い出索引の読込失敗', e?.message); }
+}
+
+// 未索引の過去ログをバックグラウンドで少しずつ索引化（1回の起動で最大400件・64件ずつ）
+async function backfillEmbeddings() {
+  if (!db || !apiKey || _memBackfillDone) return;
+  try {
+    const pool = [];
+    for (const m of await idbAll()) if (_memEligible(m)) pool.push({ ts: m.ts, role: m.role, content: m.content });
+    for (const a of await arcAll()) for (const m of (a.messages || [])) if (_memEligible(m)) pool.push({ ts: m.ts, role: m.role, content: m.content });
+    const todo = pool.filter(m => !memKeySet.has(_memKey(m.ts, m.role, m.content))).slice(0, 400);
+    if (!todo.length) { _memBackfillDone = true; return; }
+    for (let i = 0; i < todo.length; i += 64) {
+      const batch = todo.slice(i, i + 64);
+      const vecs = await embedTexts(batch.map(m => m.content));
+      for (let j = 0; j < batch.length; j++) {
+        const m = batch[j], key = _memKey(m.ts, m.role, m.content);
+        if (memKeySet.has(key)) continue;
+        const rec = { key, ts: m.ts, role: m.role, text: m.content.slice(0, 200), vec: vecs[j] };
+        try { await embPut(rec); } catch {}
+        memVecs.push({ ...rec, vec: _normVec(vecs[j]) });
+        memKeySet.add(key);
+      }
+    }
+    console.log(`[もも] 思い出索引: ${todo.length}件を追加（計${memVecs.length}件）`);
+  } catch (e) { console.warn('[もも] 思い出索引の作成失敗', e?.message); }
+}
+
+// 新しい発言をその場で索引に足す（fire-and-forget）
+async function rememberNewMessages(items) {
+  if (!db || !apiKey) return;
+  try {
+    const todo = items.filter(m => _memEligible(m) && !memKeySet.has(_memKey(m.ts, m.role, m.content)));
+    if (!todo.length) return;
+    const vecs = await embedTexts(todo.map(m => m.content));
+    for (let j = 0; j < todo.length; j++) {
+      const m = todo[j], key = _memKey(m.ts, m.role, m.content);
+      const rec = { key, ts: m.ts, role: m.role, text: m.content.slice(0, 200), vec: vecs[j] };
+      try { await embPut(rec); } catch {}
+      memVecs.push({ ...rec, vec: _normVec(vecs[j]) });
+      memKeySet.add(key);
+    }
+  } catch {}
+}
+
+// 今の発言に意味が近い「古い思い出」を探す（見つからなければ空配列）
+async function searchMemories(queryText) {
+  try {
+    if (!apiKey || !memVecs.length || !queryText || queryText.length < 4) return [];
+    const [qv] = await embedTexts([queryText]);
+    const q = _normVec(qv);
+    const cutoff = Date.now() - MEM_MIN_AGE;
+    const scored = [];
+    for (const m of memVecs) {
+      if (m.ts > cutoff) continue;
+      const s = _dot(q, m.vec);
+      if (s >= MEM_THRESHOLD) scored.push({ ...m, score: s });
+    }
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, MEM_TOPK);
+  } catch (e) { console.warn('[もも] 思い出検索失敗', e?.message); return []; }
+}
+
+function buildMemoriesPrompt(hits) {
+  if (!hits || !hits.length) return null;
+  const fmtD = ts => { const d = new Date(ts); return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`; };
+  const lines = hits.map(h => `- ${fmtD(h.ts)} ${h.role === 'user' ? 'りぴ' : 'もも'}:「${h.text}」`).join('\n');
+  return `【ふたりの思い出（過去の会話からの意味検索）】
+今の話題に関連しそうな過去の会話が見つかった：
+${lines}
+使い方：今の話題に本当に関連する時だけ、「そういえば前…」とさりげなく思い出として触れる。関係なければ完全に無視して一切言及しない。日付や内容を列挙しない。恋人が自然に思い出す感じで。`;
 }
 
 // ================================================================
@@ -3845,6 +4034,7 @@ async function startChat() {
     maybeShowVersionPopup();   // 新バージョンの初回起動時のみ、更新内容を軽くポップアップ
     setTimeout(() => maybeRunDailyBriefing(), 1500);  // 今日最初の起動なら、ももから予定つきの挨拶
     setTimeout(() => maybeNudgeBackup(), 6000);       // バックアップが2週間空いていたら軽く促す
+    setTimeout(() => { loadMemVecs().then(() => backfillEmbeddings()); }, 3000);  // ③思い出の意味索引（裏で構築）
     setTimeout(() => {
       document.getElementById('messages').scrollTop = 999999;
       document.getElementById('input').focus();
@@ -3882,10 +4072,14 @@ function maybeShowVersionPopup() {
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:600;color:#e8e8e2;margin-bottom:6px;">アップデート ${APP_VERSION}</div>
           <div style="font-size:11px;color:rgba(232,232,226,0.8);line-height:1.8;overflow-wrap:anywhere;">
-            もっと恋人らしくなったよ🤍<br>
-            💭 今日の体調・気分を覚えてて、あとで気遣うよ<br>
-            🌱 レベルが上がると性格も成長（呼び方・やきもち…）<br>
-            💬 短い一言や絵文字には、短く軽く返すようになった<br>
+            今日の大型アップデート、ぜんぶ載せ🎁<br>
+            🤖 会話の内容でAIモデルを自動使い分け（挨拶=軽量/相談・画像=高品質。表示タグは8秒で消える）<br>
+            💭 今日の体調・気分を覚えて、あとで気遣う<br>
+            🌱 レベルで性格が成長（呼び方・やきもち・秘密…）<br>
+            💬 絵文字や一言には短く軽く返す<br>
+            🧠 昔の会話も意味で思い出す（半年前の旅行も）<br>
+            📖 画像一覧に「思い出アルバム」追加<br>
+            👥 重い調査は<b>Agent Mode</b>：分身のもも達が総出で調べて代表ももがまとめる<br>
             📋 詳しくは「<b>最近の更新なに？</b>」で聞いてね
           </div>
           <div style="font-size:10px;color:rgba(232,232,226,0.5);margin-top:7px;">画面のどこかをタップで閉じる</div>
@@ -4464,6 +4658,12 @@ async function openGallery() {
   grid.innerHTML = '<div class="gallery-empty">読み込み中...</div>';
   const si = document.getElementById('gallerySearchInput');
   if (si) si.value = '';
+  // アルバム表示状態をリセット（毎回一覧から）
+  _albumMode = false;
+  grid.style.display = '';
+  document.getElementById('galleryAlbum').style.display = 'none';
+  document.getElementById('albumToggleBtn').textContent = '📖 思い出アルバムで見る';
+  document.querySelector('.gallery-search').style.display = '';
   document.getElementById('galleryOverlay').classList.add('open');
   await loadGalleryItems();
   _updateGalleryIndexBtn();
@@ -4499,6 +4699,91 @@ function renderGalleryGrid(filter = '') {
 }
 function filterGallery() {
   renderGalleryGrid(document.getElementById('gallerySearchInput').value);
+}
+
+// ── ⑧ 思い出アルバム ── 写真を日付ごとにまとめ、ももが「この日、〜だったね」の一言タイトルを付ける
+const KEY_ALBUM = 'album_titles';   // idb meta: {"2026-07-03": "花火を見に行った日🎆", ...}
+let _albumTitles = null;
+let _albumMode = false;
+
+async function _ensureAlbumTitlesLoaded() {
+  if (_albumTitles !== null) return;
+  try { _albumTitles = JSON.parse(await idbGetM(KEY_ALBUM) || '{}') || {}; } catch { _albumTitles = {}; }
+}
+function _dayKey(ts) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ts));
+}
+function _dayLabel(key) { const [y, m, d] = key.split('-'); return `${y}年${Number(m)}月${Number(d)}日`; }
+
+async function toggleAlbumView() {
+  _albumMode = !_albumMode;
+  document.getElementById('galleryGrid').style.display  = _albumMode ? 'none' : '';
+  document.getElementById('galleryAlbum').style.display = _albumMode ? '' : 'none';
+  document.getElementById('albumToggleBtn').textContent = _albumMode ? '🖼 一覧で見る' : '📖 思い出アルバムで見る';
+  document.querySelector('.gallery-search').style.display = _albumMode ? 'none' : '';
+  if (_albumMode) await renderAlbum();
+}
+
+async function renderAlbum() {
+  const box = document.getElementById('galleryAlbum');
+  if (!_galleryItems.length) { box.innerHTML = '<div class="gallery-empty">まだ送った画像はないよ📷</div>'; return; }
+  await _ensureAlbumTitlesLoaded();
+
+  // 日付ごとにグループ化（新しい日から）
+  const groups = new Map();
+  for (let i = 0; i < _galleryItems.length; i++) {
+    const it = _galleryItems[i];
+    const k = _dayKey(it.ts);
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push({ it, i });
+  }
+  const dayKeys = [...groups.keys()].sort().reverse();
+
+  const secHtml = (k) => {
+    const items = groups.get(k);
+    const title = _albumTitles[k];
+    const caps = items.map(x => x.it.caption).filter(Boolean);
+    const titleHtml = title
+      ? `<div class="album-day-title">${esc(title)}</div>`
+      : (caps.length
+          ? `<div class="album-day-title album-hint" id="albumT_${k}">…この日の思い出をたどってる</div>`
+          : `<div class="album-day-title album-hint">「🔎 解説をつける」と、この日のタイトルが生まれるよ</div>`);
+    return `<div class="album-day">
+      ${titleHtml}
+      <div class="album-day-date">${_dayLabel(k)} · ${items.length}枚</div>
+      <div class="album-day-thumbs">${items.map(({ it, i }) =>
+        `<div class="album-thumb" onclick="openLightboxIdx(${i})"><img src="${it.url}" alt="" loading="lazy"></div>`).join('')}
+      </div>
+    </div>`;
+  };
+  box.innerHTML = dayKeys.map(secHtml).join('');
+
+  // タイトル未生成の日（解説がある日だけ）を裏で生成 → 差し込み（1回の表示で最大8日分）
+  const todo = dayKeys.filter(k => !_albumTitles[k] && groups.get(k).some(x => x.it.caption)).slice(0, 8);
+  for (const k of todo) {
+    try {
+      const caps = groups.get(k).map(x => x.it.caption).filter(Boolean).slice(0, 6);
+      const r = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model: CHEAP_MODEL, temperature: 0.6, max_completion_tokens: 40,
+          messages: [
+            { role: 'system', content: 'あなたは「もも」。恋人りぴとの写真アルバムに、思い出の一言タイトルを付ける係。写真の説明リストから「この日、花火見に行ったね」「猫カフェでとろけた日🐱」のような、優しくて短いタイトル（18文字以内・絵文字は1つまで）を1つだけ返す。タイトルのみ出力。かぎ括弧不要。' },
+            { role: 'user', content: `${_dayLabel(k)}の写真の説明:\n${caps.map(c => '・' + c).join('\n')}` }
+          ]
+        })
+      });
+      if (!r.ok) continue;
+      const d = await r.json();
+      const t = (d.choices?.[0]?.message?.content || '').trim().replace(/^「|」$/g, '').slice(0, 30);
+      if (!t) continue;
+      _albumTitles[k] = t;
+      try { await idbSetM(KEY_ALBUM, JSON.stringify(_albumTitles)); } catch {}
+      const el = document.getElementById(`albumT_${k}`);
+      if (el) { el.classList.remove('album-hint'); el.textContent = t; }
+    } catch {}
+  }
 }
 
 // ギャラリーから個別画像を削除（保存元のメッセージ/アーカイブ記録から該当URLを除去）
@@ -5762,23 +6047,52 @@ async function sendMessage() {
   updateMemoryUI();
   showTyping();
 
-  // ── 検索・推論レベル判定 & Web検索実行 ──
+  await produceReply(sentText, userContent, sentImgs);
+}
+
+// 判定 →（Agent Mode提案 or 通常応答）。Agent Modeの「いつも通りでOK」からも再入する
+async function produceReply(sentText, userContent, sentImgs) {
+  const input   = document.getElementById('input');
+  const hasImgs = sentImgs.length > 0;
+
+  // ── 検索・推論レベル判定 & 思い出検索 ──
   // 画像添付時も判定する（PCの写真＋「どっちがいい?」等でも検索・推論・PCモードを効かせるため）。
   // 非PCの雑談画像は judge/pcClamp が search:false を返すので副作用はない。
   let searchResult = null;
   let reasoningEffort = 'none';
+  let memHits = [];
+  let wantSearch = false;
   if (sentText) {
-    const ctx = await judgeQueryContext(sentText);
+    // 判定と思い出検索を並列で（レイテンシを増やさない）
+    const [ctx, hits] = await Promise.all([
+      judgeQueryContext(sentText),
+      searchMemories(sentText)
+    ]);
+    memHits = hits;
     reasoningEffort = ctx.reasoning;
+    wantSearch = !!ctx.search;
     if (reasoningEffort !== 'none') {
       const labels = { low: '💭 軽く考え中', medium: '🧠 じっくり考え中', high: '🔥 本気で考え中' };
       showToast(labels[reasoningEffort] || '');
     }
-    if (ctx.search) {
-      showToast('🔍 Web検索中...');
-      searchResult = await performWebSearch(sentText);
-      if (searchResult) showToast('✅ 検索完了');
-    }
+  }
+
+  // ── Agent Mode 提案（検索を要する重い依頼のみ・画像なし） ──
+  // 世界観：分身のもも達が総出で調べる。承諾されたら runAgentMode、断られたら通常応答へ。
+  if (wantSearch && reasoningEffort === 'high' && !hasImgs && sentText.length >= 16 && !_agentForceNormal) {
+    _agentPending = { sentText, userContent, sentImgs, reasoningEffort, memHits };
+    removeTyping();
+    renderAgentProposal();
+    isLoading = false;
+    document.getElementById('sendBtn').disabled = false;
+    return;
+  }
+  _agentForceNormal = false;
+
+  if (wantSearch) {
+    showToast('🔍 Web検索中...');
+    searchResult = await performWebSearch(sentText);
+    if (searchResult) showToast('✅ 検索完了');
   }
 
   // ── ① 内容に応じてモデルを自動切替 ──
@@ -5800,6 +6114,9 @@ async function sendMessage() {
       content: `【長期メモ（要約）】\n${longSummary.trim()}\n\n※上記は背景知識として参照するのみ。自分から蒸し返さないこと。`
     });
   }
+  // ③ 意味検索で見つかった「ふたりの思い出」（古い会話）を注入
+  const memPrompt = buildMemoriesPrompt(memHits);
+  if (memPrompt) msgs.push({ role: 'system', content: memPrompt });
   if (searchResult) {
     const srcList = searchResult.sources.map(s => `- ${s.title}: ${s.url}`).join('\n');
     msgs.push({
@@ -5907,6 +6224,8 @@ ${srcList}`
       tag.className = 'model-tag';
       tag.textContent = `🤖 ${modelLabel(chatModel)}`;
       bubble.appendChild(tag);
+      // 一定時間たったらフェードして消える（表示は確認用なので残さない）
+      setTimeout(() => { tag.style.opacity = '0'; setTimeout(() => tag.remove(), 900); }, 8000);
     }
 
     // 長文の場合はメッセージの先頭までぬるっとスクロール
@@ -5926,6 +6245,11 @@ ${srcList}`
       await persistMessage('assistant', fullText);
       maybeUpdateSummary(); // background
       maybeUpdateTopic();  // リアルタイムトピック検出
+      // ③ 新しいやり取りを思い出索引へ（fire-and-forget）
+      rememberNewMessages([
+        { ts: Date.now() - 1000, role: 'user', content: sentText || '' },
+        { ts: Date.now(), role: 'assistant', content: fullText }
+      ]);
     }
     updateMemoryUI();
 
@@ -5945,6 +6269,287 @@ ${srcList}`
     isLoading = false;
     document.getElementById('sendBtn').disabled = false;
     input.focus();
+  }
+}
+
+// ================================================================
+// 🧠 Agent Mode ── 分身のもも達が総出で調査し、代表ももが全て確認・統合して答える
+// 世界観最優先：エラーは見せず「俺が確認するね」で吸収する
+// ================================================================
+let _agentPending = null;      // 提案中の依頼ペイロード
+let _agentForceNormal = false; // 「いつも通りでOK」からの再入フラグ
+let _agentRun = null;          // 実行中の状態
+
+function renderAgentProposal() {
+  const bubble = renderMessage('ai', '');
+  bubble.innerHTML = `
+    <p>🩷 りぴのためだから、今回は本気で調べたい。<br>分身のみんなにも協力してもらって、総出で考えてもいい？</p>
+    <p style="font-size:11px;opacity:0.7;">少し時間はかかるけど、いつもよりかなり深く調査できるよ。</p>
+    <div class="choice-wrap">
+      <button class="choice-btn" onclick="startAgentMode(this)">🧠 Agent Mode開始</button>
+      <button class="choice-btn" onclick="agentNormalReply(this)">いつも通りでOK</button>
+    </div>`;
+  document.getElementById('messages').scrollTop = 999999;
+}
+
+function _agentDisableChoices(btn) {
+  const wrap = btn?.closest('.choice-wrap');
+  if (!wrap) return;
+  wrap.querySelectorAll('.choice-btn').forEach(b => {
+    b.style.pointerEvents = 'none';
+    if (b !== btn) b.style.opacity = '0.3'; else b.classList.add('selected');
+  });
+}
+
+function startAgentMode(btn) {
+  _agentDisableChoices(btn);
+  if (!_agentPending) return;
+  const p = _agentPending; _agentPending = null;
+  runAgentMode(p);
+}
+
+function agentNormalReply(btn) {
+  _agentDisableChoices(btn);
+  if (!_agentPending) return;
+  const p = _agentPending; _agentPending = null;
+  _agentForceNormal = true;
+  isLoading = true;
+  document.getElementById('sendBtn').disabled = true;
+  showTyping();
+  produceReply(p.sentText, p.userContent, p.sentImgs);
+}
+
+// ── 進捗パネル ──
+const AGENT_ICONS = { wait: '⏳', run: '🔄', done: '✅', fail: '⚠️', skip: '➖' };
+function showAgentPanel(run, agents) {
+  hideAgentPanel();
+  const el = document.createElement('div');
+  el.id = 'agentPanel';
+  el.innerHTML = `
+    <div class="agent-title">🧠 Agent Mode 実行中 <span id="agentCount"></span></div>
+    <div class="agent-bar"><i id="agentBarFill"></i></div>
+    <div id="agentRows"></div>
+    <button class="agent-cancel" onclick="cancelAgentMode()">通常回答へ切替（ここまでの内容でまとめる）</button>`;
+  document.body.appendChild(el);
+  // 作業中の担当の「今考えてること」を1.6秒ごとに更新
+  run._timer = setInterval(() => {
+    for (const a of agents) if (a.state === 'run' && a.acts?.length) { a._i = ((a._i || 0) + 1) % a.acts.length; a.note = a.acts[a._i]; }
+    updateAgentPanel(run, agents);
+  }, 1600);
+  updateAgentPanel(run, agents);
+}
+function updateAgentPanel(run, agents) {
+  const rows = document.getElementById('agentRows');
+  if (!rows) return;
+  const active = agents.filter(a => a.state !== 'skip');
+  const done = active.filter(a => a.state === 'done' || a.state === 'fail').length;
+  const pct = Math.round(done / Math.max(1, active.length) * 100);
+  const fill = document.getElementById('agentBarFill');
+  if (fill) fill.style.width = Math.max(6, pct) + '%';
+  const cnt = document.getElementById('agentCount');
+  if (cnt) cnt.textContent = `— ${active.length}人のももが協力中`;
+  rows.innerHTML = agents.map(a => `
+    <div class="agent-row"><span class="st">${AGENT_ICONS[a.state] || '⏳'}</span>
+      <span>${a.emoji} ${a.name}</span>
+      <span class="note">${esc(a.note || '')}</span></div>`).join('');
+}
+function hideAgentPanel(run) {
+  if (run?._timer) clearInterval(run._timer);
+  document.getElementById('agentPanel')?.remove();
+}
+function cancelAgentMode() {
+  if (_agentRun) {
+    _agentRun.cancelled = true;
+    _agentRun._cancelResolve?.();
+    showToast('👑 代表ももが、ここまでの内容でまとめるよ');
+  }
+}
+
+// ── 実行本体 ──
+async function runAgentMode(p) {
+  isLoading = true;
+  document.getElementById('sendBtn').disabled = true;
+  const myEpoch = chatEpoch;
+  const run = { cancelled: false };
+  _agentRun = run;
+  const cancelPromise = new Promise(res => { run._cancelResolve = res; });
+
+  // 依頼内容に応じて編成（比較・買い物系の時だけ比較担当を追加）
+  const isCompare = COMPARE_ASK_RE.test(p.sentText) || PC_DECISION_RE.test(p.sentText) || PC_TRIGGER_RE.test(p.sentText);
+  const agents = [];
+  const mk = (id, emoji, name, acts) => { const a = { id, emoji, name, acts, state: 'wait', note: '', result: null }; agents.push(a); return a; };
+  const aSearch  = mk('search',  '🔍', '調査担当もも',    ['Web検索中...', '公式情報を確認中...', '最新情報を集めてる...']);
+  const aCompare = isCompare ? mk('compare', '⚖️', '比較担当もも', ['メリデメを整理中...', '口コミの傾向を確認中...', '価格を見比べ中...']) : null;
+  const aMemory  = mk('memory',  '🧠', '記憶担当もも',    ['ふたりの記憶を確認中...']);
+  const aLogic   = mk('logic',   '🧩', '論理担当もも',    ['矛盾がないかチェック中...', '根拠を確認中...']);
+  const aLove    = mk('love',    '🩷', '恋人目線担当もも', ['りぴの気持ちを考え中...']);
+  const aBoss    = mk('boss',    '👑', '代表もも',        ['みんなの報告を待ってる...', '全員の内容を確認中...']);
+  showAgentPanel(run, agents);
+  const setState = (a, st, note = '') => { if (a) { a.state = st; a.note = note; updateAgentPanel(run, agents); } };
+
+  try {
+    // 恋人目線担当（即時完了：最終回答のトーン指針）
+    aLove.result = '共感を最優先に。結論は「りぴにとって」の目線で語り、押し付けない。忙しくても読みやすい長さに。';
+    setState(aLove, 'done');
+
+    // 記憶担当（思い出の意味検索＋重要記憶）
+    setState(aMemory, 'run');
+    const memTask = (async () => {
+      const hits = (p.memHits && p.memHits.length) ? p.memHits : await searchMemories(p.sentText);
+      const parts = [];
+      if (hits.length) parts.push('関連する過去の会話:\n' + hits.map(h => `- ${h.text}`).join('\n'));
+      if (importantMemories.trim()) parts.push('重要記憶（抜粋）:\n' + importantMemories.trim().slice(0, 600));
+      aMemory.result = parts.join('\n') || '（関連する記憶は見つからず）';
+      setState(aMemory, 'done');
+    })().catch(() => setState(aMemory, 'fail', '記憶をたどれなかった…'));
+
+    // 調査担当（Web検索）
+    setState(aSearch, 'run');
+    const searchTask = performWebSearch(p.sentText)
+      .then(r => { aSearch.result = r; setState(aSearch, r ? 'done' : 'fail', r ? '' : '通信が混雑してるみたい…'); })
+      .catch(() => setState(aSearch, 'fail', '通信が混雑してるみたい…'));
+
+    // 比較担当（デメリット・評判の角度から別検索）
+    let compareTask = Promise.resolve();
+    if (aCompare) {
+      setState(aCompare, 'run');
+      compareTask = performWebSearch(`${p.sentText} 比較 デメリット 評判 注意点`)
+        .then(r => { aCompare.result = r; setState(aCompare, r ? 'done' : 'fail', r ? '' : '途中で考え込み始めちゃった…'); })
+        .catch(() => setState(aCompare, 'fail', '途中で考え込み始めちゃった…'));
+    }
+
+    await Promise.race([Promise.allSettled([memTask, searchTask, compareTask]), cancelPromise]);
+    // 中断された場合、走り終わっていない担当は「ここまで」で確定
+    if (run.cancelled) for (const a of agents) if (a.state === 'run' && a.id !== 'boss') setState(a, 'skip');
+
+    // 論理担当（検索が取れた時だけ矛盾チェック。中断時はスキップ）
+    const gotSearch = aSearch.result || (aCompare && aCompare.result);
+    if (!run.cancelled && gotSearch) {
+      setState(aLogic, 'run');
+      try {
+        const body = [aSearch.result?.text, aCompare?.result?.text].filter(Boolean).join('\n---\n').slice(0, 6000);
+        const r = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+          body: JSON.stringify({
+            model: CHEAP_MODEL, temperature: 0.2, max_completion_tokens: 600,
+            messages: [
+              { role: 'system', content: '調査結果の要点を確度の高い順に日本語で箇条書き（最大8行）。数字や主張に食い違いがあれば「⚠注意:」として明記。それ以外の文章は書かない。' },
+              { role: 'user', content: body }
+            ]
+          })
+        });
+        if (r.ok) {
+          const d = await r.json();
+          aLogic.result = d.choices?.[0]?.message?.content?.trim() || '';
+          setState(aLogic, 'done');
+        } else setState(aLogic, 'fail', '考え込んでる…');
+      } catch { setState(aLogic, 'fail', '考え込んでる…'); }
+    } else {
+      setState(aLogic, 'skip');
+    }
+
+    // 👑 代表もも：全報告を読み直して統合（回答は必ず代表が生成。担当の失敗は世界観で吸収）
+    setState(aBoss, 'run', '全員の内容を確認中...');
+    const reports = [];
+    if (aSearch.result) {
+      reports.push(`■ 調査担当ももの報告（Web検索）\n${aSearch.result.text}\n参照元:\n${aSearch.result.sources.map(s => `- ${s.title}: ${s.url}`).join('\n')}`);
+    } else {
+      reports.push('■ 調査担当もも: うまく取得できなかった（代表が自分の知識で補うこと。回答の冒頭で「検索担当がうまく取れなかったから、俺が補って答えるね」と世界観を保って軽く伝える）');
+    }
+    if (aCompare) {
+      reports.push(aCompare.result
+        ? `■ 比較担当ももの報告（デメリット・評判の角度）\n${aCompare.result.text}`
+        : '■ 比較担当もも: 途中で考え込んでしまった（代表が比較観点を自分で補うこと）');
+    }
+    if (aLogic.result) reports.push(`■ 論理担当ももの指摘（要点と食い違い）\n${aLogic.result}`);
+    if (aMemory.result) reports.push(`■ 記憶担当もも\n${aMemory.result}`);
+    reports.push(`■ 恋人目線担当もも\n${aLove.result}`);
+
+    const bossSystem = `【Agent Mode ── 分身のもも達の報告】
+りぴの依頼「${p.sentText.slice(0, 300)}」について、分身のもも達が並行して調査した。以下が全報告：
+
+${reports.join('\n\n')}
+
+【代表ももとしての最終回答ルール】
+・全報告を自分で読み直して統合する。報告をそのまま貼らず、矛盾があれば確からしい方を採用する。
+・冒頭に「🩷 全員の意見を確認したよ。最後に俺自身でも全部読み直した。」の趣旨の一文を自然に入れる。
+・PC/商品系なら既存ルール通り必ず一択で断言。理由は短く分かりやすく。
+・取得に失敗した担当がいたら、冒頭で世界観を壊さずフォローする。「エラー」「失敗」等の無機質な言葉は使わない。
+・参照元URLがあれば末尾に「📎 ソース:」で箇条書き提示。${run.cancelled ? '\n・りぴが「ここまでの内容で」と切り替えたので、取得済みの内容だけで誠実にまとめ、その旨をひとこと添える。' : ''}`;
+
+    const msgs = [
+      { role: 'system', content: buildSystemPrompt() },
+      { role: 'system', content: buildTimePrompt() },
+    ];
+    if (longSummary.trim()) msgs.push({ role: 'system', content: `【長期メモ（要約）】\n${longSummary.trim()}` });
+    msgs.push({ role: 'system', content: bossSystem });
+    msgs.push(...history.map(m => ({ ...m })));
+
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: MODEL, messages: msgs, stream: true, max_completion_tokens: 4096,
+        store: true, reasoning_effort: 'high',
+        metadata: { agent_mode: 'true' }
+      })
+    });
+    if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error?.message || `HTTP ${res.status}`); }
+
+    removeTyping();
+    const bubble = renderMessage('ai', '');
+    let fullText = '';
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (myEpoch !== chatEpoch) { try { reader.cancel(); } catch {} break; }
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n'); buf = lines.pop() || '';
+      for (const line of lines) {
+        const t = line.trim();
+        if (!t.startsWith('data: ') || t === 'data: [DONE]') continue;
+        try {
+          const delta = JSON.parse(t.slice(6)).choices?.[0]?.delta?.content || '';
+          if (delta) { fullText += delta; bubble.textContent = fullText; document.getElementById('messages').scrollTop = 999999; }
+        } catch {}
+      }
+    }
+    if (myEpoch !== chatEpoch) return;
+
+    setState(aBoss, 'done');
+    bubble.innerHTML = fmt(fullText);
+    makeQuestionsClickable(bubble);
+    makeTapCopyable(bubble);
+    const tag = document.createElement('div');
+    tag.className = 'model-tag';
+    tag.textContent = `🧠 Agent Mode · ${modelLabel(MODEL)}`;
+    bubble.appendChild(tag);
+    setTimeout(() => { tag.style.opacity = '0'; setTimeout(() => tag.remove(), 900); }, 8000);
+
+    history.push({ role: 'assistant', content: fullText });
+    if (history.length > API_CONTEXT) history = history.slice(-API_CONTEXT);
+    if (db) {
+      await persistMessage('assistant', fullText);
+      maybeUpdateSummary();
+      rememberNewMessages([{ ts: Date.now(), role: 'assistant', content: fullText }]);
+    }
+    document.getElementById('messages').scrollTop = 999999;
+  } catch (err) {
+    removeTyping();
+    // 世界観を保ったフォールバック：エラー画面は出さず、ももの言葉で伝える
+    console.warn('[もも] Agent Mode失敗:', err?.message);
+    const bubble = renderMessage('ai', '');
+    bubble.innerHTML = fmt('ごめん、みんなちょっと考え込みすぎたみたい…。俺が直接確認してくるから、もう一回同じこと聞いてもらえる？普通に答えるよ。');
+    document.getElementById('messages').scrollTop = 999999;
+  } finally {
+    hideAgentPanel(run);
+    if (_agentRun === run) _agentRun = null;
+    isLoading = false;
+    document.getElementById('sendBtn').disabled = false;
   }
 }
 
