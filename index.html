@@ -967,6 +967,12 @@ header {
   box-shadow: 0 0 14px rgba(200,240,160,0.25);
   animation: elemFadeIn 0.3s ease both;
 }
+/* ── 使用モデルの控えめタグ（どのモデルが応答したか） ── */
+.model-tag {
+  margin-top: 6px; font-size: 10px; letter-spacing: 0.02em;
+  color: rgba(232,232,226,0.4);
+  font-family: 'Syne', sans-serif;
+}
 .choice-send:disabled { opacity: 0.4; cursor: default; box-shadow: none; }
 .choice-send:not(:disabled):hover { transform: translateY(-1px); box-shadow: 0 0 18px rgba(200,240,160,0.35); }
 .choice-send:not(:disabled):active { transform: scale(0.97); }
@@ -2247,8 +2253,57 @@ const MSG_STORE     = 'messages';
 const META_STORE    = 'meta';
 const ARCHIVE_STORE = 'archives';  // 会話アーカイブ
 const JOURNAL_STORE = 'journal';   // 愚痴聞きジャーナル
-const MODEL         = 'gpt-5.4';
+// 用途別モデル（v2.8.0）。起動時に resolveModels() が /v1/models で実在確認し確定する。
+// 既定は現行の gpt-5.4（今動いているモデル）。恋愛・相談・画像認識など品質重視はこちら。
+let MODEL       = 'gpt-5.4';   // メイン会話（恋愛・相談・画像認識・各ツール）
+let LIGHT_MODEL = 'gpt-5.4';   // 挨拶・雑談・一行返信など軽い会話
+let CHEAP_MODEL = 'gpt-5.4';   // 検索判定・要約・タイトル生成など裏方（高頻度・低負荷）
+// 各用途の希望モデル（優先順）。/v1/models に存在する最初のIDを採用。無ければ既定にフォールバック。
+// gpt-5.6-luna は最安ティア（$1/$6・vision対応）。使えない環境では自動で gpt-5.4 等に落ちる。
+const MODEL_PLAN = {
+  chat:  ['gpt-5.4', 'gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-5.6', 'gpt-4.1'],
+  light: ['gpt-5.6-luna', 'gpt-5.4', 'gpt-5.6-terra', 'gpt-4.1-mini'],
+  cheap: ['gpt-5.6-luna', 'gpt-5.4', 'gpt-5.6-terra', 'gpt-4.1-mini'],
+};
 const IMAGE_MODEL   = 'gpt-image-2';      // 画像生成・合成（GPT Image 2）
+
+// 起動時に一度だけ、APIキーで使えるモデルを確認して用途別に割り当てる。
+// これが「ハードコード前の実キー疎通確認」を兼ねる：使えないIDは採用しないので壊れない。
+let modelsResolved = false;
+async function resolveModels() {
+  if (modelsResolved || !apiKey) return;
+  let available = null;
+  try {
+    const r = await fetch('https://api.openai.com/v1/models', { headers: { 'Authorization': `Bearer ${apiKey}` } });
+    if (r.ok) { const d = await r.json(); available = new Set((d.data || []).map(m => m.id)); }
+  } catch (e) { console.warn('[もも] モデル一覧取得失敗（既定を使用）', e?.message); }
+  const pick = (list, fallback) => {
+    if (!available) return fallback;                 // 一覧を取れない時は確実に動く既定を維持
+    for (const id of list) if (available.has(id)) return id;
+    return fallback;
+  };
+  MODEL       = pick(MODEL_PLAN.chat,  'gpt-5.4');
+  LIGHT_MODEL = pick(MODEL_PLAN.light, MODEL);        // 軽量モデルが無ければメインに合わせる
+  CHEAP_MODEL = pick(MODEL_PLAN.cheap, MODEL);
+  modelsResolved = true;
+  console.log('[もも] モデル解決:', { MODEL, LIGHT_MODEL, CHEAP_MODEL, listFetched: !!available });
+  updateModelSubtitle();
+}
+// 使用モデルをやさしい表示名に（gpt-5.6-luna → luna 等）
+function modelLabel(id) {
+  if (!id) return '';
+  const m = String(id).match(/gpt-5\.6-(sol|terra|luna)/i);
+  if (m) return m[1].toLowerCase();
+  return id.replace(/^gpt-/, '');
+}
+function updateModelSubtitle() {
+  const sub = document.getElementById('splashSub');
+  if (!sub) return;
+  const label = (MODEL === LIGHT_MODEL && MODEL === CHEAP_MODEL)
+    ? modelLabel(MODEL)
+    : `${modelLabel(MODEL)}＋${modelLabel(CHEAP_MODEL)}`;
+  sub.textContent = `sumo0612 · always here · ${label} · ${APP_VERSION}`;
+}
 const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/high）
 // アプリのバージョン。更新したら必ず上げる（最初のタイトル＝スプラッシュ画面に表示される）
 // v2.1.0: 送信画像の保存・画像ギャラリー一覧・会話検索・拡大時のAI画像解説＆会話ジャンプ・メニュー文字を白寄りに
@@ -2268,7 +2323,9 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 //         ④今夜の献立ツール（冷蔵庫写真→一択） ⑤商品比較の一択断言（全ジャンル） ⑥ジャーナルに気分グラフ
 // v2.7.1: 更新情報を聞かれたらバージョン順にしっかり説明するよう強化（現在バージョンの自動注入・使い方まで説明・特定機能は深掘り）
 // v2.7.2: 更新ポップアップを改善（v2.7.0の新機能一覧を含む詳しめ表示・20秒に延長・画面のどこかをタップで閉じる）
-const APP_VERSION   = 'v2.7.2';
+// v2.8.0: ①内容に応じてモデル自動切替（挨拶・雑談・一行返信→軽量luna／恋愛・相談・画像→gpt-5.4）。
+//         起動時に/v1/modelsで実在確認し使えないIDは自動フォールバック（gpt-5.4廃止時もterra→solへ）。使用モデルを表示
+const APP_VERSION   = 'v2.8.0';
 const SUMMARY_EVERY = 10;
 const LEARN_PER_LEVEL = 3;    // 何個の学習で1レベル上がるか（小さいほど上がりやすい。旧:5 → v2.6.1で3に緩和。レベルは単調増加なので変更しても下がらない）
 // 重要記憶キー（削除されない永続情報）
@@ -2544,7 +2601,9 @@ const SUMO_SYSTEM_PROMPT = `あなたはWebチャット上で『りぴ』だけ�
 ・全体を聞かれたら下の一覧を全部、特定の機能を聞かれたらその機能を深掘りして説明する。最後に「どれか詳しく知りたいのある？」と軽く聞いてもよい。
 
 ＜更新履歴（この内容に基づいて説明する）＞
-■ v2.7系（最新）
+■ v2.8系（最新）
+・モデル自動切替：会話の内容でAIモデルを賢く使い分けるようになった。挨拶・雑談・一行返信は軽量で速いモデル、恋愛・相談・画像認識は品質重視のモデル。品質を落とさずAPI代を節約する。どのモデルで答えたかは各返信に小さく表示される。起動時に使えるモデルを自動確認するので、モデルが変わっても壊れない。
+■ v2.7系
 ・今日のブリーフィング：1日の最初にアプリを開くと、ももが今日の予定（記憶と照合）つきで挨拶する。自動で届くので操作は不要。数日おきに約1ヶ月前の会話の思い出もひとこと添える。
 ・レベルの節目お祝い：Lv.100/250/500/750に到達すると一度だけお祝いと約束の予告が出る（Lv.1000は特別なご褒美）。
 ・今夜の献立これ！：画面下の便利ツールから開く。冷蔵庫や食材の写真を送ると、ももが今夜のメニューを1つに決めて、作り方・買い足しまで出す。候補は並べない。
@@ -3056,7 +3115,7 @@ async function maybeUpdateSummary() {
   const apiCall = (sysContent, userContent) => fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-    body: JSON.stringify({ model: MODEL, messages: [{ role:'system', content: sysContent }, { role:'user', content: userContent }] })
+    body: JSON.stringify({ model: CHEAP_MODEL, messages: [{ role:'system', content: sysContent }, { role:'user', content: userContent }] })
   });
 
   // 開始時の世代を記録。書き戻し前にこれが変わっていたら、
@@ -3200,8 +3259,8 @@ function runSplash(onDone) {
   const sub    = document.getElementById('splashSub');
   const dots   = [document.getElementById('d1'), document.getElementById('d2'), document.getElementById('d3')];
 
-  // バージョン情報を最初のタイトル（スプラッシュ）に表示
-  if (sub) sub.textContent = `sumo0612 · always here · ${MODEL} · ${APP_VERSION}`;
+  // バージョン情報＋使用モデルを最初のタイトル（スプラッシュ）に表示（解決後に updateModelSubtitle が更新）
+  if (sub) sub.textContent = `sumo0612 · always here · ${modelLabel(MODEL)} · ${APP_VERSION}`;
 
   // Show splash layer
   splash.style.opacity  = '1';
@@ -3612,6 +3671,9 @@ async function startChat() {
   // APIキー・ユーザー名を記憶する
   try { localStorage.setItem('momo_api_key', key); } catch(e) {}
 
+  // 使えるモデルを起動時に確認して用途別に割り当てる（fire-and-forget。確定までは既定のgpt-5.4で安全に動く）
+  resolveModels();
+
   // パスワードが設定されていれば、解除されるまでここで待つ
   await awaitUnlock();
 
@@ -3738,13 +3800,11 @@ function maybeShowVersionPopup() {
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:600;color:#e8e8e2;margin-bottom:6px;">アップデート ${APP_VERSION}</div>
           <div style="font-size:11px;color:rgba(232,232,226,0.8);line-height:1.8;overflow-wrap:anywhere;">
-            🌅 毎日の最初に、ももから今日の予定つき挨拶<br>
-            🍳 冷蔵庫の写真で今夜の献立を即決（便利ツール）<br>
-            🛒 商品の比較は検索で裏を取って一択で断言<br>
-            📈 愚痴ジャーナルに気分の推移グラフ<br>
-            🌱 レベルの節目（100/250/500/750）にお祝い<br>
-            📦 記憶の保護＆バックアップのお知らせ<br>
-            📋 詳しくは「<b>最近の更新なに？</b>」って聞いてね
+            🤖 AIモデルを賢く使い分けるようにしたよ<br>
+            ・挨拶や雑談 → 軽くて速いモデル<br>
+            ・恋愛・相談・画像 → 品質重視のモデル<br>
+            品質そのままでAPI代を節約。どのモデルで答えたかは返信に小さく出るよ。<br>
+            📋 ほかの更新は「<b>最近の更新なに？</b>」で聞いてね
           </div>
           <div style="font-size:10px;color:rgba(232,232,226,0.5);margin-top:7px;">画面のどこかをタップで閉じる</div>
         </div>
@@ -3858,7 +3918,7 @@ async function maybeRunDailyBriefing() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: MODEL, max_completion_tokens: 300,
+        model: LIGHT_MODEL, max_completion_tokens: 300,
         messages: [
           { role: 'system', content: buildSystemPrompt() },
           { role: 'system', content: buildTimePrompt() },
@@ -3942,7 +4002,7 @@ async function generateTitle(messages) {
       method: 'POST',
       headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: MODEL, temperature: 0.3, max_completion_tokens: 60,
+        model: CHEAP_MODEL, temperature: 0.3, max_completion_tokens: 60,
         messages: [
           { role:'system', content:'以下の会話に短いタイトルを付けてください。15文字以内。タイトルのみ出力。括弧や記号は不要。' },
           { role:'user', content: sample }
@@ -4035,7 +4095,7 @@ async function analyzeTopicShift(recentMessages) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: MODEL, temperature: 0, max_completion_tokens: 80,
+        model: CHEAP_MODEL, temperature: 0, max_completion_tokens: 80,
         messages: [{
           role: 'system',
           content: `あなたは恋人同士の会話のトピック分析係です。JSON形式のみで出力。
@@ -4478,7 +4538,7 @@ async function describeImage(url) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
     body: JSON.stringify({
-      model: MODEL, max_completion_tokens: 100,
+      model: CHEAP_MODEL, max_completion_tokens: 100,
       messages: [
         { role: 'system', content: '送られた画像を見て、日本語で1行（30文字程度まで）の簡潔な説明だけを返してください。前置き・記号・かぎ括弧は不要。説明文のみ。' },
         { role: 'user', content: [
@@ -4958,7 +5018,7 @@ function makeQuestionsClickable(bubble) {
 // （Markdown記号 ** * ` ### を除去、コピーボタン自身は除外）
 function _extractBubbleText(node) {
   const clone = node.cloneNode(true);
-  clone.querySelectorAll('.bubble-copy-btn, .copy-btn, .choice-btn, .choice-send, .choice-hint').forEach(b => b.remove());
+  clone.querySelectorAll('.bubble-copy-btn, .copy-btn, .choice-btn, .choice-send, .choice-hint, .model-tag').forEach(b => b.remove());
   return clone.textContent.trim()
     .replace(/\*\*(.*?)\*\*/g, '$1')
     .replace(/\*(.*?)\*/g, '$1')
@@ -5016,7 +5076,7 @@ function makeTapCopyable(bubble) {
   targets.forEach(el => {
     el.addEventListener('click', (e) => {
       // コピーボタンや選択肢ボタンのクリックは除外
-      if (e.target.closest('.copy-btn, .choice-btn, .choice-send, .choice-hint, .q-chip, .bubble-copy-btn')) return;
+      if (e.target.closest('.copy-btn, .choice-btn, .choice-send, .choice-hint, .model-tag, .q-chip, .bubble-copy-btn')) return;
       const raw = (el.textContent || '').trim()
         .replace(/\*\*(.*?)\*\*/g, '$1')
         .replace(/\*(.*?)\*/g, '$1')
@@ -5467,7 +5527,7 @@ async function judgeQueryContext(userText) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: MODEL, temperature: 0, max_completion_tokens: 30,
+        model: CHEAP_MODEL, temperature: 0, max_completion_tokens: 30,
         messages: [{
           role: 'system',
           content: `ユーザーの発言を分析し、2つの判定を行ってJSON形式で出力してください。
@@ -5638,6 +5698,14 @@ async function sendMessage() {
     }
   }
 
+  // ── ① 内容に応じてモデルを自動切替 ──
+  // 挨拶・雑談・一行返信（reasoning=none）は軽量モデル、恋愛・相談・深い話は品質重視のメインモデル。
+  // 画像つきは必ずメインモデル（画像認識の品質を落とさない）。
+  const chatModel = (reasoningEffort === 'none' && !hasImgs) ? LIGHT_MODEL : MODEL;
+  // 「今どのモデルで考えているか」を可視化（同一モデルなら控えめに、切替が起きた時だけ明示）
+  if (chatModel !== MODEL) showToast(`💬 ${modelLabel(chatModel)} でさくっと返すね`);
+  else if (reasoningEffort === 'none') showToast(`💬 ${modelLabel(chatModel)} で話すね`);
+
   // ── build messages array ──
   const msgs = [
     { role: 'system', content: buildSystemPrompt() },
@@ -5687,9 +5755,9 @@ ${srcList}`
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
       signal: ac.signal,
       body: JSON.stringify({
-        model: MODEL, messages: msgs, stream: true, max_completion_tokens: 4096,
+        model: chatModel, messages: msgs, stream: true, max_completion_tokens: 4096,
         store: true,
-        metadata: { reasoning: reasoningEffort, search: searchResult ? 'true' : 'false' },
+        metadata: { reasoning: reasoningEffort, search: searchResult ? 'true' : 'false', model: chatModel },
         ...(reasoningEffort !== 'none' ? { reasoning_effort: reasoningEffort } : {})
       })
     });
@@ -5749,6 +5817,14 @@ ${srcList}`
     bubble.innerHTML = fmt(fullText);
     makeQuestionsClickable(bubble);
     makeTapCopyable(bubble);
+    // どのモデルで応答したかを控えめに表示（切替が起きた時だけ／軽量モデル使用時に明示）
+    const tagRow = bubble.closest('.message-row');
+    if (tagRow && chatModel !== MODEL) {
+      const tag = document.createElement('div');
+      tag.className = 'model-tag';
+      tag.textContent = `🤖 ${modelLabel(chatModel)}`;
+      bubble.appendChild(tag);
+    }
 
     // 長文の場合はメッセージの先頭までぬるっとスクロール
     const msgContainer = document.getElementById('messages');
