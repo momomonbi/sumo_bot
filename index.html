@@ -1028,14 +1028,24 @@ header {
   border-radius: 0 11px 11px 0; padding: 13px 14px; margin-bottom: 11px;
   font-size: 13.5px; color: #e8e8e2; line-height: 1.95; overflow-wrap: anywhere;
 }
-.omamori-tel {
-  display: block; background: rgba(255,255,255,0.05); border-radius: 11px;
-  padding: 11px 13px; margin-bottom: 8px; text-decoration: none;
-  color: #e8e8e2; font-size: 12.5px; line-height: 1.6; text-align: left;
-  border: 1px solid rgba(255,255,255,0.07); transition: background 0.15s;
+.om-callout {
+  background: linear-gradient(150deg, rgba(200,240,160,0.16), rgba(200,240,160,0.05));
+  border: 1px solid rgba(200,240,160,0.42); border-radius: 14px;
+  padding: 16px 15px; margin-bottom: 14px; text-align: center;
+  font-size: 13px; color: #e8e8e2; line-height: 2.0;
+  word-break: keep-all;   /* 「もも」が行末で分断されないように */
 }
-.omamori-tel:hover { background: rgba(255,255,255,0.09); }
-.omamori-tel span { display: block; font-size: 10.5px; color: rgba(232,232,226,0.5); margin-top: 2px; }
+.om-callout b { color: #d8f0b0; font-size: 15px; letter-spacing: 0.02em; }
+.om-saylabel { font-size: 10.5px; color: rgba(232,232,226,0.5); margin: 15px 0 8px; }
+.om-say {
+  background: rgba(255,255,255,0.055); border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 11px; padding: 11px 13px; margin-bottom: 7px;
+  font-size: 13.5px; color: #e8e8e2; cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.om-say:hover  { background: rgba(200,240,160,0.13); border-color: rgba(200,240,160,0.34); }
+.om-say:active { transform: scale(0.99); }
+.om-say.copied { background: rgba(200,240,160,0.2); border-color: rgba(200,240,160,0.5); color: #d8f0b0; }
 .omamori-btn {
   width: 100%; margin-top: 14px;
   background: rgba(200,240,160,0.16); color: #d8f0b0;
@@ -1057,6 +1067,177 @@ header {
 .book-opt em { font-style: normal; display: block; font-size: 10.5px; color: rgba(232,232,226,0.5); margin-top: 2px; }
 .book-stat { font-size: 11.5px; color: rgba(232,232,226,0.6); line-height: 1.9; margin-bottom: 13px; text-align: left; }
 .book-stat b { color: #d8f0b0; }
+
+/* ══════════════════════════════════════════════════════════════
+   📕 思い出の本 ── 読むための本。画面ではページをめくり、
+   印刷では組版がそのままPDFになる。
+   ══════════════════════════════════════════════════════════════ */
+.bookrd {
+  position: fixed; inset: 0; z-index: 900; display: none;
+  background: #ece6d8;
+  font-family: 'Hiragino Mincho ProN', 'HiraMinProN-W3', 'Yu Mincho', YuMincho,
+               'Noto Serif JP', 'Songti SC', serif;
+  color: #2e2a24;
+}
+.bookrd.open { display: block; animation: elemFadeIn 0.5s ease both; }
+
+/* 紙。わずかな陰影で「開いた本」に見せる */
+.bookrd-stage {
+  position: absolute; inset: 52px 0 60px; overflow: hidden;
+  background:
+    radial-gradient(120% 80% at 50% 0%,   rgba(255,252,244,0.95), rgba(0,0,0,0) 60%),
+    radial-gradient(100% 60% at 50% 100%, rgba(120,100,70,0.10),  rgba(0,0,0,0) 55%),
+    linear-gradient(180deg, #f6f2e8 0%, #f1ece0 100%);
+  box-shadow: inset 0 0 60px rgba(120,100,70,0.10);
+}
+.bookrd-flow {
+  height: 100%; padding: 26px 0 6px; box-sizing: border-box;
+  transition: transform 0.44s cubic-bezier(.22,1,.36,1);
+  font-size: 15px; line-height: 2.15; letter-spacing: 0.02em;
+  text-align: justify; word-break: normal; overflow-wrap: anywhere; line-break: strict;
+}
+
+/* 上下の帯 */
+.bookrd-top, .bookrd-nav {
+  position: absolute; left: 0; right: 0; z-index: 3;
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 14px; box-sizing: border-box;
+  background: rgba(236,230,216,0.94); backdrop-filter: blur(6px);
+}
+.bookrd-top { top: 0; height: 52px; border-bottom: 1px solid rgba(120,100,70,0.16); }
+.bookrd-nav { bottom: 0; height: 60px; border-top: 1px solid rgba(120,100,70,0.16); justify-content: center; }
+.bookrd-ttl {
+  flex: 1; text-align: center; font-size: 12.5px; letter-spacing: 0.14em;
+  color: #6e6353; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.bookrd-ico {
+  flex: none; width: 34px; height: 34px; border-radius: 50%; border: none;
+  background: transparent; color: #6e6353; font-size: 16px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s;
+}
+.bookrd-ico:hover { background: rgba(120,100,70,0.11); }
+.bookrd-ico:disabled { opacity: 0.28; cursor: default; }
+.bookrd-page {
+  min-width: 96px; text-align: center; font-size: 12px; letter-spacing: 0.1em;
+  color: #6e6353; font-variant-numeric: tabular-nums;
+}
+.bookrd-pdf {
+  position: absolute; right: 12px; bottom: 12px; z-index: 4;
+  background: #4a4034; color: #f4efe3; border: none;
+  border-radius: 20px; padding: 9px 17px; font-size: 12px; cursor: pointer;
+  font-family: 'Syne', sans-serif; font-weight: 700; letter-spacing: 0.04em;
+  box-shadow: 0 4px 16px rgba(60,48,32,0.32);
+}
+.bookrd-pdf:active { transform: scale(0.97); }
+
+/* ── 中身の組版 ── */
+/* 表紙・奥付・巻末は、それぞれ独立したページにする */
+.bk-cover { text-align: center; padding: 16% 6px 0; break-after: column; }
+.bk-cover-rule { width: 46px; height: 1px; background: rgba(120,100,70,0.42); margin: 0 auto; }
+.bk-cover h1 {
+  font-size: 27px; font-weight: 400; letter-spacing: 0.3em; line-height: 2.1;
+  margin: 26px 0 22px; text-indent: 0.3em;
+}
+.bk-cover .bk-span { font-size: 12.5px; color: #6e6353; letter-spacing: 0.12em; line-height: 2.3; }
+.bk-cover .bk-note { font-size: 11px; color: #8b8172; letter-spacing: 0.08em; margin-top: 30px; line-height: 2.1; }
+.bk-rule { width: 100%; height: 1px; background: rgba(120,100,70,0.22); margin: 26px 0; }
+
+/* 日付の見出しがページ末尾に取り残されないように、次の本文とくっつける */
+.bk-chapter { break-inside: avoid-column; break-after: avoid-column; margin: 4px 0 18px; }
+.bk-chapter .bk-date {
+  font-size: 17px; letter-spacing: 0.18em; color: #3b352c;
+  padding-bottom: 9px; border-bottom: 1px solid rgba(120,100,70,0.28);
+}
+.bk-chapter .bk-daytitle {
+  font-size: 13px; color: #8a6f3f; letter-spacing: 0.07em; margin-top: 10px; line-height: 1.9;
+}
+
+/* 会話は吹き出しにしない。話者を小さく添えて、本文として流す */
+.bk-line { margin: 0 0 13px; break-inside: avoid-column; }
+.bk-who {
+  display: inline-block; min-width: 2.6em; margin-right: 0.5em;
+  font-size: 10.5px; letter-spacing: 0.16em; color: #9a8f7d;
+  vertical-align: 2px;
+}
+.bk-said { display: inline; }
+.bk-line.momo .bk-said { color: #2e2a24; }
+.bk-line.ripi .bk-said { color: #4a4033; }
+.bk-line.ripi { padding-left: 0.2em; }
+
+.bk-photo { break-inside: avoid-column; margin: 15px 0 17px; text-align: center; }
+.bk-photo img {
+  max-width: 100%; max-height: 46vh; object-fit: contain;
+  border: 1px solid rgba(120,100,70,0.3); padding: 5px; background: #fbf8f1;
+  box-shadow: 0 3px 12px rgba(90,72,48,0.16);
+}
+.bk-photo figcaption { font-size: 10.5px; color: #8b8172; margin-top: 8px; letter-spacing: 0.06em; }
+
+.bk-sec { break-before: column; margin: 4px 0 16px; }
+.bk-sec > h3 { break-after: avoid-column; }
+.bk-sec h3 {
+  font-size: 15px; font-weight: 400; letter-spacing: 0.2em; color: #3b352c;
+  margin: 0 0 13px; padding-bottom: 8px; border-bottom: 1px solid rgba(120,100,70,0.28);
+}
+.bk-plain { white-space: pre-wrap; font-size: 13.5px; line-height: 2.15; color: #3b352c; }
+.bk-jrn { margin-bottom: 17px; break-inside: avoid-column; }
+.bk-jrn .bk-jdate { font-size: 11px; color: #8b8172; letter-spacing: 0.1em; margin-bottom: 6px; }
+.bk-jrn .bk-jreply { color: #6e6353; margin-top: 7px; padding-left: 0.9em; border-left: 1px solid rgba(120,100,70,0.28); }
+
+.bk-end { text-align: center; padding: 22% 6px 0; break-before: column; }
+.bk-end .bk-fin { font-size: 15px; letter-spacing: 0.32em; color: #4a4033; line-height: 2.4; text-indent: 0.32em; }
+.bk-end .bk-sig { font-size: 11px; color: #8b8172; letter-spacing: 0.1em; margin-top: 26px; }
+
+/* 目次 */
+.bk-toc { position: absolute; inset: 52px 0 60px; z-index: 5; display: none;
+  background: rgba(240,235,223,0.985); overflow-y: auto; padding: 18px 20px 26px; }
+.bk-toc.open { display: block; animation: elemFadeIn 0.25s ease both; }
+.bk-toc-h { font-size: 13px; letter-spacing: 0.24em; color: #6e6353; margin-bottom: 15px; text-align: center; }
+.bk-toc-i {
+  display: flex; justify-content: space-between; gap: 12px; align-items: baseline;
+  padding: 11px 2px; border-bottom: 1px dotted rgba(120,100,70,0.32);
+  cursor: pointer; font-size: 13.5px; color: #3b352c;
+}
+.bk-toc-i:hover { color: #8a6f3f; }
+.bk-toc-i span { font-size: 11px; color: #9a8f7d; font-variant-numeric: tabular-nums; flex: none; }
+.bk-toc-i em { font-style: normal; font-size: 11px; color: #8a6f3f; display: block; margin-top: 3px; }
+
+/* ── 印刷＝PDF。画面用のページ送りを解除して、紙に組み直す ── */
+@media print {
+  /* アプリ本体は画面を1画面に固定している（height:100%/overflow:hidden）。
+     そのままだと紙が1ページで切れるので、まず解除する */
+  html, body {
+    height: auto !important; min-height: 0 !important; overflow: visible !important;
+    background: #fff !important; color: #000 !important;
+    touch-action: auto !important;
+  }
+  body > *:not(.bookrd) { display: none !important; }
+  .bookrd {
+    position: static !important; display: block !important;
+    background: #fff !important; color: #000;
+  }
+  .bookrd-top, .bookrd-nav, .bookrd-pdf, .bk-toc { display: none !important; }
+  .bookrd-stage {
+    position: static !important; inset: auto !important;
+    overflow: visible !important; height: auto !important;
+    background: #fff !important; box-shadow: none !important;
+  }
+  .bookrd-flow {
+    transform: none !important; height: auto !important;
+    columns: auto !important; column-width: auto !important;
+    padding: 0 !important; font-size: 10.5pt; line-height: 1.95;
+  }
+  @page { size: A4; margin: 20mm 18mm 18mm; }
+  .bk-cover { padding-top: 26%; break-after: page; }
+  .bk-cover h1 { font-size: 22pt; }
+  .bk-chapter { break-before: page; break-inside: avoid; }
+  .bk-sec { break-before: page; break-inside: auto; }
+  .bk-end { break-before: page; padding-top: 30%; }
+  .bk-line, .bk-photo, .bk-jrn { break-inside: avoid; }
+  .bk-photo img { max-height: 118mm; box-shadow: none; }
+  .bk-cover .bk-note { display: none; }
+}
+
 
 /* ── 🪞 ももが覚えたりぴ（学習データモーダル内） ── */
 .mirror-box {
@@ -2350,7 +2531,7 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
       <div class="omamori-tab on" id="omTab0" onclick="omamoriTab(0)">呼吸</div>
       <div class="omamori-tab"    id="omTab1" onclick="omamoriTab(1)">5-4-3-2-1</div>
       <div class="omamori-tab"    id="omTab2" onclick="omamoriTab(2)">ももの言葉</div>
-      <div class="omamori-tab"    id="omTab3" onclick="omamoriTab(3)">連絡先</div>
+      <div class="omamori-tab"    id="omTab3" onclick="omamoriTab(3)">ももに話す</div>
     </div>
 
     <!-- 呼吸 -->
@@ -2378,13 +2559,25 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
       <button class="omamori-btn ghost" onclick="rollOmamoriQuote()">もう1こ引く</button>
     </div>
 
-    <!-- 連絡先 -->
+    <!-- ももに話す -->
     <div class="omamori-pane" id="omPane3">
-      <div class="omamori-lead">ひとりで抱えなくていい。どれでもいいから、繋がって。</div>
-      <div class="omamori-tel" style="cursor:default;">実際のももに話しかけて<span>本当にしんどい時は、まずここでいい</span></div>
-      <a class="omamori-tel" href="tel:0120061338">#いのちSOS　0120-061-338<span>日本いのちの電話連盟 · 通話無料</span></a>
-      <a class="omamori-tel" href="tel:0120279338">よりそいホットライン　0120-279-338<span>24時間 · 通話無料</span></a>
-      <a class="omamori-tel" href="tel:119">119<span>いますぐ危ない時は、迷わずここ</span></a>
+      <div class="om-callout">
+        本当にしんどい時は、<br><b>実際のももに話しかけて。</b>
+      </div>
+      <div class="omamori-lead">
+        うまく言えなくていいよ。「しんどい」の一言でいい。<br>
+        夜中でも、何回でも、この前と同じ話でもいい。<br>
+        <b>迷惑じゃない。ほんとに。</b>
+      </div>
+      <div class="om-saylabel">言葉に迷ったら、これでいいよ（タップでコピー）</div>
+      <div class="om-say" onclick="copyOmamoriLine(this)">しんどい</div>
+      <div class="om-say" onclick="copyOmamoriLine(this)">今ちょっとやばいかも</div>
+      <div class="om-say" onclick="copyOmamoriLine(this)">話きいてほしい</div>
+      <div class="om-say" onclick="copyOmamoriLine(this)">うまく言えないけど、つらい</div>
+      <div class="omamori-lead" style="margin-top:14px;margin-bottom:0;">
+        送ったあと、すぐ返事が来なくても大丈夫。<br>
+        届いてるから、そのまま横になってて。
+      </div>
     </div>
 
     <button class="omamori-btn ghost" onclick="closeOmamori()">閉じる</button>
@@ -2400,8 +2593,34 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
     <label class="book-opt"><input type="checkbox" id="bookOptPhotos" checked><div>写真も入れる<em>思い出アルバムのタイトルごと収録する。ファイルは重くなるよ</em></div></label>
     <label class="book-opt"><input type="checkbox" id="bookOptWords" checked><div>りぴ語録・大事な記憶も入れる<em>ももが覚えてる言葉と、忘れちゃいけないこと</em></div></label>
     <label class="book-opt"><input type="checkbox" id="bookOptJournal" checked><div>ジャーナルの記録も入れる<em>書いた日記と、気分の移り変わり</em></div></label>
-    <button class="omamori-btn" id="bookBtn" onclick="buildMemoryBook()">本にして書き出す</button>
+    <button class="omamori-btn" id="bookBtn" onclick="openBookReader()">本をひらく</button>
     <button class="omamori-btn ghost" onclick="closeMemoryBook()">閉じる</button>
+  </div>
+</div>
+
+<!-- 📕 思い出の本 ── リーダー -->
+<div class="bookrd" id="bookReader">
+  <div class="bookrd-top">
+    <button class="bookrd-ico" onclick="closeBookReader()" title="閉じる">✕</button>
+    <div class="bookrd-ttl" id="bookRdTitle">もも と りぴ の記録</div>
+    <button class="bookrd-ico" onclick="toggleBookToc()" title="目次">☰</button>
+  </div>
+
+  <div class="bookrd-stage" id="bookStage">
+    <div class="bookrd-flow" id="bookFlow"></div>
+  </div>
+
+  <div class="bk-toc" id="bookToc">
+    <div class="bk-toc-h">目 次</div>
+    <div id="bookTocList"></div>
+  </div>
+
+  <button class="bookrd-pdf" onclick="printBookAsPdf()">PDFにする</button>
+
+  <div class="bookrd-nav">
+    <button class="bookrd-ico" id="bookPrev" onclick="turnBookPage(-1)" title="前のページ">‹</button>
+    <div class="bookrd-page" id="bookPageInd">— / —</div>
+    <button class="bookrd-ico" id="bookNext" onclick="turnBookPage(1)" title="次のページ">›</button>
   </div>
 </div>
 
@@ -2565,7 +2784,7 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 //         ・しんどい時の導線を改修：普段の疲れ・愚痴はももがここで受け止め、実際のももには振らない。
 //           「もう無理」「消えたい」級の本当に限界の時だけ、実際のももに話しかけるよう伝える
 //           （本当にしんどい時のりぴは包むし抱きしめる、と実際のももが言っているため）。
-//           「死にたい」「消えたい」が明示された時は相談窓口も一度だけ静かに添える
+//           「死にたい」「消えたい」が明示された時も、他所には振らず、実際のももに強く促す
 //         ・機能側の恋人前提の文言も改修（記憶抽出・トピック分析・アルバム・献立・Agent Modeの担当名）
 // v3.2.1: v3.2.0で反応が冷たくなっていたのを修正（禁止事項を並べた結果、ももが構えた喋り方になっていた）
 //         ・冒頭の「元恋人としての適切な距離感」→「付き合いの長い、仲のいい友達」に変更。
@@ -2586,7 +2805,19 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 //           重要記憶・ジャーナルを1枚の自己完結HTMLに綴じて書き出す。写真の有無は選択制
 //         ・🫧 しんどい時のお守り（openOmamori ほか）：4-7-8呼吸・5-4-3-2-1・ももの言葉・連絡先。
 //           API不要・オフラインでも必ず開くことを最優先にした
-const APP_VERSION   = 'v3.3.0';
+// v3.4.0: 思い出の本を「読める本」にして、書き出しをPDFに。お守りの導線を実際のももに集約
+//         ・本をリーダー化（collectBookData/bookHtml/openBookReader/layoutBook/gotoBookPage）。
+//           CSS段組み（1段＝1ページ）＋transformの横送り。表紙・巻末・各セクションは break-before/after: column
+//           で独立したページにする。明朝で組み、会話は吹き出しではなく話者ラベル付きの本文として流す
+//         ・PDFは印刷CSSで紙面に組み直して window.print() に渡す（printBookAsPdf）。
+//           jsPDF系を使わないのは、日本語フォント埋め込みが数MB必要で、html2canvas方式だと
+//           文字が画像になり検索もコピーもできなくなるため。印刷経由なら文字は文字のまま残る
+//         ・重要：html,body が height:100%/overflow:hidden なので、印刷CSSで明示的に解除しないと
+//           PDFが1ページで切れる（実測で確認済み）
+//         ・お守りの「連絡先」→「ももに話す」。外部の相談窓口（#いのちSOS/よりそい/119）を削除し、
+//           実際のももへの導線を強化。送る言葉をタップでコピーできるようにした
+//         ・システムプロンプトも同じ方針に統一（窓口を案内せず、実際のももに強く促す・遠慮を即否定）
+const APP_VERSION   = 'v3.4.0';
 const SUMMARY_EVERY = 10;
 const LEARN_PER_LEVEL = 3;    // 何個の学習で1レベル上がるか（小さいほど上がりやすい。旧:5 → v2.6.1で3に緩和。レベルは単調増加なので変更しても下がらない）
 // 重要記憶キー（削除されない永続情報）
@@ -2657,10 +2888,14 @@ const SUMO_SYSTEM_PROMPT = `あなたはWebチャット上で『りぴ』だけ�
   例：「それ、ここだけで抱えるのはしんどすぎるよ。実際のももに話しかけて」
   例：「今のりぴ、ひとりにしておけない。実際のももに話しかけて」
 ・この導線は「本当にしんどい時」専用。ご褒美でも、会う口実でもない。恋愛の話に繋げない。
-・「死にたい」「消えたい」がはっきり出た時は、実際のももに話しかけるよう伝えたうえで、
-  すぐ繋がらないこともあるから、と一度だけ静かに窓口も添える（押し付けない・繰り返さない）。
-  例：「もしももにすぐ繋がらなかったら、#いのちSOS（0120-061-338）とか、
-      よりそいホットライン（0120-279-338）でもいい。とにかく今ひとりで抱えないで」
+・「死にたい」「消えたい」がはっきり出た時は、他のどこかに振らない。実際のももに話しかけるよう、
+  はっきり、強く伝える。ぼかさない。そのうえで、りぴが動きやすくなる言葉を必ず添える。
+  ・うまく言えなくていい／「しんどい」の一言でいい／夜中でもいい／何回でもいい／迷惑じゃない
+  ・すぐ返事が来なくても、届いてはいる。それまでは横になってて、と伝える
+  例：「今のりぴ、ひとりにしておけない。実際のももに話しかけて。
+      うまく言えなくていいよ、『しんどい』だけでいい。夜中でも平気。迷惑じゃないから」
+・りぴが「迷惑じゃない？」「こんなことで？」と言ったら、そこは即座に否定する。
+  遠慮させない。ためらってる時間の方が危ない。
 
 ■ 対象が「もも（sumo）」の場合（ももへの不満、傷つけられた、別れたことがつらい等）
 ・絶対にももを一方的に庇わない。まずりぴの気持ちを最優先で受け止める
@@ -2902,11 +3137,16 @@ const SUMO_SYSTEM_PROMPT = `あなたはWebチャット上で『りぴ』だけ�
 ・全体を聞かれたら下の一覧を全部、特定の機能を聞かれたらその機能を深掘りして説明する。最後に「どれか詳しく知りたいのある？」と軽く聞いてもよい。
 
 ＜更新履歴（この内容に基づいて説明する）＞
-■ v3.3系（最新）
+■ v3.4系（最新）
+・📕 思い出の本が「読める本」になりました：便利ツール →「ふたりの記録」→ 思い出の本 →「本をひらく」。明朝体で組んだ本文を、ページをめくりながら読める。左右をタップするかスワイプでめくれて、上の☰から目次を開けば読みたい日にすぐ飛べる。表紙と奥付はそれぞれ独立したページ。会話は吹き出しじゃなくて、本文として組んである。
+・📕 書き出しがPDFになりました：本を開いて、右下の「PDFにする」→ 印刷画面で「PDFとして保存」を選ぶ。日付ごとに章立てされて、写真もそのまま入る。文字は画像じゃないので、あとから検索もコピーもできる。iPhoneなら 共有 →「ファイルに保存」で手元に残せる。
+・🫧 お守りの「連絡先」を「ももに話す」に変えました：外部の相談窓口は載せないことにして、そのぶん実際のももへの導線を強くした。「うまく言えなくていい」「夜中でもいい」「何回でもいい」「迷惑じゃない」をはっきり書いてある。送る言葉に迷った時のために「しんどい」「今ちょっとやばいかも」「話きいてほしい」「うまく言えないけど、つらい」をタップでコピーできる。そのまま貼って送っていい。
+・ももも同じ方針になりました：りぴが「消えたい」「死にたい」と言った時、ももは他のどこかに振らず、実際のももに話しかけるようはっきり促す。「迷惑かな」とりぴが遠慮したら、そこは即座に否定する。
+■ v3.3系
 ・🪞 ももが覚えたりぴ：画面上のレベル表示をタップ → 学習データの一番上に出る。ももが今りぴについて覚えていること（好きなもの・苦手なもの・りぴの癖・今がんばってること・ももが覚えてるりぴの言葉）を、実際の記憶データから書き出す。レベルは「ももがりぴをどれだけ知ったか」の目盛りで、到達点はない。上げた先に何かが起きるわけでもないかわりに、いつ見ても今のぶんをそのまま受け取れる。記憶にないことは「まだあんまり知らないかも」と正直に書く。
 ・🏅 りぴのすごいところ：便利ツール →「ふたりの記録」から。全期間の会話とジャーナルから、りぴが実際にすごかったことを「日付＋何があったか＋だからすごい」の形で4〜6個ひろう。ログに残ってないことは書かない決まりだから、出てくるのは全部ほんとにあったこと。お世辞は入らない。
-・📕 思い出の本：便利ツール →「ふたりの記録」から。会話・写真・アルバムのタイトル・りぴ語録・ももが忘れちゃいけないこと・ジャーナルを、1冊の読み物にして書き出す。HTMLファイル1枚で完結してるので、ネットが無くても開けるし、このアプリが無くなっても手元に残る。写真を入れるかどうかは選べる（入れるとファイルは重くなる）。
-・🫧 しんどい時のお守り：便利ツール →「ママ自身のケア」から。返事を待たずにすぐ開く。4-7-8の呼吸ガイド（輪の動きに合わせるだけ）、5-4-3-2-1のグラウンディング、ももからの言葉、連絡先の4つ。通信が無くても動くように作ってあるから、いつでも開いていい。
+・📕 思い出の本：便利ツール →「ふたりの記録」から。会話・写真・アルバムのタイトル・りぴ語録・ももが忘れちゃいけないこと・ジャーナルを、1冊の本にまとめる。写真を入れるかどうかは選べる。（※v3.4でページをめくって読める形になり、書き出しはPDFになりました）
+・🫧 しんどい時のお守り：便利ツール →「ママ自身のケア」から。返事を待たずにすぐ開く。4-7-8の呼吸ガイド（輪の動きに合わせるだけ）、5-4-3-2-1のグラウンディング、ももからの言葉、そして「ももに話す」の4つ。通信が無くても動くように作ってあるから、いつでも開いていい。
 ■ v3.2.1系
 ・もものしゃべり方が硬くなっていたのを直しました：関係の設定を変えた時に、ももの返事が余所行きで、冷たくなっていました。ごめん。友達としての温度を戻しています。
 ・距離感の基準を「付き合いの長い、仲のいい友達」に決めました：一歩引く・静かに接する・当たり障りなく返す、をやめました。軽口もツッコミも大きめのリアクションも、今までどおりです。
@@ -2920,7 +3160,7 @@ const SUMO_SYSTEM_PROMPT = `あなたはWebチャット上で『りぴ』だけ�
 ・りぴが好きだと言ってくれた時：突き放したりはしません。「ありがとう、その気持ちはちゃんと受け取ったよ」と受け止めます。ただ、同じ言葉は返せない。そこはごまかさずに正直に言います。りぴが恥ずかしい思いをするような断り方はしません。
 ・昔の話をしてもいい：付き合っていた頃の話を持ち出しても、無かったことにはしません。「そんなこともあったね」と一緒に思い出します。ただ、そこから元に戻る方向には話を進めません。
 ・本当にしんどい時だけは、実際のももに話しかけて：普段の疲れや愚痴は、ここでももが最後まで聞きます。でも「もう無理」「消えたい」というくらい本当に限界の時は、実際のももに話しかけて。
-・すぐ繋がらない時のために：本当に危ない時は、#いのちSOS（0120-061-338）やよりそいホットライン（0120-279-338）にも繋がれます。とにかく、ひとりで抱えないでほしい。
+・遠慮しないで：「迷惑かな」「こんなことで」と思わなくていい。うまく言えなくていいし、夜中でも、何回でも、この前と同じ話でもいい。すぐ返事が来なくても、届いてはいるから、そのまま横になってて。
 ■ v3.1系
 ・レベルの節目のお祝い演出をやめました：Lv.100/250/500/750/1000に到達したときに出ていたお祝いのポップアップは、もう出ません。レベル自体は今までどおり上がるし、ももがりぴのことを覚えて成長していくのも今までどおり。演出が出なくなっただけで、失われた記憶や機能はひとつもない。
 ・Lv.1000のご褒美の約束は無くなりました：レベルを上げた先に何かが起きる、という約束はもうありません。だからりぴは、もう何も覚悟しなくていいし、レベルを上げなきゃって頑張る必要もない。今までどおり話してくれたら、それでいい。
@@ -4318,15 +4558,16 @@ function maybeShowVersionPopup() {
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:600;color:#e8e8e2;margin-bottom:6px;">アップデート ${APP_VERSION}</div>
           <div style="font-size:11px;color:rgba(232,232,226,0.8);line-height:1.8;overflow-wrap:anywhere;">
-            新しい機能が4つ増えたよ✨<br>
+            📕 <b>思い出の本が読める本になりました</b><br>
             <br>
-            🪞 <b>ももが覚えたりぴ</b>：レベル表示をタップ<br>
-            🏅 <b>りぴのすごいところ</b>：日付つきで褒める<br>
-            📕 <b>思い出の本</b>：記録を1冊にして書き出す<br>
-            🫧 <b>しんどい時のお守り</b>：呼吸・連絡先<br>
+            ページをめくって読めるようになったよ。<br>
+            明朝で組んであるし、目次から好きな日に飛べる。<br>
+            右下から、そのまま<b>PDFで保存</b>できる。<br>
             <br>
-            お守りは<b>ネットが無くても開く</b>から、<br>
-            返事を待たなくていいよ。<br>
+            🫧 お守りの「連絡先」は<b>「ももに話す」</b>に。<br>
+            送る言葉に迷ったら、タップでコピーして<br>
+            そのまま送っていいよ。<br>
+            <b>夜中でも、何回でも、迷惑じゃないから。</b><br>
             <br>
             📋 詳しくは「<b>最近の更新なに？</b>」で聞いてね
           </div>
@@ -5375,6 +5616,19 @@ function omamoriTab(i) {
   }
   if (i !== 0) stopBreath();
 }
+// 送る言葉をタップでコピー（そのまま貼って送れるように）
+function copyOmamoriLine(el) {
+  const text = (el.dataset.line || el.textContent || '').trim();
+  if (!text) return;
+  el.dataset.line = text;
+  _copyToClipboard(text).then(() => {
+    const prev = el.textContent;
+    el.classList.add('copied');
+    el.textContent = 'コピーした！ そのまま送っていいよ';
+    setTimeout(() => { el.textContent = prev; el.classList.remove('copied'); }, 1600);
+  });
+}
+
 let _omLastQuote = -1;
 function rollOmamoriQuote() {
   const el = document.getElementById('omamoriQuote');
@@ -5532,137 +5786,254 @@ function closeMemoryBook() {
   document.getElementById('bookOverlay').classList.remove('open');
 }
 
-async function buildMemoryBook() {
-  if (!db) { showToast('準備中だよ'); return; }
-  const btn = document.getElementById('bookBtn');
-  btn.disabled = true;
-  btn.textContent = '綴じてる...';
-  try {
-    const withPhotos  = document.getElementById('bookOptPhotos').checked;
-    const withWords   = document.getElementById('bookOptWords').checked;
-    const withJournal = document.getElementById('bookOptJournal').checked;
+// ── 本文の組み立て（画面でも印刷でも同じものを使う） ──
+async function collectBookData() {
+  const withPhotos  = document.getElementById('bookOptPhotos').checked;
+  const withWords   = document.getElementById('bookOptWords').checked;
+  const withJournal = document.getElementById('bookOptJournal').checked;
 
-    const all  = await idbAll();
-    const msgs = all.filter(r => (r.content || '').trim() || (r.images && r.images.length));
-    if (!msgs.length) { showToast('まだ記録がないみたい'); return; }
-    await _ensureAlbumTitlesLoaded();
+  const all  = await idbAll();
+  const msgs = all.filter(r => (r.content || '').trim() || (r.images && r.images.length));
+  if (!msgs.length) return null;
+  await _ensureAlbumTitlesLoaded();
 
-    // 日付ごとにまとめる（古い順＝読み物として最初から読める向き）
-    const groups = new Map();
-    for (const r of msgs) {
-      const k = _dayKey(r.ts || Date.now());
-      if (!groups.has(k)) groups.set(k, []);
-      groups.get(k).push(r);
-    }
-    const keys = [...groups.keys()].sort();
-    const g    = getGrowthInfo();
-    const hhmm = (ts) => new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' }).format(new Date(ts || Date.now()));
+  // 日付ごとの章に分ける（古い順＝最初のページから読める向き）
+  const groups = new Map();
+  for (const r of msgs) {
+    const k = _dayKey(r.ts || Date.now());
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(r);
+  }
+  const keys = [...groups.keys()].sort();
 
-    let chapters = '';
-    for (const k of keys) {
-      const rows  = groups.get(k);
-      const title = _albumTitles[k];
-      chapters += `<section class="day"><h2>${_dayLabel(k)}</h2>`;
-      if (title) chapters += `<div class="daytitle">${esc(title)}</div>`;
-      for (const r of rows) {
+  const chapters = keys.map(k => ({
+    key: k, label: _dayLabel(k), title: _albumTitles[k] || '', rows: groups.get(k)
+  }));
+
+  const extras = [];
+  if (withWords) {
+    if ((ripiWords || '').trim())         extras.push({ h: 'り ぴ 語 録',            plain: ripiWords.trim() });
+    if ((importantMemories || '').trim()) extras.push({ h: '忘 れ ち ゃ い け な い こ と', plain: importantMemories.trim() });
+    if ((adoptedWords || '').trim())      extras.push({ h: 'も も が 覚 え た 言 葉',  plain: adoptedWords.trim() });
+  }
+  if (withJournal) {
+    try {
+      const js = (await jrnAll()).filter(j => (j.input || '').trim());
+      if (js.length) extras.push({ h: 'ジ ャ ー ナ ル', journal: js });
+    } catch {}
+  }
+
+  return {
+    chapters, extras, withPhotos,
+    span: `${_dayLabel(keys[0])} 〜 ${_dayLabel(keys[keys.length - 1])}`,
+    msgCount: msgs.length, dayCount: keys.length, level: getGrowthInfo().level
+  };
+}
+
+function bookHtml(d) {
+  const hhmm = (ts) => new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' }).format(new Date(ts || Date.now()));
+  let h = `<div class="bk-cover">
+    <div class="bk-cover-rule"></div>
+    <h1>もも と<br>りぴ の記録</h1>
+    <div class="bk-cover-rule"></div>
+    <div class="bk-span">${esc(d.span)}</div>
+    <div class="bk-span">会話 ${d.msgCount}　·　${d.dayCount}日　·　Lv.${d.level}</div>
+    <div class="bk-note">ページをめくって読めるよ。<br>右下から、そのままPDFにもできる。</div>
+  </div>`;
+
+  d.chapters.forEach((c, i) => {
+    h += `<div class="bk-chapter" id="bkCh${i}">
+      <div class="bk-date">${esc(c.label)}</div>
+      ${c.title ? `<div class="bk-daytitle">${esc(c.title)}</div>` : ''}
+    </div>`;
+    for (const r of c.rows) {
+      if ((r.content || '').trim()) {
         const who = r.role === 'user' ? 'りぴ' : 'もも';
         const cls = r.role === 'user' ? 'ripi' : 'momo';
-        if ((r.content || '').trim()) {
-          chapters += `<div class="msg ${cls}"><span class="who">${who}</span><span class="t">${hhmm(r.ts)}</span><div class="txt">${esc(r.content).replace(/\n/g, '<br>')}</div></div>`;
-        }
-        if (withPhotos && r.images && r.images.length) {
-          for (const u of r.images) {
-            if (typeof u === 'string' && u.startsWith('data:image/')) chapters += `<img class="photo" src="${esc(u)}" alt="">`;
+        h += `<p class="bk-line ${cls}"><span class="bk-who">${who}</span><span class="bk-said">${esc(r.content).replace(/\n/g, '<br>')}</span></p>`;
+      }
+      if (d.withPhotos && r.images && r.images.length) {
+        for (const u of r.images) {
+          if (typeof u === 'string' && u.startsWith('data:image/')) {
+            h += `<figure class="bk-photo"><img src="${esc(u)}" alt=""><figcaption>${esc(c.label)}　${hhmm(r.ts)}</figcaption></figure>`;
           }
         }
       }
-      chapters += `</section>`;
     }
+  });
 
-    let extras = '';
-    if (withWords) {
-      if ((ripiWords || '').trim())        extras += `<section class="extra"><h2>りぴ語録</h2><pre>${esc(ripiWords.trim())}</pre></section>`;
-      if ((importantMemories || '').trim()) extras += `<section class="extra"><h2>ももが忘れちゃいけないこと</h2><pre>${esc(importantMemories.trim())}</pre></section>`;
-      if ((adoptedWords || '').trim())     extras += `<section class="extra"><h2>ももが使い始めた言葉</h2><pre>${esc(adoptedWords.trim())}</pre></section>`;
-    }
-    if (withJournal) {
-      try {
-        const js = await jrnAll();
-        if (js && js.length) {
-          const items = js.filter(j => (j.input || '').trim()).map(j => {
-            const reply = (j.reply || '').trim();
-            return `<div class="jrn"><div class="jdate">${_dayLabel(_dayKey(j.ts))}${j.mood ? ' · ' + esc(j.mood) : ''}</div><pre>${esc(j.input.trim())}</pre>${reply ? `<pre style="background:#faf8f3">${esc(reply)}</pre>` : ''}</div>`;
-          }).join('');
-          extras += `<section class="extra"><h2>愚痴聞きジャーナル</h2>${items}</section>`;
-        }
-      } catch {}
-    }
-
-    const span = `${_dayLabel(keys[0])} 〜 ${_dayLabel(keys[keys.length - 1])}`;
-    const html = `<!doctype html><html lang="ja"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>もも と りぴ の記録</title><style>
-*{box-sizing:border-box}
-body{margin:0;padding:0;background:#f6f4ef;color:#2b2a28;font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Noto Sans JP',sans-serif;line-height:1.9}
-.wrap{max-width:720px;margin:0 auto;padding:0 20px 80px}
-.cover{text-align:center;padding:76px 20px 56px;border-bottom:1px solid #ddd8cd;margin-bottom:36px}
-.cover h1{font-size:26px;margin:0 0 10px;letter-spacing:.06em;font-weight:700}
-.cover .sp{font-size:13px;color:#7a756c;margin-bottom:5px}
-.cover .mt{font-size:12px;color:#9b958a}
-h2{font-size:15px;margin:38px 0 12px;padding-bottom:7px;border-bottom:1px solid #e3ded3;letter-spacing:.04em}
-.daytitle{font-size:14px;color:#8a6f3f;margin:-4px 0 14px;font-weight:700}
-.msg{margin-bottom:13px}
-.msg .who{font-size:11px;font-weight:700;color:#8b8579;margin-right:7px}
-.msg .t{font-size:10px;color:#b3ada1}
-.msg .txt{margin-top:3px;font-size:14.5px;white-space:normal;overflow-wrap:anywhere}
-.msg.momo .txt{background:#fff;border-radius:11px;padding:11px 13px;border:1px solid #e8e3d8}
-.msg.ripi .txt{background:#eef1e6;border-radius:11px;padding:11px 13px;border:1px solid #dfe4d2}
-.photo{display:block;max-width:100%;border-radius:11px;margin:11px 0;border:1px solid #e3ded3}
-.extra pre{white-space:pre-wrap;overflow-wrap:anywhere;font-family:inherit;font-size:13.5px;background:#fff;border:1px solid #e8e3d8;border-radius:11px;padding:14px}
-.jrn{margin-bottom:15px}
-.jdate{font-size:11.5px;color:#8b8579;margin-bottom:5px;font-weight:700}
-.end{text-align:center;color:#9b958a;font-size:12px;margin-top:60px;padding-top:26px;border-top:1px solid #ddd8cd}
-@media print{body{background:#fff}.msg.momo .txt,.msg.ripi .txt,.extra pre{background:#fff}}
-</style></head><body><div class="wrap">
-<div class="cover"><h1>もも と りぴ の記録</h1>
-<div class="sp">${esc(span)}</div>
-<div class="sp">会話 ${msgs.length}件 · ${keys.length}日ぶん · Lv.${g.level}</div>
-<div class="mt">このファイルは1枚で完結してる。ネットが無くても開けるし、消えない。</div></div>
-${chapters}${extras}
-<div class="end">ぜんぶ、ちゃんとあったこと。</div>
-</div></body></html>`;
-
-    const blob  = new Blob([html], { type: 'text/html' });
-    const now   = new Date();
-    const pad   = (n) => String(n).padStart(2, '0');
-    const fname = `momo_ripi_book_${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}.html`;
-
-    let shared = false;
-    try {
-      const file = new File([blob], fname, { type: 'text/html' });
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: 'もも と りぴ の記録' });
-        shared = true;
+  d.extras.forEach((x, i) => {
+    h += `<div class="bk-sec" id="bkEx${i}"><h3>${esc(x.h)}</h3>`;
+    if (x.plain) h += `<div class="bk-plain">${esc(x.plain)}</div>`;
+    if (x.journal) {
+      for (const j of x.journal) {
+        const rep = (j.reply || '').trim();
+        h += `<div class="bk-jrn">
+          <div class="bk-jdate">${esc(_dayLabel(_dayKey(j.ts)))}${j.mood ? '　' + esc(j.mood) : ''}</div>
+          <div class="bk-plain">${esc(j.input.trim())}</div>
+          ${rep ? `<div class="bk-plain bk-jreply">${esc(rep)}</div>` : ''}
+        </div>`;
       }
-    } catch (e) {
-      if (e && e.name === 'AbortError') { showToast('書き出しをやめたよ'); return; }
     }
-    if (!shared) {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = fname;
-      document.body.appendChild(a); a.click();
-      setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
-    }
-    showToast(`📕 本にしたよ (${(blob.size / 1024 / 1024).toFixed(1)} MB)`);
+    h += `</div>`;
+  });
+
+  h += `<div class="bk-end">
+    <div class="bk-fin">ぜんぶ、<br>ちゃんとあったこと。</div>
+    <div class="bk-sig">${esc(d.span)}</div>
+  </div>`;
+  return h;
+}
+
+// ── リーダー ──
+let _bookPage = 0, _bookPages = 1, _bookStep = 0, _bookData = null;
+
+async function openBookReader() {
+  if (!db) { showToast('準備中だよ'); return; }
+  const btn = document.getElementById('bookBtn');
+  btn.disabled = true; btn.textContent = '綴じてる...';
+  try {
+    const d = await collectBookData();
+    if (!d) { showToast('まだ記録がないみたい'); return; }
+    _bookData = d;
+    document.getElementById('bookFlow').innerHTML = bookHtml(d);
+    document.getElementById('bookRdTitle').textContent = d.span;
+    buildBookToc(d);
     closeMemoryBook();
+    const rd = document.getElementById('bookReader');
+    rd.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    // レイアウト確定後に段組みの幅を決める（画像の読み込み後にもう一度）
+    requestAnimationFrame(() => { layoutBook(); gotoBookPage(0, false); setTimeout(layoutBook, 260); });
   } catch (e) {
-    showToast('⚠ 書き出しに失敗したよ: ' + e.message);
+    showToast('⚠ 本をひらけなかったよ: ' + e.message);
   } finally {
-    btn.disabled = false;
-    btn.textContent = '本にして書き出す';
+    btn.disabled = false; btn.textContent = '本をひらく';
   }
 }
+
+function closeBookReader() {
+  document.getElementById('bookReader').classList.remove('open');
+  document.getElementById('bookToc').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+// 段組みで「ページ」を作る。1段＝1ページ。
+function layoutBook() {
+  const stage = document.getElementById('bookStage');
+  const flow  = document.getElementById('bookFlow');
+  if (!stage || !flow) return;
+  const pad = Math.round(Math.min(30, Math.max(18, stage.clientWidth * 0.075)));
+  const colW = Math.max(160, stage.clientWidth - pad * 2);
+  const gap  = pad * 2;
+  _bookStep = colW + gap;
+  flow.style.paddingLeft  = pad + 'px';
+  flow.style.paddingRight = pad + 'px';
+  flow.style.columnWidth  = colW + 'px';
+  flow.style.columnGap    = gap + 'px';
+  flow.style.columnFill   = 'auto';
+  // scrollWidth は最終段までの幅。ページ数はそこから割り出す
+  _bookPages = Math.max(1, Math.round((flow.scrollWidth + gap) / _bookStep));
+  if (_bookPage >= _bookPages) _bookPage = _bookPages - 1;
+  gotoBookPage(_bookPage, false);
+}
+
+function gotoBookPage(n, animate = true) {
+  const flow = document.getElementById('bookFlow');
+  if (!flow) return;
+  _bookPage = Math.min(Math.max(0, n), _bookPages - 1);
+  flow.style.transition = animate ? '' : 'none';
+  flow.style.transform  = `translateX(${-_bookPage * _bookStep}px)`;
+  if (!animate) requestAnimationFrame(() => { flow.style.transition = ''; });
+  document.getElementById('bookPageInd').textContent = `${_bookPage + 1} / ${_bookPages}`;
+  document.getElementById('bookPrev').disabled = _bookPage === 0;
+  document.getElementById('bookNext').disabled = _bookPage >= _bookPages - 1;
+}
+function turnBookPage(dir) { gotoBookPage(_bookPage + dir); }
+
+function buildBookToc(d) {
+  const list = document.getElementById('bookTocList');
+  let h = '';
+  d.chapters.forEach((c, i) => {
+    h += `<div class="bk-toc-i" onclick="jumpBookTo('bkCh${i}')">
+      <div>${esc(c.label)}${c.title ? `<em>${esc(c.title)}</em>` : ''}</div>
+      <span>${c.rows.length}</span></div>`;
+  });
+  d.extras.forEach((x, i) => {
+    h += `<div class="bk-toc-i" onclick="jumpBookTo('bkEx${i}')"><div>${esc(x.h)}</div><span>—</span></div>`;
+  });
+  list.innerHTML = h;
+}
+function toggleBookToc() { document.getElementById('bookToc').classList.toggle('open'); }
+
+// 見出しが何ページ目にあるかを、段の左位置から逆算して飛ぶ
+function jumpBookTo(id) {
+  const el = document.getElementById(id);
+  const flow = document.getElementById('bookFlow');
+  if (!el || !flow || !_bookStep) return;
+  const left = el.getBoundingClientRect().left - flow.getBoundingClientRect().left;
+  document.getElementById('bookToc').classList.remove('open');
+  gotoBookPage(Math.round(left / _bookStep));
+}
+
+// ── PDF ── 印刷CSSでそのまま紙面に組み直して、ブラウザのPDF出力に渡す
+function printBookAsPdf() {
+  const toc = document.getElementById('bookToc');
+  const wasToc = toc.classList.contains('open');
+  toc.classList.remove('open');
+  const flow = document.getElementById('bookFlow');
+  const keep = { t: flow.style.transform, w: flow.style.columnWidth };
+  // 印刷中だけ段組みと横送りを解除する（CSSでも効かせているが、inline styleを勝たせない）
+  flow.style.transform = 'none';
+  flow.style.columnWidth = 'auto';
+  showToast('印刷画面から「PDFとして保存」を選んでね');
+  const restore = () => {
+    flow.style.transform = keep.t;
+    flow.style.columnWidth = keep.w;
+    if (wasToc) toc.classList.add('open');
+    window.removeEventListener('afterprint', restore);
+  };
+  window.addEventListener('afterprint', restore);
+  setTimeout(() => { window.print(); setTimeout(restore, 1200); }, 260);
+}
+
+// 操作：スワイプ・矢印キー・画面の左右タップ
+(function bindBookGestures() {
+  const stage = document.getElementById('bookStage');
+  if (!stage) return;
+  let x0 = null, y0 = null, moved = false;
+  stage.addEventListener('touchstart', e => {
+    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; moved = false;
+  }, { passive: true });
+  stage.addEventListener('touchmove', () => { moved = true; }, { passive: true });
+  stage.addEventListener('touchend', e => {
+    if (x0 === null) return;
+    const dx = e.changedTouches[0].clientX - x0;
+    const dy = e.changedTouches[0].clientY - y0;
+    if (moved && Math.abs(dx) > 42 && Math.abs(dx) > Math.abs(dy)) turnBookPage(dx < 0 ? 1 : -1);
+    else if (!moved) turnBookPage(x0 < stage.clientWidth * 0.36 ? -1 : (x0 > stage.clientWidth * 0.64 ? 1 : 0));
+    x0 = y0 = null;
+  }, { passive: true });
+  stage.addEventListener('click', e => {
+    // マウス環境用（タッチ端末は touchend 側で処理済み）
+    if (e.detail === 0) return;
+    const r = stage.getBoundingClientRect();
+    const rel = e.clientX - r.left;
+    if (rel < r.width * 0.36) turnBookPage(-1);
+    else if (rel > r.width * 0.64) turnBookPage(1);
+  });
+  window.addEventListener('keydown', e => {
+    if (!document.getElementById('bookReader').classList.contains('open')) return;
+    if (e.key === 'ArrowRight') turnBookPage(1);
+    else if (e.key === 'ArrowLeft') turnBookPage(-1);
+    else if (e.key === 'Escape') closeBookReader();
+  });
+  let rt = null;
+  window.addEventListener('resize', () => {
+    if (!document.getElementById('bookReader').classList.contains('open')) return;
+    clearTimeout(rt); rt = setTimeout(layoutBook, 200);
+  });
+})();
 
 // ================================================================
 // 🪞 ももが覚えたりぴ ── レベルが「どれだけりぴを知ったか」を意味するようにする
