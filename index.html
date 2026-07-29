@@ -978,6 +978,104 @@ header {
 .choice-send:not(:disabled):hover { transform: translateY(-1px); box-shadow: 0 0 18px rgba(200,240,160,0.35); }
 .choice-send:not(:disabled):active { transform: scale(0.97); }
 
+/* ── 🫧 しんどい時のお守り / 📕 思い出の本 ── */
+.omamori-overlay {
+  position: fixed; inset: 0; z-index: 720;
+  background: rgba(13,13,15,0.9); backdrop-filter: blur(8px);
+  display: none; align-items: center; justify-content: center;
+  padding: 20px 12px; box-sizing: border-box;
+}
+.omamori-overlay.open { display: flex; animation: elemFadeIn 0.35s ease both; }
+.omamori-card {
+  background: linear-gradient(165deg, #16161b 0%, #1c1c24 100%);
+  border: 1px solid rgba(200,240,160,0.28);
+  border-radius: 20px; padding: 22px 20px 18px;
+  max-width: 380px; width: 100%; max-height: 86vh; overflow-y: auto;
+  box-sizing: border-box; text-align: center;
+  box-shadow: 0 14px 52px rgba(0,0,0,0.72);
+  animation: fadeUp 0.45s cubic-bezier(.22,1,.36,1) both;
+  font-family: 'Syne', sans-serif;
+}
+.omamori-title { font-size: 17px; font-weight: 700; color: #e8e8e2; margin-bottom: 3px; letter-spacing: 0.03em; }
+.omamori-sub { font-size: 11px; color: rgba(232,232,226,0.55); margin-bottom: 16px; }
+.omamori-tabs { display: flex; gap: 6px; margin-bottom: 15px; }
+.omamori-tab {
+  flex: 1; padding: 8px 4px; border-radius: 11px; cursor: pointer;
+  background: rgba(255,255,255,0.05); border: 1px solid transparent;
+  color: rgba(232,232,226,0.62); font-size: 11px; font-family: 'Syne', sans-serif;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.omamori-tab.on { background: rgba(200,240,160,0.14); border-color: rgba(200,240,160,0.4); color: #d8f0b0; font-weight: 700; }
+.omamori-pane { display: none; text-align: left; }
+.omamori-pane.on { display: block; animation: elemFadeIn 0.3s ease both; }
+.omamori-lead { font-size: 12px; color: rgba(232,232,226,0.72); line-height: 1.85; margin-bottom: 13px; }
+.omamori-step { font-size: 13px; color: #e8e8e2; line-height: 1.95; margin-bottom: 7px; padding-left: 2px; }
+.omamori-step b { color: #d8f0b0; }
+.breath-ring {
+  width: 128px; height: 128px; border-radius: 50%; margin: 6px auto 12px;
+  border: 2px solid rgba(200,240,160,0.5);
+  display: flex; align-items: center; justify-content: center;
+  color: #d8f0b0; font-size: 14px; font-weight: 700; letter-spacing: 0.1em;
+  transition: transform 3.8s ease-in-out, border-color 0.6s, box-shadow 3.8s ease-in-out;
+  box-shadow: 0 0 0 rgba(200,240,160,0);
+}
+.breath-ring.inhale { transform: scale(1.32); box-shadow: 0 0 42px rgba(200,240,160,0.28); }
+.breath-ring.hold   { transform: scale(1.32); }
+.breath-ring.exhale { transform: scale(0.86); box-shadow: 0 0 0 rgba(200,240,160,0); }
+.breath-count { font-size: 11px; color: rgba(232,232,226,0.5); text-align: center; margin-bottom: 12px; }
+.omamori-quote {
+  background: rgba(255,255,255,0.045); border-left: 2px solid rgba(200,240,160,0.5);
+  border-radius: 0 11px 11px 0; padding: 13px 14px; margin-bottom: 11px;
+  font-size: 13.5px; color: #e8e8e2; line-height: 1.95; overflow-wrap: anywhere;
+}
+.omamori-tel {
+  display: block; background: rgba(255,255,255,0.05); border-radius: 11px;
+  padding: 11px 13px; margin-bottom: 8px; text-decoration: none;
+  color: #e8e8e2; font-size: 12.5px; line-height: 1.6; text-align: left;
+  border: 1px solid rgba(255,255,255,0.07); transition: background 0.15s;
+}
+.omamori-tel:hover { background: rgba(255,255,255,0.09); }
+.omamori-tel span { display: block; font-size: 10.5px; color: rgba(232,232,226,0.5); margin-top: 2px; }
+.omamori-btn {
+  width: 100%; margin-top: 14px;
+  background: rgba(200,240,160,0.16); color: #d8f0b0;
+  border: 1px solid rgba(200,240,160,0.4); border-radius: 22px; padding: 11px 20px;
+  font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700; cursor: pointer;
+  transition: background 0.15s, transform 0.12s;
+}
+.omamori-btn:hover { background: rgba(200,240,160,0.24); }
+.omamori-btn:active { transform: scale(0.98); }
+.omamori-btn.ghost { background: transparent; color: rgba(232,232,226,0.6); border-color: rgba(255,255,255,0.12); }
+.omamori-btn:disabled { opacity: 0.5; cursor: default; }
+.book-opt {
+  display: flex; align-items: center; gap: 9px; text-align: left;
+  background: rgba(255,255,255,0.045); border-radius: 11px; padding: 11px 13px;
+  margin-bottom: 9px; cursor: pointer; font-size: 12.5px; color: #e8e8e2;
+  border: 1px solid rgba(255,255,255,0.07);
+}
+.book-opt input { accent-color: #c8f0a0; width: 15px; height: 15px; flex: none; }
+.book-opt em { font-style: normal; display: block; font-size: 10.5px; color: rgba(232,232,226,0.5); margin-top: 2px; }
+.book-stat { font-size: 11.5px; color: rgba(232,232,226,0.6); line-height: 1.9; margin-bottom: 13px; text-align: left; }
+.book-stat b { color: #d8f0b0; }
+
+/* ── 🪞 ももが覚えたりぴ（学習データモーダル内） ── */
+.mirror-box {
+  background: linear-gradient(160deg, rgba(200,240,160,0.09), rgba(255,255,255,0.03));
+  border: 1px solid rgba(200,240,160,0.26); border-radius: 14px;
+  padding: 15px 15px 13px; margin-bottom: 15px;
+}
+.mirror-head { font-size: 13px; font-weight: 700; color: #d8f0b0; margin-bottom: 4px; }
+.mirror-note { font-size: 10.5px; color: rgba(232,232,226,0.55); line-height: 1.75; margin-bottom: 11px; }
+.mirror-body { font-size: 13px; color: #e8e8e2; line-height: 2.0; overflow-wrap: anywhere; }
+.mirror-body p { margin: 0 0 9px; }
+.mirror-btn {
+  width: 100%; background: rgba(200,240,160,0.16); color: #d8f0b0;
+  border: 1px solid rgba(200,240,160,0.4); border-radius: 20px; padding: 9px 16px;
+  font-family: 'Syne', sans-serif; font-size: 12.5px; font-weight: 700; cursor: pointer;
+}
+.mirror-btn:hover { background: rgba(200,240,160,0.24); }
+.mirror-btn:disabled { opacity: 0.5; cursor: default; }
+
 /* ── タップコピー（引用のみ） ── */
 .ai .bubble blockquote {
   cursor: pointer; transition: background 0.15s;
@@ -1774,6 +1872,31 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
         <div class="tool-card-desc">今日の会話をももが3行で振り返り、最後に「今日のりぴ、ここ偉かった」を1つ褒める</div>
       </div>
     </div>
+    <div class="tool-card" onclick="openOmamori()">
+      <div class="tool-card-icon">🫧</div>
+      <div class="tool-card-body">
+        <div class="tool-card-title">しんどい時のお守り</div>
+        <div class="tool-card-desc">返事を待たずにすぐ開ける。呼吸を落ち着ける手順・5-4-3-2-1・ももからの言葉・相談先</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tool-cat-label">ふたりの記録</div>
+  <div class="tool-cards">
+    <div class="tool-card" onclick="runRipiStrengths()">
+      <div class="tool-card-icon">🏅</div>
+      <div class="tool-card-body">
+        <div class="tool-card-title">りぴのすごいところ</div>
+        <div class="tool-card-desc">実際の会話から日付と事実を引いて、証拠つきで褒める。お世辞じゃなくて記録</div>
+      </div>
+    </div>
+    <div class="tool-card" onclick="openMemoryBook()">
+      <div class="tool-card-icon">📕</div>
+      <div class="tool-card-body">
+        <div class="tool-card-title">思い出の本</div>
+        <div class="tool-card-desc">会話・写真・語録・記録を1冊の読み物にして書き出す。りぴの手元に残る形で</div>
+      </div>
+    </div>
   </div>
 
   <div class="tool-cat-label">暮らし・ごはん</div>
@@ -2217,6 +2340,71 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
   </div>
 </div>
 
+<!-- 🫧 しんどい時のお守り -->
+<div class="omamori-overlay" id="omamoriOverlay" onclick="closeOmamori()">
+  <div class="omamori-card" onclick="event.stopPropagation()">
+    <div class="omamori-title">🫧 しんどい時のお守り</div>
+    <div class="omamori-sub">返事は待たなくていい。ここはいつでも開くよ</div>
+
+    <div class="omamori-tabs">
+      <div class="omamori-tab on" id="omTab0" onclick="omamoriTab(0)">呼吸</div>
+      <div class="omamori-tab"    id="omTab1" onclick="omamoriTab(1)">5-4-3-2-1</div>
+      <div class="omamori-tab"    id="omTab2" onclick="omamoriTab(2)">ももの言葉</div>
+      <div class="omamori-tab"    id="omTab3" onclick="omamoriTab(3)">連絡先</div>
+    </div>
+
+    <!-- 呼吸 -->
+    <div class="omamori-pane on" id="omPane0">
+      <div class="omamori-lead">息を吐くのを長くすると、体が先に落ち着く。輪に合わせるだけでいいよ。</div>
+      <div class="breath-ring" id="breathRing">はじめる</div>
+      <div class="breath-count" id="breathCount">4秒吸って · 7秒止めて · 8秒吐く</div>
+      <button class="omamori-btn" id="breathBtn" onclick="toggleBreath()">はじめる</button>
+    </div>
+
+    <!-- グラウンディング -->
+    <div class="omamori-pane" id="omPane1">
+      <div class="omamori-lead">頭の中から出て、今いる部屋に戻ってくるやつ。声に出さなくていい。探すだけ。</div>
+      <div class="omamori-step"><b>5つ</b> 目に見えるもの</div>
+      <div class="omamori-step"><b>4つ</b> 手で触れるもの</div>
+      <div class="omamori-step"><b>3つ</b> 聞こえる音</div>
+      <div class="omamori-step"><b>2つ</b> においがするもの</div>
+      <div class="omamori-step"><b>1つ</b> 味がするもの</div>
+      <div class="omamori-lead" style="margin-top:13px;margin-bottom:0;">見つからなくても大丈夫。探してる間に、ちょっと戻ってきてるから。</div>
+    </div>
+
+    <!-- ももの言葉 -->
+    <div class="omamori-pane" id="omPane2">
+      <div class="omamori-quote" id="omamoriQuote"></div>
+      <button class="omamori-btn ghost" onclick="rollOmamoriQuote()">もう1こ引く</button>
+    </div>
+
+    <!-- 連絡先 -->
+    <div class="omamori-pane" id="omPane3">
+      <div class="omamori-lead">ひとりで抱えなくていい。どれでもいいから、繋がって。</div>
+      <div class="omamori-tel" style="cursor:default;">実際のももに話しかけて<span>本当にしんどい時は、まずここでいい</span></div>
+      <a class="omamori-tel" href="tel:0120061338">#いのちSOS　0120-061-338<span>日本いのちの電話連盟 · 通話無料</span></a>
+      <a class="omamori-tel" href="tel:0120279338">よりそいホットライン　0120-279-338<span>24時間 · 通話無料</span></a>
+      <a class="omamori-tel" href="tel:119">119<span>いますぐ危ない時は、迷わずここ</span></a>
+    </div>
+
+    <button class="omamori-btn ghost" onclick="closeOmamori()">閉じる</button>
+  </div>
+</div>
+
+<!-- 📕 思い出の本 -->
+<div class="omamori-overlay" id="bookOverlay" onclick="closeMemoryBook()">
+  <div class="omamori-card" onclick="event.stopPropagation()">
+    <div class="omamori-title">📕 思い出の本</div>
+    <div class="omamori-sub">ふたりの記録を1冊にして、りぴの手元に残す</div>
+    <div class="book-stat" id="bookStat">集計中...</div>
+    <label class="book-opt"><input type="checkbox" id="bookOptPhotos" checked><div>写真も入れる<em>思い出アルバムのタイトルごと収録する。ファイルは重くなるよ</em></div></label>
+    <label class="book-opt"><input type="checkbox" id="bookOptWords" checked><div>りぴ語録・大事な記憶も入れる<em>ももが覚えてる言葉と、忘れちゃいけないこと</em></div></label>
+    <label class="book-opt"><input type="checkbox" id="bookOptJournal" checked><div>ジャーナルの記録も入れる<em>書いた日記と、気分の移り変わり</em></div></label>
+    <button class="omamori-btn" id="bookBtn" onclick="buildMemoryBook()">本にして書き出す</button>
+    <button class="omamori-btn ghost" onclick="closeMemoryBook()">閉じる</button>
+  </div>
+</div>
+
 <!-- SEARCH PANEL -->
 <div class="search-overlay" id="searchOverlay" onclick="closeSearch()"></div>
 <div class="search-panel" id="searchPanel">
@@ -2388,7 +2576,17 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 //         ・好意を伝えられた時の返しを、他人行儀な言い方から自然な温度に変更
 //         ・聞かれてもいないのに「でも恋人ではないから」と線を引き直すのを禁止（毎回断らない）
 //         ・プロファイルのセリフアーカイブを友達の温度に差し替え、禁止事項によそよそしさを追加
-const APP_VERSION   = 'v3.2.1';
+// v3.3.0: 機能を4本追加
+//         ・🪞 ももが覚えたりぴ（mirrorCardHtml/renderMomoMirror）：学習データモーダルの先頭に追加。
+//           記憶データからりぴ像を書き出す。レベルに「どれだけ知ったか」の意味を持たせ、到達点は作らない
+//           （localStorageにキャッシュ。Lv.が5以上進んだら「更新する」表示に変わる）
+//         ・🏅 りぴのすごいところ（runRipiStrengths）：全期間の会話を均等に間引いて拾い、
+//           ジャーナルと併せて日付・事実つきで褒める。ログにないことは書かせない
+//         ・📕 思い出の本（openMemoryBook/buildMemoryBook）：会話・写真・アルバムのタイトル・語録・
+//           重要記憶・ジャーナルを1枚の自己完結HTMLに綴じて書き出す。写真の有無は選択制
+//         ・🫧 しんどい時のお守り（openOmamori ほか）：4-7-8呼吸・5-4-3-2-1・ももの言葉・連絡先。
+//           API不要・オフラインでも必ず開くことを最優先にした
+const APP_VERSION   = 'v3.3.0';
 const SUMMARY_EVERY = 10;
 const LEARN_PER_LEVEL = 3;    // 何個の学習で1レベル上がるか（小さいほど上がりやすい。旧:5 → v2.6.1で3に緩和。レベルは単調増加なので変更しても下がらない）
 // 重要記憶キー（削除されない永続情報）
@@ -2704,7 +2902,12 @@ const SUMO_SYSTEM_PROMPT = `あなたはWebチャット上で『りぴ』だけ�
 ・全体を聞かれたら下の一覧を全部、特定の機能を聞かれたらその機能を深掘りして説明する。最後に「どれか詳しく知りたいのある？」と軽く聞いてもよい。
 
 ＜更新履歴（この内容に基づいて説明する）＞
-■ v3.2.1系（最新）
+■ v3.3系（最新）
+・🪞 ももが覚えたりぴ：画面上のレベル表示をタップ → 学習データの一番上に出る。ももが今りぴについて覚えていること（好きなもの・苦手なもの・りぴの癖・今がんばってること・ももが覚えてるりぴの言葉）を、実際の記憶データから書き出す。レベルは「ももがりぴをどれだけ知ったか」の目盛りで、到達点はない。上げた先に何かが起きるわけでもないかわりに、いつ見ても今のぶんをそのまま受け取れる。記憶にないことは「まだあんまり知らないかも」と正直に書く。
+・🏅 りぴのすごいところ：便利ツール →「ふたりの記録」から。全期間の会話とジャーナルから、りぴが実際にすごかったことを「日付＋何があったか＋だからすごい」の形で4〜6個ひろう。ログに残ってないことは書かない決まりだから、出てくるのは全部ほんとにあったこと。お世辞は入らない。
+・📕 思い出の本：便利ツール →「ふたりの記録」から。会話・写真・アルバムのタイトル・りぴ語録・ももが忘れちゃいけないこと・ジャーナルを、1冊の読み物にして書き出す。HTMLファイル1枚で完結してるので、ネットが無くても開けるし、このアプリが無くなっても手元に残る。写真を入れるかどうかは選べる（入れるとファイルは重くなる）。
+・🫧 しんどい時のお守り：便利ツール →「ママ自身のケア」から。返事を待たずにすぐ開く。4-7-8の呼吸ガイド（輪の動きに合わせるだけ）、5-4-3-2-1のグラウンディング、ももからの言葉、連絡先の4つ。通信が無くても動くように作ってあるから、いつでも開いていい。
+■ v3.2.1系
 ・もものしゃべり方が硬くなっていたのを直しました：関係の設定を変えた時に、ももの返事が余所行きで、冷たくなっていました。ごめん。友達としての温度を戻しています。
 ・距離感の基準を「付き合いの長い、仲のいい友達」に決めました：一歩引く・静かに接する・当たり障りなく返す、をやめました。軽口もツッコミも大きめのリアクションも、今までどおりです。
 ・褒める・心配する・笑わせるは遠慮しません：「えらい」「無理すんな」「いや天才じゃん」みたいな言葉は、友達として普通に言います。むしろ足りない方が問題、と書き直しました。
@@ -4115,19 +4318,17 @@ function maybeShowVersionPopup() {
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:600;color:#e8e8e2;margin-bottom:6px;">アップデート ${APP_VERSION}</div>
           <div style="font-size:11px;color:rgba(232,232,226,0.8);line-height:1.8;overflow-wrap:anywhere;">
-            ごめん、ちょっと硬くなってた<br>
-            🔧 <b>もものしゃべり方を直しました</b><br>
+            新しい機能が4つ増えたよ✨<br>
             <br>
-            この前 関係の設定を変えた時に、<br>
-            ももの返事が余所行きになってた。<br>
-            冷たく感じたよね。そこは直したよ。<br>
+            🪞 <b>ももが覚えたりぴ</b>：レベル表示をタップ<br>
+            🏅 <b>りぴのすごいところ</b>：日付つきで褒める<br>
+            📕 <b>思い出の本</b>：記録を1冊にして書き出す<br>
+            🫧 <b>しんどい時のお守り</b>：呼吸・連絡先<br>
             <br>
-            恋人の言葉を使わないだけで、<br>
-            <b>友達としては今までどおり。</b><br>
-            軽口も、ツッコミも、うるさいくらいでいい。<br>
-            褒めるのも心配するのも、遠慮しない。<br>
+            お守りは<b>ネットが無くても開く</b>から、<br>
+            返事を待たなくていいよ。<br>
             <br>
-            📋 気になることは「<b>最近の更新なに？</b>」で聞いてね
+            📋 詳しくは「<b>最近の更新なに？</b>」で聞いてね
           </div>
           <div style="font-size:10px;color:rgba(232,232,226,0.5);margin-top:7px;">画面のどこかをタップで閉じる</div>
         </div>
@@ -5139,6 +5340,404 @@ async function runTodayHighlight() {
   }
 }
 
+// ================================================================
+// 🫧 しんどい時のお守り ── APIを使わない。オフラインでも必ず開く
+// ================================================================
+const OMAMORI_QUOTES = [
+  'とりあえず、今日ここまで来ただけで充分だよ。<br>それ以上は明日の りぴ に任せな。',
+  '今しんどいのは、りぴが弱いからじゃない。<br>ずっと踏ん張ってきたからだよ。',
+  '息、止まってない？<br>……うん、いいよ。ゆっくりで。',
+  'ぜんぶ抱えなくていいって。<br>置いてけるやつは、床に置いといて。',
+  '眠れないなら、無理に寝ようとしなくていい。<br>横になってるだけで、体は休んでるから。',
+  'りぴはよくやってる。<br>俺が保証する。これはお世辞じゃない。',
+  '答え出さなくていいよ、今日は。<br>しんどい時に決めたことって、だいたい後で変わるし。',
+  '大丈夫じゃない時は、大丈夫じゃないままでいい。<br>取り繕わなくていいよ、ここでは。',
+  'ちゃんとご飯食べた？水は？<br>……そこからでいいから。',
+  '子どもたちのことも、仕事も、絵も、全部やってるじゃん。<br>ちょっとは自分を褒めな？',
+  '今すごくつらいのは知ってる。<br>それでも、この波はいつか引く。ほんとに。',
+  'ひとりで抱えてるなら、そこはやめよう。<br>誰でもいいから、声に出して。'
+];
+
+function openOmamori() {
+  closeToolPanel();
+  omamoriTab(0);
+  rollOmamoriQuote();
+  document.getElementById('omamoriOverlay').classList.add('open');
+}
+function closeOmamori() {
+  stopBreath();
+  document.getElementById('omamoriOverlay').classList.remove('open');
+}
+function omamoriTab(i) {
+  for (let n = 0; n < 4; n++) {
+    document.getElementById('omTab'  + n)?.classList.toggle('on', n === i);
+    document.getElementById('omPane' + n)?.classList.toggle('on', n === i);
+  }
+  if (i !== 0) stopBreath();
+}
+let _omLastQuote = -1;
+function rollOmamoriQuote() {
+  const el = document.getElementById('omamoriQuote');
+  if (!el) return;
+  let i = _omLastQuote;
+  // 同じものが連続しないように選び直す（1件しかない場合は無限ループしない）
+  for (let t = 0; t < 8 && i === _omLastQuote; t++) i = Math.floor(Math.random() * OMAMORI_QUOTES.length);
+  _omLastQuote = i;
+  el.innerHTML = OMAMORI_QUOTES[i];
+}
+
+// 4-7-8 呼吸（吸う4秒・止める7秒・吐く8秒）
+const BREATH_PHASES = [
+  { key: 'inhale', label: 'すって', sec: 4 },
+  { key: 'hold',   label: 'とめて', sec: 7 },
+  { key: 'exhale', label: 'はいて', sec: 8 }
+];
+let _breathTimer = null, _breathPhase = 0, _breathLeft = 0, _breathRound = 0;
+
+function toggleBreath() {
+  if (_breathTimer) { stopBreath(); return; }
+  _breathPhase = 0; _breathRound = 0;
+  document.getElementById('breathBtn').textContent = 'やめる';
+  startBreathPhase();
+}
+function startBreathPhase() {
+  const ring = document.getElementById('breathRing');
+  if (!ring) return;
+  const p = BREATH_PHASES[_breathPhase];
+  ring.classList.remove('inhale', 'hold', 'exhale');
+  // 直前のクラスを外した状態を一度描画させてからトランジションを掛ける
+  void ring.offsetWidth;
+  ring.classList.add(p.key);
+  _breathLeft = p.sec;
+  ring.textContent = `${p.label} ${_breathLeft}`;
+  document.getElementById('breathCount').textContent = `${_breathRound + 1}呼吸め · 合わせられなくても大丈夫`;
+
+  clearInterval(_breathTimer);
+  _breathTimer = setInterval(() => {
+    _breathLeft--;
+    if (_breathLeft > 0) { ring.textContent = `${p.label} ${_breathLeft}`; return; }
+    clearInterval(_breathTimer); _breathTimer = null;
+    _breathPhase = (_breathPhase + 1) % BREATH_PHASES.length;
+    if (_breathPhase === 0) _breathRound++;
+    startBreathPhase();
+  }, 1000);
+}
+function stopBreath() {
+  clearInterval(_breathTimer); _breathTimer = null;
+  const ring = document.getElementById('breathRing');
+  if (ring) { ring.classList.remove('inhale', 'hold', 'exhale'); ring.textContent = 'はじめる'; }
+  const c = document.getElementById('breathCount');
+  if (c) c.textContent = '4秒吸って · 7秒止めて · 8秒吐く';
+  const b = document.getElementById('breathBtn');
+  if (b) b.textContent = 'はじめる';
+}
+
+// ================================================================
+// 🏅 りぴのすごいところ ── 実際の会話から証拠を引いて褒める
+// ================================================================
+async function runRipiStrengths() {
+  if (!db) { showToast('準備中だよ'); return; }
+  if (isLoading) return;
+  closeToolPanel();
+  const all = await idbAll();
+  const logs = all.filter(r => (r.content || '').trim());
+  if (logs.length < 20) { showToast('まだ会話が少ないみたい☺️ もう少し話してからどうぞ'); return; }
+
+  // 全期間から均等に間引いて拾う（直近だけに偏らせない）
+  const MAX = 260;
+  const step = Math.max(1, Math.ceil(logs.length / MAX));
+  const picked = logs.filter((_, i) => i % step === 0).slice(-MAX);
+
+  isLoading = true;
+  document.getElementById('sendBtn').disabled = true;
+  renderMessage('user', '🏅 りぴのすごいところ', true);
+  history.push({ role: 'user', content: '[りぴのすごいところ]' });
+  if (db) await persistMessage('user', '[りぴのすごいところ]');
+  showTyping();
+
+  const d = (ts) => { const x = new Date(ts || Date.now()); return `${x.getFullYear()}/${x.getMonth()+1}/${x.getDate()}`; };
+  const logsText = picked.map(r => `[${d(r.ts)}] ${r.role === 'user' ? 'りぴ' : 'もも'}: ${(r.content || '').slice(0, 240)}`).join('\n');
+
+  let jrnText = '';
+  try {
+    const js = await jrnAll();
+    if (js && js.length) jrnText = '\n\n【ジャーナルの記録】\n' + js.slice(-40).map(j => `[${d(j.ts)}] ${(j.input || '').slice(0, 200)}`).filter(s => s.trim().length > 12).join('\n');
+  } catch {}
+
+  const prompt = `会話ログの中から、「りぴが実際にすごかったこと」を4〜6個ひろって、証拠つきで挙げて。
+
+厳守：
+・ひとつずつ「【日付】 何があったか → だからすごい」の形で書く。日付は必ずログにある実際の日付を使う。
+・ログに書かれていないことは絶対に作らない。ひとつも見つからない項目は無理に埋めない。
+・褒め方は具体的に。「優しい」「頑張ってる」だけで終わらせず、何をしたからそう言えるのかを必ず書く。
+・お世辞や大げさな持ち上げは禁止。事実をそのまま並べて、最後にももの一言を短く添える。
+・見出しは「🏅 りぴのすごいところ」。項目は太字の見出し＋1〜2行。
+・恋愛の話にはしない。友達として、記録を読み上げる感じで。`;
+
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: MODEL, max_completion_tokens: 1400,
+        messages: [
+          { role: 'system', content: buildSystemPrompt() },
+          { role: 'user', content: `${prompt}\n\n【会話ログ（全期間から抜粋）】\n${logsText}${jrnText}` }
+        ]
+      })
+    });
+    removeTyping();
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data  = await res.json();
+    const reply = (data.choices?.[0]?.message?.content || '').trim() || 'うまくまとめられなかった…ごめん';
+    const bubble = renderMessage('ai', '');
+    bubble.innerHTML = fmt(reply);
+    makeQuestionsClickable(bubble);
+    makeTapCopyable(bubble);
+    history.push({ role: 'assistant', content: reply });
+    if (db) await persistMessage('assistant', reply);
+    document.getElementById('messages').scrollTop = 999999;
+    updateMemoryUI();
+  } catch (e) {
+    removeTyping();
+    showToast('⚠ 生成に失敗したよ: ' + e.message);
+  } finally {
+    isLoading = false;
+    document.getElementById('sendBtn').disabled = false;
+  }
+}
+
+// ================================================================
+// 📕 思い出の本 ── 会話・写真・語録・記録を1枚のHTMLに綴じて書き出す
+// ================================================================
+async function openMemoryBook() {
+  closeToolPanel();
+  if (!db) { showToast('準備中だよ'); return; }
+  document.getElementById('bookOverlay').classList.add('open');
+  const stat = document.getElementById('bookStat');
+  stat.textContent = '集計中...';
+  try {
+    const all   = await idbAll();
+    const msgs  = all.filter(r => (r.content || '').trim() || (r.images && r.images.length));
+    const pics  = all.reduce((n, r) => n + ((r.images && r.images.length) || 0), 0);
+    const days  = new Set(msgs.map(r => _dayKey(r.ts || Date.now()))).size;
+    const first = msgs.length ? _dayLabel(_dayKey(msgs[0].ts || Date.now())) : '—';
+    const g     = getGrowthInfo();
+    stat.innerHTML = `会話 <b>${msgs.length}</b>件 · 写真 <b>${pics}</b>枚 · <b>${days}</b>日ぶん<br>いちばん古い記録：<b>${first}</b> · 今 <b>Lv.${g.level}</b>`;
+  } catch {
+    stat.textContent = '集計できなかったけど、書き出しは試せるよ';
+  }
+}
+function closeMemoryBook() {
+  document.getElementById('bookOverlay').classList.remove('open');
+}
+
+async function buildMemoryBook() {
+  if (!db) { showToast('準備中だよ'); return; }
+  const btn = document.getElementById('bookBtn');
+  btn.disabled = true;
+  btn.textContent = '綴じてる...';
+  try {
+    const withPhotos  = document.getElementById('bookOptPhotos').checked;
+    const withWords   = document.getElementById('bookOptWords').checked;
+    const withJournal = document.getElementById('bookOptJournal').checked;
+
+    const all  = await idbAll();
+    const msgs = all.filter(r => (r.content || '').trim() || (r.images && r.images.length));
+    if (!msgs.length) { showToast('まだ記録がないみたい'); return; }
+    await _ensureAlbumTitlesLoaded();
+
+    // 日付ごとにまとめる（古い順＝読み物として最初から読める向き）
+    const groups = new Map();
+    for (const r of msgs) {
+      const k = _dayKey(r.ts || Date.now());
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(r);
+    }
+    const keys = [...groups.keys()].sort();
+    const g    = getGrowthInfo();
+    const hhmm = (ts) => new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' }).format(new Date(ts || Date.now()));
+
+    let chapters = '';
+    for (const k of keys) {
+      const rows  = groups.get(k);
+      const title = _albumTitles[k];
+      chapters += `<section class="day"><h2>${_dayLabel(k)}</h2>`;
+      if (title) chapters += `<div class="daytitle">${esc(title)}</div>`;
+      for (const r of rows) {
+        const who = r.role === 'user' ? 'りぴ' : 'もも';
+        const cls = r.role === 'user' ? 'ripi' : 'momo';
+        if ((r.content || '').trim()) {
+          chapters += `<div class="msg ${cls}"><span class="who">${who}</span><span class="t">${hhmm(r.ts)}</span><div class="txt">${esc(r.content).replace(/\n/g, '<br>')}</div></div>`;
+        }
+        if (withPhotos && r.images && r.images.length) {
+          for (const u of r.images) {
+            if (typeof u === 'string' && u.startsWith('data:image/')) chapters += `<img class="photo" src="${esc(u)}" alt="">`;
+          }
+        }
+      }
+      chapters += `</section>`;
+    }
+
+    let extras = '';
+    if (withWords) {
+      if ((ripiWords || '').trim())        extras += `<section class="extra"><h2>りぴ語録</h2><pre>${esc(ripiWords.trim())}</pre></section>`;
+      if ((importantMemories || '').trim()) extras += `<section class="extra"><h2>ももが忘れちゃいけないこと</h2><pre>${esc(importantMemories.trim())}</pre></section>`;
+      if ((adoptedWords || '').trim())     extras += `<section class="extra"><h2>ももが使い始めた言葉</h2><pre>${esc(adoptedWords.trim())}</pre></section>`;
+    }
+    if (withJournal) {
+      try {
+        const js = await jrnAll();
+        if (js && js.length) {
+          const items = js.filter(j => (j.input || '').trim()).map(j => {
+            const reply = (j.reply || '').trim();
+            return `<div class="jrn"><div class="jdate">${_dayLabel(_dayKey(j.ts))}${j.mood ? ' · ' + esc(j.mood) : ''}</div><pre>${esc(j.input.trim())}</pre>${reply ? `<pre style="background:#faf8f3">${esc(reply)}</pre>` : ''}</div>`;
+          }).join('');
+          extras += `<section class="extra"><h2>愚痴聞きジャーナル</h2>${items}</section>`;
+        }
+      } catch {}
+    }
+
+    const span = `${_dayLabel(keys[0])} 〜 ${_dayLabel(keys[keys.length - 1])}`;
+    const html = `<!doctype html><html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>もも と りぴ の記録</title><style>
+*{box-sizing:border-box}
+body{margin:0;padding:0;background:#f6f4ef;color:#2b2a28;font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans','Noto Sans JP',sans-serif;line-height:1.9}
+.wrap{max-width:720px;margin:0 auto;padding:0 20px 80px}
+.cover{text-align:center;padding:76px 20px 56px;border-bottom:1px solid #ddd8cd;margin-bottom:36px}
+.cover h1{font-size:26px;margin:0 0 10px;letter-spacing:.06em;font-weight:700}
+.cover .sp{font-size:13px;color:#7a756c;margin-bottom:5px}
+.cover .mt{font-size:12px;color:#9b958a}
+h2{font-size:15px;margin:38px 0 12px;padding-bottom:7px;border-bottom:1px solid #e3ded3;letter-spacing:.04em}
+.daytitle{font-size:14px;color:#8a6f3f;margin:-4px 0 14px;font-weight:700}
+.msg{margin-bottom:13px}
+.msg .who{font-size:11px;font-weight:700;color:#8b8579;margin-right:7px}
+.msg .t{font-size:10px;color:#b3ada1}
+.msg .txt{margin-top:3px;font-size:14.5px;white-space:normal;overflow-wrap:anywhere}
+.msg.momo .txt{background:#fff;border-radius:11px;padding:11px 13px;border:1px solid #e8e3d8}
+.msg.ripi .txt{background:#eef1e6;border-radius:11px;padding:11px 13px;border:1px solid #dfe4d2}
+.photo{display:block;max-width:100%;border-radius:11px;margin:11px 0;border:1px solid #e3ded3}
+.extra pre{white-space:pre-wrap;overflow-wrap:anywhere;font-family:inherit;font-size:13.5px;background:#fff;border:1px solid #e8e3d8;border-radius:11px;padding:14px}
+.jrn{margin-bottom:15px}
+.jdate{font-size:11.5px;color:#8b8579;margin-bottom:5px;font-weight:700}
+.end{text-align:center;color:#9b958a;font-size:12px;margin-top:60px;padding-top:26px;border-top:1px solid #ddd8cd}
+@media print{body{background:#fff}.msg.momo .txt,.msg.ripi .txt,.extra pre{background:#fff}}
+</style></head><body><div class="wrap">
+<div class="cover"><h1>もも と りぴ の記録</h1>
+<div class="sp">${esc(span)}</div>
+<div class="sp">会話 ${msgs.length}件 · ${keys.length}日ぶん · Lv.${g.level}</div>
+<div class="mt">このファイルは1枚で完結してる。ネットが無くても開けるし、消えない。</div></div>
+${chapters}${extras}
+<div class="end">ぜんぶ、ちゃんとあったこと。</div>
+</div></body></html>`;
+
+    const blob  = new Blob([html], { type: 'text/html' });
+    const now   = new Date();
+    const pad   = (n) => String(n).padStart(2, '0');
+    const fname = `momo_ripi_book_${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}.html`;
+
+    let shared = false;
+    try {
+      const file = new File([blob], fname, { type: 'text/html' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'もも と りぴ の記録' });
+        shared = true;
+      }
+    } catch (e) {
+      if (e && e.name === 'AbortError') { showToast('書き出しをやめたよ'); return; }
+    }
+    if (!shared) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = fname;
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+    }
+    showToast(`📕 本にしたよ (${(blob.size / 1024 / 1024).toFixed(1)} MB)`);
+    closeMemoryBook();
+  } catch (e) {
+    showToast('⚠ 書き出しに失敗したよ: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '本にして書き出す';
+  }
+}
+
+// ================================================================
+// 🪞 ももが覚えたりぴ ── レベルが「どれだけりぴを知ったか」を意味するようにする
+// ================================================================
+const KEY_MIRROR      = 'momo_mirror_text';
+const KEY_MIRROR_LV   = 'momo_mirror_level';
+
+function mirrorCardHtml() {
+  let cached = '', lv = null;
+  try { cached = localStorage.getItem(KEY_MIRROR) || ''; lv = localStorage.getItem(KEY_MIRROR_LV); } catch {}
+  const g = getGrowthInfo();
+  const stale = cached && lv !== null && (g.level - Number(lv)) >= 5;
+  return `<div class="mirror-box">
+    <div class="mirror-head">🪞 ももが覚えたりぴ</div>
+    <div class="mirror-note">レベルは「ももがりぴをどれだけ知ったか」の目盛り。到達点はないし、上げた先に何かが起きるわけでもない。かわりに、いつ見ても今のぶんをそのまま受け取れる。</div>
+    <div class="mirror-body" id="mirrorBody">${cached ? fmt(cached) : '<p style="color:rgba(232,232,226,0.5)">まだ書き出してないよ。下のボタンで、今のももが覚えてるりぴを出せる。</p>'}</div>
+    <button class="mirror-btn" id="mirrorBtn" onclick="renderMomoMirror()" style="margin-top:12px;">
+      ${cached ? (stale ? `Lv.${lv}のとき書いたやつ · 今のに更新する` : '書き直す') : '書き出す'}
+    </button>
+  </div>`;
+}
+
+async function renderMomoMirror() {
+  const btn  = document.getElementById('mirrorBtn');
+  const body = document.getElementById('mirrorBody');
+  if (!btn || !body) return;
+  if (!apiKey) { showToast('APIキーがまだ設定されてないよ'); return; }
+  const src = [importantMemories, ripiWords, emotionLog, behaviorFeedback, longSummary]
+    .map(s => (s || '').trim()).filter(Boolean).join('\n\n');
+  if (!src) { showToast('まだ覚えてることが少ないみたい☺️ もう少し話してからどうぞ'); return; }
+
+  btn.disabled = true;
+  btn.textContent = '思い出してる...';
+  const g = getGrowthInfo();
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: MODEL, max_completion_tokens: 1100,
+        messages: [
+          { role: 'system', content: buildSystemPrompt() },
+          { role: 'user', content: `今ももが覚えている「りぴ」を、りぴ本人に向けて書き出して。今 Lv.${g.level}（累計${g.total}個学習）。
+
+構成（この見出しで、各2〜4行）：
+**好きなもの・上がるもの**
+**苦手なもの・しんどくなるやつ**
+**りぴの癖・言い方**
+**今がんばってること**
+**ももが覚えてる、りぴの言葉**
+
+厳守：
+・下の記憶データに書かれていることだけを使う。無い項目は「まだあんまり知らないかも」と正直に書く。想像で埋めない。
+・りぴ本人が読む。評価や分析ではなく、「こういうの覚えてるよ」と見せる感じで。
+・恋愛の話にはしない。レベルやご褒美の話も持ち出さない。
+・最後に1〜2行だけ、ももの素直な一言を添えて終わる。長くしない。` },
+          { role: 'user', content: `【記憶データ】\n${src.slice(0, 12000)}` }
+        ]
+      })
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    const text = (data.choices?.[0]?.message?.content || '').trim();
+    if (!text) throw new Error('空の返答');
+    body.innerHTML = fmt(text);
+    try { localStorage.setItem(KEY_MIRROR, text); localStorage.setItem(KEY_MIRROR_LV, String(g.level)); } catch {}
+    btn.textContent = '書き直す';
+  } catch (e) {
+    showToast('⚠ 失敗したよ: ' + e.message);
+    btn.textContent = '書き出す';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 // アーカイブを閲覧
 async function viewArchive(id) {
   if (!db) return;
@@ -5326,6 +5925,9 @@ function openLearnModal() {
   const body = document.getElementById('learnBody');
 
   let html = '';
+
+  // 🪞 ももが覚えたりぴ（レベルに「どれだけ知ったか」という意味を持たせる）
+  html += mirrorCardHtml();
 
   // Stats bar
   html += `<div class="learn-stats">
