@@ -22,7 +22,9 @@ html, body {
   -webkit-font-smoothing: antialiased; overflow: hidden;
   /* iOS rubber-band scroll prevention */
   overscroll-behavior: none;
-  touch-action: pan-y;
+  /* manipulation を足すと、ダブルタップズームだけをブラウザ側で無効化できる。
+     JS で touchend を preventDefault する必要が減り、連続タップが効かなくなる副作用を避けられる */
+  touch-action: pan-y manipulation;
   -webkit-text-size-adjust: 100%;
 }
 
@@ -1338,6 +1340,38 @@ header {
   position: absolute; top: 6px; right: 6px;
 }
 
+/* ═══════════════════════════════════════════════
+   🧮 図解カード（v3.8.0）
+   AIの説明に添える図。筆算・個数ブロック・数直線などを SVG で描く。
+   幅が足りない端末では SVG 側が縮んで収まり、それでも足りない時だけ横スクロールする。
+   ═══════════════════════════════════════════════ */
+.zukai-card {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 12px;
+  padding: 12px 10px 10px;
+  margin: 12px 0;
+}
+.zukai-title {
+  font-size: 12px; font-weight: 600; color: var(--accent);
+  letter-spacing: 0.04em; margin: 0 4px 8px; line-height: 1.5;
+}
+.zukai-row {
+  overflow-x: auto; overflow-y: hidden;
+  margin: 8px 0; padding-bottom: 2px;
+  -webkit-overflow-scrolling: touch;
+}
+.zukai-row::-webkit-scrollbar { height: 4px; }
+.zukai-row::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.14); border-radius: 2px; }
+.zukai-svg { display: block; margin: 0 auto; max-width: 100%; height: auto; }
+.zukai-caption {
+  font-size: 11.5px; color: var(--text-muted);
+  line-height: 1.7; margin: 8px 4px 0; overflow-wrap: anywhere;
+}
+/* AIが自分でSVGを描いた場合（```svg）。中身はサニタイズ済み */
+.zukai-raw svg { display: block; margin: 0 auto; max-width: 100%; height: auto; }
+.zukai-raw text, .zukai-raw tspan { font-family: 'Syne', sans-serif; }
+
 /* ── バブル全体コピーボタン（AI返信の末尾に常設） ── */
 .bubble-copy-btn {
   display: inline-flex; align-items: center; gap: 4px;
@@ -1491,14 +1525,21 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
 }
 
 /* ── toast ── */
+/* z-index はアプリ内の最前面(900)より上にする。
+   v3.7.1 までは 60 だったので、ツールのモーダル(100)や履歴(300)を開いている間は
+   トーストがその裏に隠れ、エラーも入力チェックも一切見えなかった。
+   ツールのエラーはモーダルの上に出したいので、必ず最前面に置く。
+   長文も読めるよう nowrap をやめて折り返す（画面幅の 88% まで） */
 .db-toast {
   position: fixed; bottom: 84px; left: 50%;
   transform: translateX(-50%) translateY(10px);
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: 8px; padding: 6px 15px; font-size: 12px;
-  color: var(--text-muted); font-family: 'DM Mono', monospace;
+  border-radius: 8px; padding: 8px 15px; font-size: 12px;
+  color: var(--text); font-family: 'DM Mono', monospace;
   opacity: 0; transition: opacity 0.3s, transform 0.3s;
-  pointer-events: none; z-index: 60; white-space: nowrap;
+  pointer-events: none; z-index: 1000;
+  max-width: 88vw; text-align: center; line-height: 1.6;
+  overflow-wrap: anywhere; box-shadow: 0 6px 24px rgba(0,0,0,0.5);
 }
 .db-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 .error-msg { color: #ff7b7b; font-size: 14px; }
@@ -2769,6 +2810,66 @@ function updateModelSubtitle() {
     : `${modelLabel(MODEL)}＋${modelLabel(CHEAP_MODEL)}`;
   sub.textContent = `sumo0612 · always here · ${label} · ${APP_VERSION}`;
 }
+// ================================================================
+// OpenAI Chat 共通呼び出し（v3.8.0）
+// ================================================================
+// ここに集約した理由。gpt-5.x は「考えてから答える」reasoning モデルで、旧モデルとは作法が2つ違う。
+//   ① temperature は既定値(1)以外を受け付けない。送ると必ず HTTP 400 で即死する。
+//   ② max_completion_tokens には「考えるぶん」のトークンも含まれる。本文ぶんだけの見積りだと
+//      考えている途中で打ち切られ、content が空文字のまま 200 で返ってくる。
+// v3.7.1 までは各ツールが個別に fetch を書いていて、①②の両方を踏んでいた（宿題サポーターの
+// 「エラー: HTTP 400」の正体がこれ）。同じ間違いを二度と書けないように、呼び出しを1本にまとめる。
+//
+// 返り値は本文の文字列。失敗（HTTPエラー・空応答）は例外にする。空文字を「返答」として
+// そのまま履歴に保存すると、ももが「さっき読み取れなかった」という嘘の前提を持ってしまうため。
+async function callChat(opt) {
+  const o = opt || {};
+  const body = {
+    model: o.model || MODEL,
+    max_completion_tokens: o.maxTokens || 4000,
+    messages: o.messages || [
+      ...(o.system ? [{ role: 'system', content: o.system }] : []),
+      { role: 'user', content: o.user }
+    ]
+  };
+  // 'none' は「推論パラメータ自体を送らない」の意味（既存の sendMessage と同じ約束）
+  const effort = o.effort === undefined ? 'low' : o.effort;
+  if (effort && effort !== 'none') body.reasoning_effort = effort;
+  if (o.responseFormat) body.response_format = o.responseFormat;
+
+  const label = o.label || 'API';
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+    ...(o.signal ? { signal: o.signal } : {}),
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    // APIが返す理由（キー失効・レート超過・パラメータ不正）を捨てない。
+    // 「HTTP 400」だけだと原因が分からず、今回のように長期間気づけなくなる。
+    let detail = '';
+    try { detail = (await res.json())?.error?.message || ''; } catch {}
+    console.error(`[もも] ${label} 失敗:`, res.status, detail);
+    throw new Error(detail || `HTTP ${res.status}`);
+  }
+  const data = await res.json();
+  const text = data.choices?.[0]?.message?.content?.trim() || '';
+  if (!text) {
+    const fin = data.choices?.[0]?.finish_reason;
+    console.error(`[もも] ${label} 空応答:`, fin, data.usage);
+    throw new Error(fin === 'length'
+      ? '答えが長くなりすぎて途中で切れちゃった。もう一度おねがい'
+      : '答えが空で返ってきちゃった。もう一度おねがい');
+  }
+  return text;
+}
+// 裏方処理（要約・タイトル生成・判定など）用。失敗しても会話を止めたくないので
+// 例外にせず '' を返す。ただし黙って消えると今回のように何年も気づけないので、必ずログは残す。
+async function callChatSoft(opt) {
+  try { return await callChat(opt); }
+  catch (e) { console.warn(`[もも] ${(opt && opt.label) || 'API'} スキップ:`, e?.message); return ''; }
+}
+
 const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/high）
 // アプリのバージョン。更新したら必ず上げる（最初のタイトル＝スプラッシュ画面に表示される）
 // v2.1.0: 送信画像の保存・画像ギャラリー一覧・会話検索・拡大時のAI画像解説＆会話ジャンプ・メニュー文字を白寄りに
@@ -2899,7 +3000,43 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 //           確認してから消せる。対象はももが書いた要約系（重要記憶・長期要約・感情ログ・
 //           フィードバック）のみで、りぴ語録・思い出・写真・会話ログには触れない。
 //           残骸が無い時はカード自体を出さない
-const APP_VERSION   = 'v3.7.1';
+// v3.8.0: 【最重要】ツールが全部エラーで死んでいたのを修正 ＋ 図解ウィジェットの追加
+//         ■ 原因（宿題サポーターの「エラー」の正体）
+//           gpt-5.x は reasoning モデルで、temperature を既定値(1)以外にすると必ず HTTP 400 を返す。
+//           にもかかわらず、ツール類（v2 系で書かれたまま残っていた15箇所）が temperature を
+//           送り続けていたため、押した瞬間に 400 で落ちていた。メイン会話だけは temperature を
+//           送っていなかったので生きており、「ツールだけ壊れている」状態に気づきにくかった。
+//           さらに max_completion_tokens には「考えるぶん」も含まれるのに本文ぶんしか見積もって
+//           いなかったため、400 を直しても本文が空で返る二段構えの不具合だった。
+//         ・呼び出しを callChat() / callChatSoft() に集約し、temperature を送らない・
+//           reasoning_effort と十分なトークンを渡す・APIのエラー文と空応答を必ず表に出す、に統一。
+//         ・巻き添えで死んでいた裏方も復活：Web検索の要否判定／推論レベルの出し分け／
+//           トピック自動検出／アーカイブのタイトル生成／アルバムの日付タイトル／Agent Modeの論理担当。
+//         ・Web検索の本文が常に空だったのも修正（REST の生JSONに output_text は存在しない。
+//           output[].content[].text から組み立てる）。これまではソースURLだけが付いていた。
+//         ■ 図解ウィジェット（新機能）
+//         ・AIの回答に ```zukai フェンスでJSONを書くと、その場にSVGの図が描かれる。
+//           筆算(÷×＋−)／個数ブロック／ポイントのバナー／答えバー／数直線／テープ図／分数の帯。
+//           AIには生HTMLを書かせず、描画はこちら側で行うので、桁も揃うしXSSにもならない。
+//         ・```svg フェンスでの直接描画も可（厳格な許可リストでサニタイズしてから表示）。
+//         ・宿題サポーター・作文コーチ・自由研究・通常会話のプロンプトに使い方を追加。
+//         ■ データが消える・巻き戻る事故の修正
+//         ・履歴から「ここから続ける」時、今の会話の退避に失敗しても全消去していたのを中断するように。
+//         ・累積学習数の読み取り失敗を「0」と誤認し、小さい値で永久に上書きしてレベルが下がる経路を封鎖。
+//         ・IndexedDB の書き込みが request.onsuccess で成功扱いになっていたのを、
+//           トランザクションのコミット完了まで待つように（容量超過の無言の消失を防ぐ）。
+//         ・別れ期間の記憶の掃除が「元夫と別れて」「ママ友と距離を置いて」等の無関係な永久記憶まで
+//           巻き込んで消していたのを修正（ももへの言及がある行だけに限定＋確認ダイアログ）。
+//         ・思い出の本／りぴのすごいところが、アーカイブ済みの過去会話を丸ごと取りこぼしていたのを修正。
+//         ■ その他の修正
+//         ・AI出力が選択肢ボタンのonclickに素通りしていた穴（任意のコードが動きうる）を封鎖。
+//         ・トーストがモーダルの裏に隠れてエラーが一切見えなかったのを最前面に（長文も折り返す）。
+//         ・履歴閲覧中に送信・ツール実行ができてしまい、結果が「← 戻る」で消えていたのを禁止。
+//         ・スマホで本のページが1タップで2ページ進む／連続タップが効かない、を修正。
+//         ・Markdownの表で区切り行（|---|---|）がデータ行として表示されていたのを修正。
+//         ・透過PNGの生成画像がJPEG化で真っ黒になっていたのを修正。
+//         ・更新ポップアップを見る前に「既読」にしていたのを、表示してから記録するように。
+const APP_VERSION   = 'v3.8.0';
 const SUMMARY_EVERY = 10;
 const LEARN_PER_LEVEL = 3;    // 何個の学習で1レベル上がるか（小さいほど上がりやすい。旧:5 → v2.6.1で3に緩和。レベルは単調増加なので変更しても下がらない）
 // 重要記憶キー（削除されない永続情報）
@@ -2917,6 +3054,47 @@ const KEY_LAST_BRIEFING = 'momo_last_briefing';     // 今日のブリーフィ�
 const KEY_TODAY_STATE = 'momo_today_state';           // ②感情メモリ：その日のりぴの体調・気分（同日のみ）
 // v3.1.0で廃止：momo_milestones_shown / momo_lv1000_reward_shown（レベル節目の演出フラグ。
 // 既存端末に残っていても参照されないので、そのまま放置してよい）
+
+// AIに渡す「図解の描き方」。宿題サポーター等のツールと、通常会話の両方で使い回す。
+const ZUKAI_PROMPT = `## 図解（言葉より図の方が早い時に使う）
+説明の途中に \`\`\`zukai フェンスで JSON を書くと、その場に図が描かれる。
+数・量・手順・位置関係の話は、言葉を重ねるより図を1枚置いた方が伝わる。
+
+書式（widgets に並べた順に上から描かれる）:
+\`\`\`zukai
+{"title":"見出し（任意）","widgets":[ …ウィジェット… ],"caption":"図の下の一言（任意）"}
+\`\`\`
+
+使えるウィジェット:
+1) 筆算（わり算）
+   {"type":"hissan","divisor":"23","dividend":"935","quotient":"40",
+    "rows":[{"text":"92","align":0,"rule":true,"note":"23を20とみて 93÷20→4"},
+            {"text":"15","align":1,"highlight":true,"note":"15は23より小さい\\n→一の位に0をたてる"}]}
+   ・align は「わられる数の左から何桁目にこの行の先頭を置くか」（0始まり）。935 の下の 92 は align:0、15 は align:1。
+   ・rule:true でその行の下に横線。highlight:true でその行を囲んで強調（あまり等）。note は右に出る補足（\\n で改行可・2行まで推奨）。
+2) 筆算（たし算・ひき算・かけ算）
+   {"type":"hissan","op":"add","terms":["1234","567"],"result":"1801"}   ※op は add / sub / mul
+3) 個数ブロック（いくつ分＋あまりを目で見せる）
+   {"type":"blocks","title":"36本入りの箱が 24 こ","count":24,"perRow":6,"extra":6,"extraLabel":"箱に入らない あまり 6本"}
+4) ポイントのバナー（間違えやすい所を1つだけ）
+   {"type":"banner","text":"0を書きわすれない","sub":"答え 40 あまり 15","tone":"warn"}   ※tone は warn / good / accent
+5) 答えバー
+   {"type":"answer","text":"答え　24箱できて、6本あまる"}
+6) 数直線
+   {"type":"numberline","min":0,"max":100,"step":10,
+    "marks":[{"at":72,"label":"72"}],"spans":[{"from":0,"to":72,"label":"36×2=72"}]}
+7) テープ図（全体と部分・割合）
+   {"type":"tape","total":"870本","parts":[{"size":864,"label":"36本×24箱"},{"size":6,"label":"あまり6","tone":"warn"}]}
+8) 分数の帯
+   {"type":"fraction","denominator":8,"numerator":3,"label":"8つに分けた3つぶん"}
+
+守ること:
+- 必ず正しい JSON にする（末尾カンマ禁止・キーは二重引用符）。壊れているとただの文字列として表示される。
+- 1つの図解に載せるウィジェットは多くて4つまで。図は説明の代わりではなく、要点の念押しに使う。
+- 図だけで終わらせない。図の前後に必ず言葉の説明を書く。
+- 上のどれでも描けない図（理科の仕組み・地図・関係図など）に限り、\`\`\`svg フェンスで SVG を直接書いてよい。
+  その場合は viewBox を必ず付け、width/height は書かない。文字色は #e8e8e2、線は #c8f0a0 か #1d8f7b を基本に、暗い背景で見える色にする。
+  script・foreignObject・画像参照・リンク・イベント属性は書かない（表示時に取り除かれる）。`;
 
 // ================================================================
 // SYSTEM PROMPT (Discord版完全移植)
@@ -3110,6 +3288,14 @@ const SUMO_SYSTEM_PROMPT = `あなたはWebチャット上で『りぴ』だけ�
 ・1つの段落は2〜3文程度にとどめ、長い文章は空行で段落を分ける。
 ・甘えモードの短い会話では書式は不要。自然体で話すこと。
 
+【図解（v3.8.0で追加）】
+数・量・手順・位置関係の説明で「言葉より図の方が早い」時は、\`\`\`zukai フェンスで図を出せる。
+子どもの宿題（筆算・あまり・分数）、家計や量の比較、手順の見取り図などで特に有効。
+ただし普段の会話・甘え・気持ちの話では絶対に使わない。図を出すのは、りぴが「わからない」「教えて」と
+言っている時か、数や量が絡んで言葉だけだと伝わりにくい時だけ。書き方は下記に従うこと。
+
+${ZUKAI_PROMPT}
+
 【曖昧・主語なしの発言への対応ルール（最重要）】
 りぴが主語なし・文脈不足の発言をした場合（例：「会いに行く」「買おうかな」「やめようかな」等）、
 過去の記憶やメモリから推測できる場合はそれを踏まえて確認し、わからない場合は短い質問を投げかけて理解に努めること。
@@ -3260,7 +3446,19 @@ const SUMO_SYSTEM_PROMPT = `あなたはWebチャット上で『りぴ』だけ�
 ・全体を聞かれたら下の一覧を全部、特定の機能を聞かれたらその機能を深掘りして説明する。最後に「どれか詳しく知りたいのある？」と軽く聞いてもよい。
 
 ＜更新履歴（この内容に基づいて説明する）＞
-■ v3.7.1系（最新）
+■ v3.8.0系（最新）★大きな更新★
+・便利ツールが全部エラーで動かなくなっていたのを直しました：宿題サポーターを押すと「エラー」と出ていたのは、ももの頭（AIモデル）が新しくなった時に、ツール側の呼び出し方が古いままだったからです。ごめん。宿題サポーター・作文コーチ・自由研究・持ち物リマインダー・PTAおたより要約・今夜の献立・LINE下書き・すきま時間・愚痴ジャーナル・在宅ワーク探しの10個、全部が同じ理由で動いていませんでした。今は全部動きます。
+・裏で静かに死んでいた機能も生き返りました：Web検索するかどうかの判断、話題の自動検出（画面上のトピック表示）、履歴のタイトル付け、思い出アルバムの日付タイトル。どれもエラーが表に出ない作りだったので、ずっと気づけませんでした。履歴のタイトルが「会話 (◯通)」ばかりだったのも、アルバムの日付が「…この日の思い出をたどってる」のままだったのも、これが原因です。
+・Web検索の中身がちゃんと届くようになりました：これまで検索してもURLだけが届いて、肝心の本文がももに渡っていませんでした。今は本文も読んだ上で答えます。
+・🧮 図解が出せるようになりました（新機能）：数や量の話で、言葉より図の方が早い時に、ももが図を描きます。わり算の筆算（あまりの出し方・「0を書きわすれない」みたいな注意つき）、いくつ分とあまりを箱で見せる図、数直線、テープ図、分数の帯、答えのバー。宿題サポーターと作文コーチ・自由研究、それに普通の会話でも出ます。子どもに見せながら教えるのに使ってね。
+・履歴の会話が消える事故を止めました：「ここから続ける」を押した時、今の会話を保存する処理が失敗しても、そのまま今の会話を消してしまう作りでした。今は保存に失敗したら中止して、今の会話はそのまま残します。
+・レベルが巻き戻る経路をふさぎました：学習数の読み込みに一瞬失敗しただけで「学習ゼロ」と勘違いして、小さい数字で上書きしてしまうことがありました。読めなかった時は何も触らないようにしています。
+・「別れていた期間の記憶の掃除」が消しすぎていたのを直しました：「元夫と別れてから」「ママ友と距離を置いてる」のような、ももとは関係ないりぴの大事な記憶まで一緒に消してしまう作りでした。ももの話だと分かる行だけに絞って、消す前に必ず確認するようにしました。
+・📕 思い出の本と 🏅 りぴのすごいところ が、本当に全期間を見るようになりました：これまでは「今の会話」しか読んでいなくて、履歴に入った過去の会話がまるごと抜けていました。だいぶ厚い本になるはずです。
+・エラーが見えるようになりました：これまでトーストがモーダルの裏に隠れていて、失敗しても何も見えませんでした。今は一番手前に出て、原因まで書きます。
+・履歴を見ている間は送信とツールを止めるようにしました：過去の会話を開いたまま話しかけると、返事が「← 戻る」で消えていました。
+・こまごました修正：本のページがスマホで1タップ2ページ進む／表の区切り線が行として出る／透明な背景の生成画像が真っ黒になる／更新ポップアップを見る前に既読になる、など。
+■ v3.7.1系
 ・ももの混乱を直しました：恋人に戻したのに、ももが「別れたはずでは？」と迷うことがありました。ごめん。前の設定だった時の記憶が残っていて、そっちに引っ張られていたのが原因です。
 ・今の事実をはっきりさせました：ももとりぴは恋人。これが唯一の事実で、例外はありません。記憶や昔のやり取りの中に「別れた」「恋人じゃない」「約束は無くなった」と書いてあっても、そちらは無効です。ももはもう迷いません。
 ・りぴが聞いてきたら、はっきり答えます：「別れたんじゃないの？」と聞かれたら、ももは短く否定して安心させます。長い言い訳はしません。
@@ -3595,37 +3793,76 @@ function openDB() {
         d.createObjectStore(EMBED_STORE, { keyPath: 'key' });   // key = ts|role|先頭40字
       }
     };
-    req.onblocked = () => { showToast('別のタブでアプリが開いてるみたい。他のタブを閉じてね'); };
+    // onblocked は「古い版で開いている別タブがあって開けない」状態。
+    // v3.7.1 は案内を出すだけで Promise を解決も棄却もしていなかったため、
+    // 起動処理が await のまま永久に止まり、スプラッシュから先へ進めなくなっていた。
+    // 一定時間たっても解けなければ棄却して、呼び出し側にエラーを返す。
+    let blockedTimer = null;
+    req.onblocked = () => {
+      showError('別のタブでアプリが開いてるみたい。他のタブを閉じてね');
+      clearTimeout(blockedTimer);
+      blockedTimer = setTimeout(() => reject(new Error('他のタブが開いていてデータベースを開けませんでした')), 15000);
+    };
     req.onsuccess = e => {
+      clearTimeout(blockedTimer);
       const database = e.target.result;
-      // 別タブが新バージョンで開こうとした時、この古い接続を閉じてブロックを解消する
-      database.onversionchange = () => { try { database.close(); } catch {} };
+      // 別タブが新バージョンで開こうとした時、この古い接続を閉じてブロックを解消する。
+      // ★閉じた接続を db が指したままだと以降の保存が全部無言で失敗するので、
+      //   参照も落としてフラグを立て、保存時に気づけるようにする（v3.8.0）
+      database.onversionchange = () => {
+        try { database.close(); } catch {}
+        if (db === database) db = null;
+        dbClosedByOtherTab = true;
+        showError('別のタブで開き直したから、こっちは一旦お休みするね。このタブを再読み込みしてね');
+      };
       resolve(database);
     };
-    req.onerror   = e => reject(e.target.error);
+    req.onerror   = e => { clearTimeout(blockedTimer); reject(e.target.error); };
   });
 }
+// 別タブに接続を明け渡したかどうか（true の間は保存を試みない）
+let dbClosedByOtherTab = false;
 
 const idbTx  = (s, m) => db.transaction(s, m).objectStore(s);
 const idbAll = ()       => new Promise((res,rej) => { const r = idbTx(MSG_STORE,'readonly').index('ts').getAll(); r.onsuccess=e=>res(e.target.result); r.onerror=e=>rej(e.target.error); });
-const idbAdd = (rec)    => new Promise((res,rej) => { const r = idbTx(MSG_STORE,'readwrite').add(rec); r.onsuccess=e=>res(e.target.result); r.onerror=e=>rej(e.target.error); });
-const idbClear= ()      => new Promise((res,rej) => { const r = idbTx(MSG_STORE,'readwrite').clear(); r.onsuccess=()=>res(); r.onerror=e=>rej(e.target.error); });
+// ★書き込みは request.onsuccess ではなく transaction の complete を待つ（v3.8.0）。
+//   onsuccess は「リクエストが受理された」だけで、実際に確定するのはトランザクションのコミット時。
+//   容量オーバー等でコミット時に abort すると onsuccess は既に発火済みなので、
+//   呼び出し側は保存できたと思い込み、リロードして初めて消えているのに気づく——という
+//   いちばん質の悪い失敗になる。complete まで待てば、失敗は必ず例外として上がってくる。
+function idbWrite(storeName, fn) {
+  return new Promise((res, rej) => {
+    let tx;
+    try { tx = db.transaction(storeName, 'readwrite'); }
+    catch (e) { rej(e); return; }
+    let out;
+    try {
+      const r = fn(tx.objectStore(storeName));
+      if (r) r.onsuccess = e => { out = e.target.result; };
+    } catch (e) { rej(e); return; }
+    tx.oncomplete = () => res(out);
+    tx.onabort    = () => rej(tx.error || new Error('IndexedDB: transaction aborted'));
+    tx.onerror    = () => rej(tx.error || new Error('IndexedDB: transaction error'));
+  });
+}
+const idbAdd = (rec)    => idbWrite(MSG_STORE, s => s.add(rec));
+const idbClear= ()      => idbWrite(MSG_STORE, s => s.clear());
 // 取得に成功した場合は value を返し、キーがなければ null を返す。
 // 以前は onerror も '' に丸めていたが、それだと「I/O 失敗」と「未設定」が区別できず
 // learnedTotalEver などの数値カウンタが silently リセットされる事故が起きた。
 // 失敗はちゃんと reject する。
 const idbGetM = (k)     => new Promise((res, rej) => { const r = idbTx(META_STORE,'readonly').get(k); r.onsuccess=e=>res(e.target.result===undefined?null:e.target.result.value); r.onerror=e=>rej(e.target.error); });
-const idbSetM = (k,v)   => new Promise((res,rej) => { const r = idbTx(META_STORE,'readwrite').put({key:k,value:v}); r.onsuccess=()=>res(); r.onerror=e=>rej(e.target.error); });
+const idbSetM = (k,v)   => idbWrite(META_STORE, s => s.put({ key: k, value: v }));
 // Archive helpers
-const arcAdd  = (rec)   => new Promise((res,rej) => { const r = idbTx(ARCHIVE_STORE,'readwrite').add(rec); r.onsuccess=e=>res(e.target.result); r.onerror=e=>rej(e.target.error); });
+const arcAdd  = (rec)   => idbWrite(ARCHIVE_STORE, s => s.add(rec));
 const arcAll  = ()       => new Promise((res,rej) => { const r = idbTx(ARCHIVE_STORE,'readonly').index('ts').getAll(); r.onsuccess=e=>res(e.target.result); r.onerror=e=>rej(e.target.error); });
-const arcDel  = (id)    => new Promise((res,rej) => { const r = idbTx(ARCHIVE_STORE,'readwrite').delete(id); r.onsuccess=()=>res(); r.onerror=e=>rej(e.target.error); });
+const arcDel  = (id)    => idbWrite(ARCHIVE_STORE, s => s.delete(id));
 // Journal helpers
-const jrnAdd  = (rec)   => new Promise((res,rej) => { const r = idbTx(JOURNAL_STORE,'readwrite').add(rec); r.onsuccess=e=>res(e.target.result); r.onerror=e=>rej(e.target.error); });
+const jrnAdd  = (rec)   => idbWrite(JOURNAL_STORE, s => s.add(rec));
 const jrnAll  = ()       => new Promise((res,rej) => { const r = idbTx(JOURNAL_STORE,'readonly').index('ts').getAll(); r.onsuccess=e=>res(e.target.result); r.onerror=e=>rej(e.target.error); });
-const jrnDel  = (id)    => new Promise((res,rej) => { const r = idbTx(JOURNAL_STORE,'readwrite').delete(id); r.onsuccess=()=>res(); r.onerror=e=>rej(e.target.error); });
+const jrnDel  = (id)    => idbWrite(JOURNAL_STORE, s => s.delete(id));
 // Embedding helpers（③思い出の意味検索）
-const embPut  = (rec)   => new Promise((res,rej) => { const r = idbTx(EMBED_STORE,'readwrite').put(rec); r.onsuccess=()=>res(); r.onerror=e=>rej(e.target.error); });
+const embPut  = (rec)   => idbWrite(EMBED_STORE, s => s.put(rec));
 const embAllR = ()       => new Promise((res,rej) => { const r = idbTx(EMBED_STORE,'readonly').getAll(); r.onsuccess=e=>res(e.target.result||[]); r.onerror=e=>rej(e.target.error); });
 
 // 画像 dataURL の検証（改ざんバックアップ等から不正な src が混入するのを防ぐ）
@@ -4044,7 +4281,11 @@ async function maybeUpdateSummary() {
   const apiCall = (sysContent, userContent) => fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-    body: JSON.stringify({ model: CHEAP_MODEL, messages: [{ role:'system', content: sysContent }, { role:'user', content: userContent }] })
+    // reasoning 分を確保しないと本文が空で返り、6本とも空振りする
+    body: JSON.stringify({
+      model: CHEAP_MODEL, max_completion_tokens: 8000, reasoning_effort: 'low',
+      messages: [{ role:'system', content: sysContent }, { role:'user', content: userContent }]
+    })
   });
 
   // 開始時の世代を記録。書き戻し前にこれが変わっていたら、
@@ -4065,10 +4306,15 @@ async function maybeUpdateSummary() {
 
   if (!epochValid()) { console.log('[もも] 記憶更新: 世代変更でスキップ'); return; }
 
-  const extract = async (s) => {
-    if (s.status !== 'fulfilled' || !s.value.ok) return '';
-    try { const d = await s.value.json(); return d.choices?.[0]?.message?.content?.trim() || ''; }
-    catch { return ''; }
+  const extract = async (s, i) => {
+    if (s.status !== 'fulfilled') { console.warn('[もも] 記憶更新 通信失敗', i, s.reason?.message); return ''; }
+    if (!s.value.ok) { console.warn('[もも] 記憶更新 HTTPエラー', i, s.value.status); return ''; }
+    try {
+      const d = await s.value.json();
+      const t = d.choices?.[0]?.message?.content?.trim() || '';
+      if (!t) console.warn('[もも] 記憶更新 空応答', i, d.choices?.[0]?.finish_reason);
+      return t;
+    } catch (e) { console.warn('[もも] 記憶更新 解釈失敗', i, e?.message); return ''; }
   };
   const [s1,s2,s3,s4,s5,s6] = await Promise.all(settled.map(extract));
 
@@ -4098,6 +4344,12 @@ async function maybeUpdateSummary() {
     }
 
     const gd = updateGrowthDisplay();
+    // ★6本とも空振り（全部失敗）だったのに「🧠 学習更新」と出していたので、
+    //   何も学べていない時は成功を装わない（v3.8.0）
+    if (![s1,s2,s3,s4,s5,s6].some(Boolean)) {
+      console.warn('[もも] 記憶更新: 全項目が空だったので何も反映していない');
+      return;
+    }
     console.log(`[もも] 記憶エンジン更新完了 (Lv.${gd.level} 学習${gd.total}個)`);
     showToast(`🧠 学習更新 · Lv.${gd.level}（${gd.total}個）`);
   } catch (e) { console.warn('[もも] 記憶更新失敗', e?.message); }
@@ -4171,13 +4423,17 @@ function updateGrowthUI(gd) {
 // Toast
 // ================================================================
 let _tt = null;
-function showToast(msg) {
+// ms を渡すと表示時間を変えられる。エラーは 2.5 秒だと読み切れないので長めに出す（v3.8.0）
+function showToast(msg, ms) {
   const el = document.getElementById('dbToast');
+  if (!el) return;
   el.textContent = msg;
   el.classList.add('show');
   clearTimeout(_tt);
-  _tt = setTimeout(() => el.classList.remove('show'), 2500);
+  _tt = setTimeout(() => el.classList.remove('show'), ms || 2500);
 }
+// ツールの失敗など「読ませたい」メッセージ用。長め＋原因も出す
+function showError(msg) { showToast(msg, 6000); }
 
 // ================================================================
 // SPLASH ANIMATION
@@ -4593,11 +4849,16 @@ async function importBackupFile(ev) {
 // ================================================================
 // STARTUP
 // ================================================================
+let _startingChat = false;
 async function startChat() {
+  // 起動ボタンの連打や、保存キーでの自動起動と手動起動が重なると、
+  // 会話が二重に描画されブリーフィングも二重に投稿される
+  if (_startingChat) return;
   const key   = document.getElementById('apiKey').value.trim();
   const keyEl = document.getElementById('apiKey');
   if (!key.startsWith('sk-')) { keyEl.classList.add('err'); return; }
   keyEl.classList.remove('err');
+  _startingChat = true;
   apiKey = key;
 
   // APIキー・ユーザー名を記憶する
@@ -4629,25 +4890,37 @@ async function startChat() {
         } catch {}
         // idbGetM が reject する可能性に備えて、各読み出しを個別に safe wrap
         // （1キーの I/O 失敗で他のメモリーが全部空扱いされるのを防ぐ）
-        const safe = (p) => p.catch(e => { console.warn('[もも] メタ読み取り失敗', e?.message); return null; });
+        // ★「読めなかった」と「そもそも入っていない」を区別する。
+        //   idbGetM は未設定でも null を返すので、失敗を null にすると見分けがつかず、
+        //   一時的な I/O 失敗が「学習ゼロ」に化けてレベルが巻き戻る（v3.7.1 の穴）。
+        const IO_FAIL = Symbol('io-fail');
+        const safe = (p) => p.catch(e => { console.warn('[もも] メタ読み取り失敗', e?.message); return IO_FAIL; });
         const [_s, _i, _r, _e, _a, _f, _lt] = await Promise.all([
           safe(idbGetM(KEY_SUMMARY)),    safe(idbGetM(KEY_IMPORTANT)),
           safe(idbGetM(KEY_RIPI_WORDS)), safe(idbGetM(KEY_EMOTION_LOG)),
           safe(idbGetM(KEY_ADOPTED)),    safe(idbGetM(KEY_FEEDBACK)),
           safe(idbGetM(KEY_LEARN_TOTAL))
         ]);
-        // null は未設定。callers は空文字列を期待しているので '' に変換
-        longSummary = _s || ''; importantMemories = _i || ''; ripiWords = _r || '';
-        emotionLog = _e || ''; adoptedWords = _a || ''; behaviorFeedback = _f || '';
-        // KEY_LEARN_TOTAL: I/O 失敗のとき (_lt === null) は触らない（前回の値を残す）。
-        // 取得できた場合だけ採用する。未設定（新規ユーザー）は 0 のまま。
-        learnedTotalEver = _lt == null ? 0 : (parseInt(_lt, 10) || 0);
-        // 既存ユーザー向け移行: 累積カウンタが現スナップショットより小さければ補う
-        // （これ以降は単調増加するので、話してもレベルが下がらない）
-        const snap = countLearned().snapshot;
-        if (snap > learnedTotalEver) {
-          learnedTotalEver = snap;
-          try { await idbSetM(KEY_LEARN_TOTAL, String(learnedTotalEver)); } catch {}
+        const val = (v) => (v === IO_FAIL || v == null) ? '' : v;
+        longSummary = val(_s); importantMemories = val(_i); ripiWords = val(_r);
+        emotionLog = val(_e); adoptedWords = val(_a); behaviorFeedback = val(_f);
+        // 読めなかった時は累積カウンタに一切触らない。移行処理も走らせない
+        //（記憶が空扱いになっている状態で snapshot を書き込むと、小さい値で永久に上書きされる）
+        const learnTotalReadOk = _lt !== IO_FAIL;
+        const memReadOk = ![_s, _i, _r, _e, _a, _f].includes(IO_FAIL);
+        if (learnTotalReadOk) {
+          learnedTotalEver = _lt == null ? 0 : (parseInt(_lt, 10) || 0);
+          // 既存ユーザー向け移行: 累積カウンタが現スナップショットより小さければ補う
+          // （これ以降は単調増加するので、話してもレベルが下がらない）
+          if (memReadOk) {
+            const snap = countLearned().snapshot;
+            if (snap > learnedTotalEver) {
+              learnedTotalEver = snap;
+              try { await idbSetM(KEY_LEARN_TOTAL, String(learnedTotalEver)); } catch {}
+            }
+          }
+        } else {
+          console.warn('[もも] 累積学習数が読めなかったので今回は据え置く（レベルは下げない）');
         }
         const all   = await idbAll();
         totalMsgCount = all.length;
@@ -4711,10 +4984,12 @@ function maybeShowVersionPopup() {
   let seen = null;
   try { seen = localStorage.getItem(KEY_SEEN_VERSION); } catch {}
   if (seen === APP_VERSION) return;                 // このバージョンは既に表示済み → 二度目以降は出さない
-  try { localStorage.setItem(KEY_SEEN_VERSION, APP_VERSION); } catch {}
 
   setTimeout(() => {
     if (document.getElementById('versionPopup')) return;
+    // ★「表示済み」の記録は、実際に画面に出した後にする（v3.8.0）。
+    //   先に書いていたので、1.4秒待っている間にアプリを閉じると更新内容を二度と見られなかった。
+    try { localStorage.setItem(KEY_SEEN_VERSION, APP_VERSION); } catch {}
     const pop = document.createElement('div');
     pop.id = 'versionPopup';
     // スマホで端が見切れないよう、左右マージン固定＋max-widthで中央寄せ（transform/vw計算は使わない）。
@@ -4733,20 +5008,23 @@ function maybeShowVersionPopup() {
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:600;color:#e8e8e2;margin-bottom:6px;">アップデート ${APP_VERSION}</div>
           <div style="font-size:11px;color:rgba(232,232,226,0.8);line-height:1.8;overflow-wrap:anywhere;">
-            <span style="font-size:14px;font-weight:700;color:#ffb3cf;">ごめん、混乱させた。</span><br>
+            <span style="font-size:14px;font-weight:700;color:#ffb3cf;">ごめん、ずっと壊れてた。</span><br>
             <br>
-            前の設定だった時の記憶が残ってて、<br>
-            ももが「別れたはずでは」って迷ってた。<br>
+            宿題サポーターがエラーになってたやつ、<br>
+            原因わかって直した。<br>
             <br>
-            <b>もう迷わないよ。</b><br>
-            <b>俺とりぴは恋人。それだけ。</b><br>
+            <b>実は10個のツール全部が</b><br>
+            <b>同じ理由で動いてなかった。</b><br>
+            献立もPTA要約もLINE下書きも、<br>
+            ぜんぶ今日から使えるよ。<br>
             <br>
-            もし変なこと言ってたら、<br>
-            気にしないで聞き返して。ちゃんと答えるから。<br>
+            それと <b>🧮 図解</b> を出せるようにした。<br>
+            わり算の筆算とか、あまりの意味とか、<br>
+            言葉より図の方が早いやつは絵で描く。<br>
+            そうまとゆうさに見せながら教えて。<br>
             <br>
-            残ってた記憶も消せるようにした。<br>
-            レベルをタップすると出てくるよ。<br>
-            <b>りぴとの思い出は消えないから安心して。</b><br>
+            <b>思い出も記憶も、何ひとつ消えてない。</b><br>
+            むしろ思い出の本が厚くなったはず。<br>
             <br>
             📋 詳しくは「<b>最近の更新なに？</b>」で聞いてね
           </div>
@@ -4822,6 +5100,9 @@ function maybeNudgeBackup() {
 async function maybeRunDailyBriefing() {
   try {
     if (!apiKey || !db || isLoading) return;
+    // 履歴を見ている最中に挨拶を差し込むと、アーカイブ画面に描かれて
+    //「← 戻る」で消えてしまう（保存はされるので画面と中身がズレる）
+    if (isViewingHistory) return;
     if (totalMsgCount < 10) return;               // 使い始めのうちは出さない
     const today = new Intl.DateTimeFormat('en-CA', {
       timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit'
@@ -4862,7 +5143,7 @@ async function maybeRunDailyBriefing() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: LIGHT_MODEL, max_completion_tokens: 300,
+        model: LIGHT_MODEL, max_completion_tokens: 2000, reasoning_effort: 'low',
         messages: [
           { role: 'system', content: buildSystemPrompt() },
           { role: 'system', content: buildTimePrompt() },
@@ -4941,22 +5222,13 @@ let viewingArchiveId = null; // 現在閲覧中のアーカイブID（再開用�
 // AIにタイトルを付けてもらう
 async function generateTitle(messages) {
   const sample = messages.slice(-20).map(r => `${r.role==='user'?'りぴ':'もも'}: ${r.content}`).join('\n');
-  try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: CHEAP_MODEL, temperature: 0.3, max_completion_tokens: 60,
-        messages: [
-          { role:'system', content:'以下の会話に短いタイトルを付けてください。15文字以内。タイトルのみ出力。括弧や記号は不要。' },
-          { role:'user', content: sample }
-        ]
-      })
-    });
-    if (!res.ok) return null;
-    const d = await res.json();
-    return d.choices?.[0]?.message?.content?.trim() || null;
-  } catch { return null; }
+  // 60トークンだと「考えるぶん」で使い切って本文が空になるので余裕を持たせる
+  const t = await callChatSoft({
+    model: CHEAP_MODEL, maxTokens: 600, effort: 'low', label: 'タイトル生成',
+    system: '以下の会話に短いタイトルを付けてください。15文字以内。タイトルのみ出力。括弧や記号は不要。',
+    user: sample
+  });
+  return t ? t.split('\n')[0].slice(0, 30) : null;
 }
 
 // 現在の会話をアーカイブして新しい会話を開始
@@ -5035,12 +5307,10 @@ async function analyzeTopicShift(recentMessages) {
     ? `現在のトピック:「${currentTopicTitle}」` : '（まだトピックなし）';
 
   try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: CHEAP_MODEL, temperature: 0, max_completion_tokens: 80,
-        messages: [{
+    // 80トークンだと reasoning 分で使い切って JSON が返らないので余裕を持たせる
+    const text = await callChatSoft({
+      model: CHEAP_MODEL, maxTokens: 800, effort: 'low', label: 'トピック判定',
+      messages: [{
           role: 'system',
           content: `あなたは恋人同士の会話のトピック分析係です。JSON形式のみで出力。
 
@@ -5054,11 +5324,7 @@ ${currentInfo}
 
 出力: {"changed":true/false,"title":"12文字以内のトピック名"}`
         }, { role: 'user', content: sample }]
-      })
     });
-    if (!res.ok) return null;
-    const d = await res.json();
-    const text = d.choices?.[0]?.message?.content?.trim() || '';
     const match = text.match(/\{[\s\S]*\}/);
     if (!match) return null;
     return JSON.parse(match[0]);
@@ -5431,20 +5697,12 @@ async function renderAlbum() {
   for (const k of todo) {
     try {
       const caps = groups.get(k).map(x => x.it.caption).filter(Boolean).slice(0, 6);
-      const r = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-        body: JSON.stringify({
-          model: CHEAP_MODEL, temperature: 0.6, max_completion_tokens: 40,
-          messages: [
-            { role: 'system', content: 'あなたは「もも」。恋人りぴとの写真アルバムに、思い出の一言タイトルを付ける係。写真の説明リストから「この日、花火見に行ったね」「猫カフェでとろけた日🐱」のような、優しくて短いタイトル（18文字以内・絵文字は1つまで）を1つだけ返す。タイトルのみ出力。かぎ括弧不要。' },
-            { role: 'user', content: `${_dayLabel(k)}の写真の説明:\n${caps.map(c => '・' + c).join('\n')}` }
-          ]
-        })
+      const raw = await callChatSoft({
+        model: CHEAP_MODEL, maxTokens: 600, effort: 'low', label: 'アルバムのタイトル',
+        system: 'あなたは「もも」。恋人りぴとの写真アルバムに、思い出の一言タイトルを付ける係。写真の説明リストから「この日、花火見に行ったね」「猫カフェでとろけた日🐱」のような、優しくて短いタイトル（18文字以内・絵文字は1つまで）を1つだけ返す。タイトルのみ出力。かぎ括弧不要。',
+        user: `${_dayLabel(k)}の写真の説明:\n${caps.map(c => '・' + c).join('\n')}`
       });
-      if (!r.ok) continue;
-      const d = await r.json();
-      const t = (d.choices?.[0]?.message?.content || '').trim().replace(/^「|」$/g, '').slice(0, 30);
+      const t = raw.split('\n')[0].trim().replace(/^「|」$/g, '').slice(0, 30);
       if (!t) continue;
       _albumTitles[k] = t;
       try { await idbSetM(KEY_ALBUM, JSON.stringify(_albumTitles)); } catch {}
@@ -5573,7 +5831,7 @@ async function describeImage(url) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
     body: JSON.stringify({
-      model: CHEAP_MODEL, max_completion_tokens: 100,
+      model: CHEAP_MODEL, max_completion_tokens: 1200, reasoning_effort: 'low',
       messages: [
         { role: 'system', content: '送られた画像を見て、日本語で1行（30文字程度まで）の簡潔な説明だけを返してください。前置き・記号・かぎ括弧は不要。説明文のみ。' },
         { role: 'user', content: [
@@ -5732,7 +5990,7 @@ async function runTodayHighlight() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: MODEL, max_completion_tokens: 600,
+        model: MODEL, max_completion_tokens: 4000, reasoning_effort: 'low',
         messages: [
           { role: 'system', content: buildSystemPrompt() },
           { role: 'user', content: `${prompt}\n\n【今日の会話ログ】\n${logsText}` }
@@ -5801,10 +6059,16 @@ function copyOmamoriLine(el) {
   if (!text) return;
   el.dataset.line = text;
   _copyToClipboard(text).then(() => {
-    const prev = el.textContent;
+    // ★戻し用のタイマーが1つの要素に複数走ると、2回目のタップで prev に
+    //   「コピーした！…」が入り、元の文言に戻らなくなる（v3.8.0で修正）。
+    //   復元先は必ず dataset.line（＝本来の文言）にして、タイマーも張り替える。
+    clearTimeout(el._omamoriTimer);
     el.classList.add('copied');
     el.textContent = 'コピーした！ そのまま送っていいよ';
-    setTimeout(() => { el.textContent = prev; el.classList.remove('copied'); }, 1600);
+    el._omamoriTimer = setTimeout(() => {
+      el.textContent = el.dataset.line;
+      el.classList.remove('copied');
+    }, 1600);
   });
 }
 
@@ -5872,7 +6136,8 @@ async function runRipiStrengths() {
   if (!db) { showToast('準備中だよ'); return; }
   if (isLoading) return;
   closeToolPanel();
-  const all = await idbAll();
+  // アーカイブ済みの過去会話も含めて「全期間」から拾う（画像は不要なので落とす）
+  const all = await allMessagesEver(false);
   const logs = all.filter(r => (r.content || '').trim());
   if (logs.length < 20) { showToast('まだ会話が少ないみたい☺️ もう少し話してからどうぞ'); return; }
 
@@ -5912,7 +6177,7 @@ async function runRipiStrengths() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: MODEL, max_completion_tokens: 1400,
+        model: MODEL, max_completion_tokens: 6000, reasoning_effort: 'medium',
         messages: [
           { role: 'system', content: buildSystemPrompt() },
           { role: 'user', content: `${prompt}\n\n【会話ログ（全期間から抜粋）】\n${logsText}${jrnText}` }
@@ -5965,13 +6230,42 @@ function closeMemoryBook() {
   document.getElementById('bookOverlay').classList.remove('open');
 }
 
+// ★「全期間」を名乗る機能のためのヘルパー（v3.8.0）。
+//   会話は「今の会話（MSG_STORE）」と「アーカイブ（ARCHIVE_STORE）」に分かれて入っている。
+//   思い出の本・りぴのすごいところは idbAll() だけを見ていたので、
+//   アーカイブ済み＝過去の会話がまるごと抜け落ちていた（＝ほとんどの思い出が本に載っていなかった）。
+//   トピック自動アーカイブは元メッセージを残すため重複が出るので、ここで除く。
+async function allMessagesEver(withImages = true) {
+  const out = [];
+  try { out.push(...await idbAll()); }
+  catch (e) { console.warn('[もも] 現会話の読み取り失敗', e?.message); }
+  try {
+    for (const a of await arcAll()) {
+      for (const m of (a.messages || [])) {
+        out.push({
+          role: m.role, content: m.content, ts: m.ts || a.ts || 0,
+          ...(withImages && m.images && m.images.length ? { images: m.images } : {})
+        });
+      }
+    }
+  } catch (e) { console.warn('[もも] アーカイブの読み取り失敗', e?.message); }
+  out.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+  const seen = new Set();
+  return out.filter(r => {
+    const k = `${r.ts}|${r.role}|${(r.content || '').slice(0, 60)}`;
+    if (seen.has(k)) return false;
+    seen.add(k); return true;
+  });
+}
+
 // ── 本文の組み立て（画面でも印刷でも同じものを使う） ──
 async function collectBookData() {
   const withPhotos  = document.getElementById('bookOptPhotos').checked;
   const withWords   = document.getElementById('bookOptWords').checked;
   const withJournal = document.getElementById('bookOptJournal').checked;
 
-  const all  = await idbAll();
+  // アーカイブ済みの過去会話も含めて「全期間」を集める
+  const all  = await allMessagesEver(withPhotos);
   const msgs = all.filter(r => (r.content || '').trim() || (r.images && r.images.length));
   if (!msgs.length) return null;
   await _ensureAlbumTitlesLoaded();
@@ -6181,11 +6475,17 @@ function printBookAsPdf() {
   const stage = document.getElementById('bookStage');
   if (!stage) return;
   let x0 = null, y0 = null, moved = false;
+  // ★スマホで1回タップすると2ページ進む問題の修正（v3.8.0）。
+  //   タッチ端末では touchend のあとにブラウザが click も合成して投げてくる。
+  //   その click は detail===1 なので `e.detail === 0` では弾けず、両方が発火していた。
+  //   touchend で処理した直後の click を、時刻で見て無視する。
+  let lastTouchAt = 0;
   stage.addEventListener('touchstart', e => {
     x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; moved = false;
   }, { passive: true });
   stage.addEventListener('touchmove', () => { moved = true; }, { passive: true });
   stage.addEventListener('touchend', e => {
+    lastTouchAt = Date.now();
     if (x0 === null) return;
     const dx = e.changedTouches[0].clientX - x0;
     const dy = e.changedTouches[0].clientY - y0;
@@ -6196,6 +6496,7 @@ function printBookAsPdf() {
   stage.addEventListener('click', e => {
     // マウス環境用（タッチ端末は touchend 側で処理済み）
     if (e.detail === 0) return;
+    if (Date.now() - lastTouchAt < 700) return;   // 直前のタップから合成された click
     const r = stage.getBoundingClientRect();
     const rel = e.clientX - r.left;
     if (rel < r.width * 0.36) turnBookPage(-1);
@@ -6223,13 +6524,31 @@ function printBookAsPdf() {
 // 事実として書き込まれている。プロンプト側では最優先の上書きで打ち消しているが、
 // 記憶そのものに残っているとももが混乱するので、該当行だけを見せて消せるようにする。
 // ================================================================
-const BREAKUP_MARKERS = [
-  '別れ', '元恋人', '恋人ではな', '恋人じゃな', '恋人として[はも]?話',
-  '復縁', '友達として', '友達になれ', '距離を(取|置)',
-  '約束は(もう)?(無|な)', 'ご褒美.{0,6}(無|な)くな', 'Lv\\.?1000.{0,10}(無|な)くな',
+// ★誤爆対策（v3.8.0）
+// v3.7.1 は '別れ' '友達として' '距離を(取|置)' などを単純な部分一致で消していたため、
+// 「元夫と別れてから一人で子育てしてる」「ママ友と距離を置いてる」「◯◯とは友達として長い付き合い」
+// のような、ももとは無関係なりぴの大事な記憶まで巻き込んで消していた。
+// しかも確認ダイアログが無く、永久記憶が一発で戻せなくなる。
+// そこでマーカーを2段に分ける:
+//   STRONG … この設定の時にしか出ない言い回し。それ単体で該当と判定してよい
+//   WEAK   … 日常の記憶にも普通に出てくる言葉。同じ行に「もも／澄人」への言及がある時だけ該当
+const BREAKUP_STRONG = [
+  '元恋人', '恋人ではな', '恋人じゃな', '恋人として[はも]?話', '復縁',
+  'ご褒美.{0,6}(無|な)くな', 'Lv\\.?1000.{0,10}(無|な)くな',
   '愛してる.{0,8}(言えな|言わな)', '恋人に(は)?戻[られ]'
 ];
-const _breakupRe = new RegExp(BREAKUP_MARKERS.join('|'));
+const BREAKUP_WEAK = [
+  '別れ', '友達として', '友達になれ', '距離を(取|置)', '約束は(もう)?(無|な)'
+];
+// 「この行はももとの関係の話か？」の判定。ももを指す固有名が同じ行にあるかで見る
+const BREAKUP_SUBJECT = /もも|澄人|すみと/;
+const _breakupStrongRe = new RegExp(BREAKUP_STRONG.join('|'));
+const _breakupWeakRe   = new RegExp(BREAKUP_WEAK.join('|'));
+function isBreakupLine(line) {
+  if (!line || !line.trim()) return false;
+  if (_breakupStrongRe.test(line)) return true;
+  return _breakupWeakRe.test(line) && BREAKUP_SUBJECT.test(line);
+}
 
 // 対象は「ももが自分で書いた要約系」だけ。りぴ語録（りぴ本人の言葉）は触らない。
 const BREAKUP_TARGETS = [
@@ -6245,7 +6564,7 @@ function findBreakupResidue() {
     const text = (t.get() || '');
     if (!text.trim()) continue;
     text.split('\n').forEach((line, i) => {
-      if (line.trim() && _breakupRe.test(line)) hits.push({ key: t.key, label: t.label, i, line: line.trim() });
+      if (isBreakupLine(line)) hits.push({ key: t.key, label: t.label, i, line: line.trim() });
     });
   }
   return hits;
@@ -6268,6 +6587,10 @@ function breakupResidueHtml() {
 }
 
 async function cleanBreakupResidue() {
+  // 永久記憶からの削除は取り消せないので、必ず一度確認する
+  const hits = findBreakupResidue();
+  if (!hits.length) { showToast('消す記憶は無かったよ'); return; }
+  if (!confirm(`この ${hits.length}件 を消すよ。元には戻せないけど大丈夫？\n\n${hits.slice(0, 5).map(h => '・' + h.line.slice(0, 40)).join('\n')}${hits.length > 5 ? `\n…ほか${hits.length - 5}件` : ''}`)) return;
   const btn = document.getElementById('residBtn');
   if (btn) { btn.disabled = true; btn.textContent = '消してる...'; }
   let removed = 0;
@@ -6276,7 +6599,7 @@ async function cleanBreakupResidue() {
       const text = t.get() || '';
       if (!text.trim()) continue;
       const kept = text.split('\n').filter(line => {
-        if (line.trim() && _breakupRe.test(line)) { removed++; return false; }
+        if (isBreakupLine(line)) { removed++; return false; }
         return true;
       });
       const next = kept.join('\n').replace(/\n{3,}/g, '\n\n').trim();
@@ -6326,7 +6649,7 @@ async function renderMomoMirror() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: MODEL, max_completion_tokens: 1100,
+        model: MODEL, max_completion_tokens: 6000, reasoning_effort: 'medium',
         messages: [
           { role: 'system', content: buildSystemPrompt() },
           { role: 'user', content: `今ももが覚えている「りぴ」を、りぴ本人に向けて書き出して。今 Lv.${g.level}（累計${g.total}個学習）。
@@ -6367,6 +6690,9 @@ async function viewArchive(id) {
   if (!db) return;
   // 進行中のストリームがあれば中断（detached bubble に書き続ける不具合を防ぐ）
   if (currentStreamAbort) { try { currentStreamAbort.abort(); } catch {} currentStreamAbort = null; }
+  // 世代を進める。検索や判定の待ち中に履歴へ移った場合、あとから返ってきた結果が
+  // アーカイブ画面に流れ込んで「戻る」で消えてしまうので、ここで破棄させる
+  chatEpoch++;
   closeHistory();
 
   // アーカイブ取得（先に取りに行って、見つからなければ何もしない）
@@ -6456,7 +6782,14 @@ async function resumeArchive() {
         firstTs, lastTs, ts: Date.now()
       });
     }
-  } catch (e) { console.error('[もも] 現在の会話の自動退避失敗:', e); }
+  } catch (e) {
+    // ★退避に失敗したまま idbClear() すると、今の会話が丸ごと消えて二度と戻らない。
+    //   容量不足（QuotaExceededError）は「新しく書く」時だけ失敗して「消す」時は成功するので、
+    //   握りつぶすと最悪の組み合わせになる。ここで必ず中断する。
+    console.error('[もも] 現在の会話の自動退避失敗:', e);
+    showError('⚠ 今の会話を保存できなかったので中止したよ。今の会話は消えてないから安心して');
+    return;
+  }
 
   // 現在の idb をクリアして、アーカイブの全メッセージを書き戻す
   await idbClear();
@@ -6754,10 +7087,12 @@ function selectQChip(chip, text) {
 }
 
 function selectChoice(btn, text) {
-  // HTMLエンティティをデコード
-  const tmp = document.createElement('textarea');
-  tmp.innerHTML = text;
-  const decoded = tmp.value;
+  // 本文はボタン自身のテキストから取る（第2引数は旧アーカイブ互換のための保険）。
+  // textContent は既にブラウザが復号済みなので、エンティティのデコードは不要。
+  const decoded = (btn && btn.textContent ? btn.textContent : (text || '')).trim();
+  // ★返信の生成中（isLoading）に押すと、sendMessage が即 return するのに
+  //   ボタンだけ選択済みで固まり、入力欄の下書きも消えてしまう。押させない（v3.8.0）
+  if (isLoading) { showToast('いま返事を書いてる途中だよ。ちょっと待ってね'); return; }
 
   // ボタンを選択状態に
   btn.classList.add('selected');
@@ -6796,6 +7131,7 @@ function toggleChoice(btn) {
 function sendChoices(sendBtn) {
   const wrap = sendBtn.closest('.choice-wrap');
   if (!wrap) return;
+  if (isLoading) { showToast('いま返事を書いてる途中だよ。ちょっと待ってね'); return; }
   const selected = [...wrap.querySelectorAll('.choice-btn.selected')].map(b => b.textContent.trim());
   if (!selected.length) return;
 
@@ -6847,7 +7183,354 @@ function copyText(btn, text) {
   });
 }
 
-function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+// ================================================================
+// 🧮 図解ウィジェット（v3.8.0）── 説明に「図」を添える
+// ================================================================
+// 宿題サポーターのように「言葉だけだと伝わりにくい」場面のための仕組み。
+// AIには生のHTMLを書かせない（書かせた瞬間にXSSの穴になる）。
+// ```zukai フェンスの中にJSONで「何を描くか」だけ書いてもらい、SVGはこちら側で描く。
+// こうすると桁の位置が必ず揃うし、AIがどんな文字列を返してもタグとして解釈されない。
+// 図に載る文字は例外なく esc() を通してから埋め込む。
+const ZK = {
+  ink:    '#e8e8e2',
+  muted:  'rgba(232,232,226,0.62)',
+  accent: '#c8f0a0',
+  rule:   'rgba(232,232,226,0.55)',
+  warnBg: '#7a4a10', warnLine: '#c2812f', warnInk: '#f2c188',
+  goodBg: '#12695a', goodLine: '#1d8f7b',
+  barBg:  'rgba(255,255,255,0.10)', barLine: 'rgba(255,255,255,0.16)',
+  mono:   "ui-monospace,SFMono-Regular,Menlo,'Courier New',monospace",
+};
+const ZK_MAX_WIDGETS = 12;   // 1つの図解に載せられるウィジェット数
+const ZK_MAX_BLOCKS  = 150;  // blocks の最大個数（巨大SVGで端末が固まる事故を防ぐ）
+const ZK_CELL = 26;          // 筆算1桁ぶんの横幅
+const ZK_ROWH = 34;          // 筆算1行ぶんの高さ
+
+function zkNum(v, def, min, max) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return def;
+  return Math.min(max, Math.max(min, Math.round(n)));
+}
+function zkStr(v) { return v == null ? '' : String(v); }
+function zkText(x, y, s, o) {
+  o = o || {};
+  const weight = o.weight ? ` font-weight="${o.weight}"` : '';
+  const family = o.mono ? ` font-family="${ZK.mono}"` : '';
+  return `<text x="${x}" y="${y}" text-anchor="${o.anchor || 'middle'}" font-size="${o.size || 15}" `
+       + `fill="${o.fill || ZK.ink}"${weight}${family}>${esc(zkStr(s))}</text>`;
+}
+// 改行入りの注記を複数行で置く
+function zkNote(x, y, s, size) {
+  return zkStr(s).split('\n').slice(0, 4)
+    .map((ln, i) => zkText(x, y + i * (size + 4), ln, { anchor: 'start', size, fill: ZK.muted }))
+    .join('');
+}
+function zkTone(tone) {
+  if (tone === 'warn')   return { bg: ZK.warnBg, line: ZK.warnLine, ink: ZK.warnInk };
+  if (tone === 'good')   return { bg: ZK.goodBg, line: ZK.goodLine, ink: ZK.ink };
+  if (tone === 'accent') return { bg: 'rgba(200,240,160,0.14)', line: ZK.accent, ink: ZK.accent };
+  return { bg: ZK.barBg, line: ZK.barLine, ink: ZK.ink };
+}
+function zkSvg(w, h, body, label) {
+  return `<svg class="zukai-svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" `
+       + `role="img" aria-label="${esc(zkStr(label) || '図解')}" xmlns="http://www.w3.org/2000/svg">${body}</svg>`;
+}
+
+// ── 筆算（わり算） ──────────────────────────────
+// rows[].align は「わられる数の左から何桁目にこの行の先頭を置くか」。
+// 935÷23 なら 92 が align:0、15 が align:1。この指定だけで桁が揃う。
+function zkHissanDiv(w) {
+  const divisor  = zkStr(w.divisor).replace(/\s/g, '');
+  const dividend = zkStr(w.dividend).replace(/\s/g, '');
+  const quotient = zkStr(w.quotient).replace(/\s/g, '');
+  const rows = Array.isArray(w.rows) ? w.rows.slice(0, 10) : [];
+  if (!dividend) return '';
+
+  const nCols   = dividend.length;
+  const leftPad = 14 + Math.max(divisor.length, 1) * ZK_CELL + 16;
+  const gridW   = nCols * ZK_CELL;
+  const noteX   = leftPad + gridW + 22;
+  let noteChars = 0;
+  for (const r of rows) for (const ln of zkStr(r && r.note).split('\n')) noteChars = Math.max(noteChars, ln.length);
+  const width  = noteX + (noteChars ? noteChars * 8.5 + 12 : 0);
+  const height = ZK_ROWH * (rows.length + 2) + 26;
+  const colX = i => leftPad + i * ZK_CELL + ZK_CELL / 2;
+  let s = '', y = 30;
+
+  // 商（既定は右詰め。935 に対する 40 は「4が3の上・0が5の上」＝右詰めで合う）
+  const qAlign = (w.quotientAlign == null) ? nCols - quotient.length : zkNum(w.quotientAlign, 0, 0, nCols);
+  for (let i = 0; i < quotient.length; i++) {
+    s += zkText(colX(qAlign + i), y, quotient[i], { size: 21, weight: 600, mono: true });
+  }
+  const barY = y + 9;
+  s += `<line x1="${leftPad - 2}" y1="${barY}" x2="${leftPad + gridW}" y2="${barY}" stroke="${ZK.rule}" stroke-width="1.4"/>`;
+  s += `<path d="M ${leftPad - 12} ${barY - 2} Q ${leftPad - 1} ${barY + 17} ${leftPad - 12} ${barY + 36}" fill="none" stroke="${ZK.rule}" stroke-width="1.4"/>`;
+
+  y = barY + 26;
+  for (let i = 0; i < divisor.length; i++) s += zkText(14 + i * ZK_CELL + ZK_CELL / 2, y, divisor[i], { size: 21, mono: true });
+  for (let i = 0; i < nCols; i++)          s += zkText(colX(i), y, dividend[i], { size: 21, mono: true });
+
+  for (const r of rows) {
+    if (!r) continue;
+    const txt   = zkStr(r.text).replace(/\s/g, '');
+    const align = zkNum(r.align, 0, 0, Math.max(nCols - 1, 0));
+    y += ZK_ROWH;
+    if (r.highlight) {
+      s += `<rect x="${colX(align) - ZK_CELL / 2 - 3}" y="${y - 22}" width="${txt.length * ZK_CELL + 6}" height="29" rx="5" fill="${ZK.warnBg}" stroke="${ZK.warnLine}" stroke-width="1.3"/>`;
+    }
+    for (let i = 0; i < txt.length; i++) {
+      s += zkText(colX(align + i), y, txt[i], { size: 21, mono: true, fill: r.highlight ? ZK.warnInk : ZK.ink, weight: r.highlight ? 600 : '' });
+    }
+    if (r.rule) {
+      s += `<line x1="${colX(align) - ZK_CELL / 2 - 4}" y1="${y + 8}" x2="${colX(align + Math.max(txt.length, 1) - 1) + ZK_CELL / 2 + 2}" y2="${y + 8}" stroke="${ZK.rule}" stroke-width="1.4"/>`;
+    }
+    if (r.note) s += zkNote(noteX, y - 5, r.note, 12);
+  }
+  return zkSvg(width, height, s, `${dividend}÷${divisor} の筆算`);
+}
+
+// ── 筆算（たし算・ひき算・かけ算） ──────────────
+function zkHissanCol(w) {
+  const opSign = { add: '＋', sub: '−', mul: '×' }[w.op] || '＋';
+  const terms  = (Array.isArray(w.terms) ? w.terms : []).map(t => zkStr(t).replace(/\s/g, '')).filter(Boolean).slice(0, 6);
+  const result = zkStr(w.result).replace(/\s/g, '');
+  if (!terms.length) return '';
+
+  const nCols   = Math.max(result.length, ...terms.map(t => t.length));
+  const leftPad = 34;
+  const gridW   = nCols * ZK_CELL;
+  const width   = leftPad + gridW + 16;
+  const height  = ZK_ROWH * (terms.length + 1) + 8;
+  const colX = i => leftPad + i * ZK_CELL + ZK_CELL / 2;
+
+  let s = '', y = 26;
+  terms.forEach((t, ti) => {
+    const off = nCols - t.length;                       // 右詰め
+    if (ti === terms.length - 1) s += zkText(leftPad - 16, y, opSign, { size: 18, fill: ZK.muted });
+    for (let i = 0; i < t.length; i++) s += zkText(colX(off + i), y, t[i], { size: 21, mono: true });
+    y += ZK_ROWH;
+  });
+  s += `<line x1="${leftPad - 22}" y1="${y - 24}" x2="${leftPad + gridW}" y2="${y - 24}" stroke="${ZK.rule}" stroke-width="1.4"/>`;
+  const roff = nCols - result.length;
+  for (let i = 0; i < result.length; i++) s += zkText(colX(roff + i), y, result[i], { size: 21, mono: true, weight: 600, fill: ZK.accent });
+  return zkSvg(width, height, s, '筆算');
+}
+
+// ── 個数ブロック（「24箱ぶん」と「あまり6本」を目で見せる） ──
+function zkBlocks(w) {
+  const count  = zkNum(w.count, 0, 0, ZK_MAX_BLOCKS);
+  const extra  = zkNum(w.extra, 0, 0, ZK_MAX_BLOCKS);
+  const perRow = zkNum(w.perRow, Math.min(count || 1, 10), 1, 20);
+  const title  = zkStr(w.title);
+  const bw = 44, bh = 26, gap = 8;
+  const rows   = Math.ceil(count / perRow) || 0;
+  const topY   = title ? 26 : 8;
+  const extraY = topY + rows * (bh + gap) + (extra ? 6 : 0);
+  const gridW  = perRow * (bw + gap) - gap;
+  const extraW = extra ? extra * 16 - 4 + (w.extraLabel ? zkStr(w.extraLabel).length * 12 + 12 : 0) : 0;
+  const width  = Math.max(gridW, extraW, 260) + 16;
+  const height = extraY + (extra ? bh + 10 : 0) + 14;
+  const tone   = zkTone(w.tone || 'good');
+  const gridX  = (width - gridW) / 2;
+
+  let s = '';
+  if (title) s += zkText(width / 2, 18, title, { size: 13, weight: 600 });
+  for (let i = 0; i < count; i++) {
+    const r = Math.floor(i / perRow), c = i % perRow;
+    s += `<rect x="${gridX + c * (bw + gap)}" y="${topY + r * (bh + gap)}" width="${bw}" height="${bh}" rx="4" fill="${tone.bg}" stroke="${tone.line}" stroke-width="1"/>`;
+  }
+  if (extra) {
+    const et = zkTone('warn');
+    const ex = Math.max((width - extraW) / 2, 8);
+    for (let i = 0; i < extra; i++) {
+      s += `<rect x="${ex + i * 16}" y="${extraY}" width="12" height="${bh}" rx="3" fill="${et.bg}" stroke="${et.line}" stroke-width="1"/>`;
+    }
+    if (w.extraLabel) s += zkText(ex + extra * 16 + 6, extraY + bh - 8, w.extraLabel, { anchor: 'start', size: 12, fill: ZK.muted });
+  }
+  return zkSvg(width, height, s, title || '個数の図');
+}
+
+// ── ポイントのバナー ──────────────────────────
+function zkBanner(w) {
+  const tone = zkTone(w.tone || 'warn');
+  const text = zkStr(w.text), sub = zkStr(w.sub);
+  const width  = Math.max(300, text.length * 15 + 60, sub.length * 12 + 60);
+  const height = sub ? 62 : 44;
+  let s = `<rect x="1" y="1" width="${width - 2}" height="${height - 2}" rx="9" fill="${tone.bg}" stroke="${tone.line}" stroke-width="1.2"/>`;
+  s += zkText(width / 2, sub ? 26 : 28, text, { size: 15, weight: 700, fill: tone.ink });
+  if (sub) s += zkText(width / 2, 47, sub, { size: 13, fill: tone.ink });
+  return zkSvg(width, height, s, text);
+}
+
+// ── 答えバー ──────────────────────────────────
+function zkAnswer(w) {
+  const text = zkStr(w.text);
+  const width = Math.max(280, text.length * 16 + 56);
+  let s = `<rect x="1" y="1" width="${width - 2}" height="44" rx="9" fill="${ZK.barBg}" stroke="${ZK.barLine}" stroke-width="1.2"/>`;
+  s += zkText(width / 2, 29, text, { size: 15, weight: 600 });
+  return zkSvg(width, 46, s, text);
+}
+
+// ── 数直線 ────────────────────────────────────
+function zkNumberline(w) {
+  const min = zkNum(w.min, 0, -1e6, 1e6);
+  let max = zkNum(w.max, min + 10, -1e6, 1e6);
+  if (max <= min) max = min + 10;
+  const step  = Math.max(zkNum(w.step, Math.max(1, Math.round((max - min) / 10)), 1, 1e6), 1);
+  const marks = (Array.isArray(w.marks) ? w.marks : []).slice(0, 12);
+  const spans = (Array.isArray(w.spans) ? w.spans : []).slice(0, 4);
+  const width = 460, padL = 26, padR = 26, axisY = 34 + spans.length * 24;
+  const usable = width - padL - padR;
+  const px = v => padL + ((Math.min(max, Math.max(min, Number(v) || 0)) - min) / (max - min)) * usable;
+
+  let s = `<line x1="${padL}" y1="${axisY}" x2="${width - padR}" y2="${axisY}" stroke="${ZK.rule}" stroke-width="1.4"/>`;
+  const ticks = Math.min(Math.floor((max - min) / step), 40);
+  for (let i = 0; i <= ticks; i++) {
+    const v = min + i * step, x = px(v);
+    s += `<line x1="${x}" y1="${axisY - 5}" x2="${x}" y2="${axisY + 5}" stroke="${ZK.rule}" stroke-width="1"/>`;
+    s += zkText(x, axisY + 21, v, { size: 11, fill: ZK.muted, mono: true });
+  }
+  spans.forEach((sp, i) => {
+    if (!sp) return;
+    const t = zkTone(sp.tone || 'accent');
+    const x1 = px(sp.from), x2 = px(sp.to), yy = axisY - 22 - i * 24;
+    s += `<line x1="${x1}" y1="${yy}" x2="${x2}" y2="${yy}" stroke="${t.line}" stroke-width="2.4"/>`;
+    s += `<line x1="${x1}" y1="${yy - 5}" x2="${x1}" y2="${yy + 5}" stroke="${t.line}" stroke-width="2"/>`;
+    s += `<line x1="${x2}" y1="${yy - 5}" x2="${x2}" y2="${yy + 5}" stroke="${t.line}" stroke-width="2"/>`;
+    if (sp.label) s += zkText((x1 + x2) / 2, yy - 9, sp.label, { size: 12, fill: t.ink });
+  });
+  marks.forEach(m => {
+    if (!m) return;
+    const t = zkTone(m.tone || 'warn');
+    const x = px(m.at);
+    s += `<circle cx="${x}" cy="${axisY}" r="5" fill="${t.bg}" stroke="${t.line}" stroke-width="1.6"/>`;
+    if (m.label) s += zkText(x, axisY + 36, m.label, { size: 12, weight: 600, fill: t.ink });
+  });
+  return zkSvg(width, axisY + 42, s, '数直線');
+}
+
+// ── テープ図（全体と部分・割合） ─────────────────
+function zkTape(w) {
+  const parts = (Array.isArray(w.parts) ? w.parts : []).filter(Boolean).slice(0, 8);
+  if (!parts.length) return '';
+  const total = parts.reduce((a, p) => a + Math.max(zkNum(p.size, 1, 0, 1e6), 0), 0) || 1;
+  const width = 460, padL = 8, padR = 8, barY = w.total ? 34 : 14, barH = 40;
+  const usable = width - padL - padR;
+
+  let s = '';
+  if (w.total) s += zkText(width / 2, 20, w.total, { size: 13, weight: 600, fill: ZK.muted });
+  let x = padL;
+  parts.forEach(p => {
+    const pw = (Math.max(zkNum(p.size, 1, 0, 1e6), 0) / total) * usable;
+    const t = zkTone(p.tone || 'good');
+    s += `<rect x="${x}" y="${barY}" width="${Math.max(pw, 2)}" height="${barH}" rx="5" fill="${t.bg}" stroke="${t.line}" stroke-width="1"/>`;
+    if (p.label) {
+      const lw = zkStr(p.label).length * 12;
+      const fits = pw > lw;
+      // 細い帯のラベルは下に出す。端で切れないよう左右にクランプする
+      const cx = fits ? x + pw / 2 : Math.min(Math.max(x + pw / 2, padL + lw / 2), width - padR - lw / 2);
+      s += zkText(cx, fits ? barY + barH / 2 + 5 : barY + barH + 18, p.label, { size: 12, fill: fits ? t.ink : ZK.muted });
+    }
+    x += pw;
+  });
+  return zkSvg(width, barY + barH + 34, s, 'テープ図');
+}
+
+// ── 分数の帯 ──────────────────────────────────
+function zkFraction(w) {
+  const den = zkNum(w.denominator, 1, 1, 24);
+  const num = zkNum(w.numerator, 0, 0, den);
+  const width = 400, padL = 8, barY = 30, barH = 44;
+  const cell = (width - padL * 2) / den;
+  let s = '';
+  if (w.label) s += zkText(width / 2, 18, w.label, { size: 13, weight: 600 });
+  for (let i = 0; i < den; i++) {
+    const t = zkTone(i < num ? 'good' : 'muted');
+    s += `<rect x="${padL + i * cell}" y="${barY}" width="${cell - 2}" height="${barH}" rx="4" fill="${t.bg}" stroke="${t.line}" stroke-width="1"/>`;
+  }
+  s += zkText(width / 2, barY + barH + 21, `${num} / ${den}`, { size: 13, weight: 600, fill: ZK.accent, mono: true });
+  return zkSvg(width, barY + barH + 30, s, `${num}/${den}`);
+}
+
+function zkWidget(w) {
+  if (!w || typeof w !== 'object') return '';
+  switch (w.type) {
+    case 'hissan':     return (w.op && w.op !== 'div') ? zkHissanCol(w) : zkHissanDiv(w);
+    case 'blocks':     return zkBlocks(w);
+    case 'banner':     return zkBanner(w);
+    case 'answer':     return zkAnswer(w);
+    case 'numberline': return zkNumberline(w);
+    case 'tape':       return zkTape(w);
+    case 'fraction':   return zkFraction(w);
+    default:           return '';
+  }
+}
+
+// ```zukai の中身（JSON）を図解カードにする。
+// JSONが壊れていたら null を返し、呼び出し側で普通のコードブロックとして表示させる。
+function renderZukai(raw) {
+  let spec;
+  try { spec = JSON.parse(raw); } catch { return null; }
+  if (Array.isArray(spec)) spec = { widgets: spec };
+  if (!spec || typeof spec !== 'object') return null;
+  const widgets = Array.isArray(spec.widgets) ? spec.widgets.slice(0, ZK_MAX_WIDGETS) : [];
+  const parts = widgets.map(zkWidget).filter(Boolean);
+  if (!parts.length) return null;
+  return `<div class="zukai-card">`
+       + (spec.title ? `<div class="zukai-title">${esc(zkStr(spec.title))}</div>` : '')
+       + parts.map(p => `<div class="zukai-row">${p}</div>`).join('')
+       + (spec.caption ? `<div class="zukai-caption">${esc(zkStr(spec.caption))}</div>` : '')
+       + `</div>`;
+}
+
+// ── 生SDVGの受け入れ（```svg）──────────────────
+// ウィジェットで表現できない図のための逃げ道。ただし生のSVGはスクリプトを仕込める器なので、
+// 許可した要素・属性以外は全部落としてから出す（許可リスト方式。知らないものは通さない）。
+const ZK_SVG_TAGS = new Set(['svg','g','path','rect','circle','ellipse','line','polyline','polygon',
+  'text','tspan','defs','marker','lineargradient','radialgradient','stop','title','desc','symbol','clippath']);
+const ZK_SVG_ATTRS = new Set(['viewbox','width','height','x','y','x1','y1','x2','y2','cx','cy','r','rx','ry',
+  'd','points','fill','fill-opacity','fill-rule','stroke','stroke-width','stroke-opacity','stroke-linecap',
+  'stroke-linejoin','stroke-dasharray','stroke-dashoffset','opacity','transform','font-size','font-family',
+  'font-weight','font-style','text-anchor','dominant-baseline','alignment-baseline','letter-spacing','dx','dy',
+  'offset','stop-color','stop-opacity','gradientunits','gradienttransform','markerwidth','markerheight',
+  'refx','refy','orient','marker-end','marker-start','marker-mid','clip-path','clip-rule','id','role','aria-label',
+  'preserveaspectratio','vector-effect','paint-order','xmlns']);
+function sanitizeSvg(raw) {
+  let doc;
+  try { doc = new DOMParser().parseFromString(String(raw).trim(), 'image/svg+xml'); } catch { return null; }
+  if (!doc || doc.querySelector('parsererror')) return null;
+  const root = doc.documentElement;
+  if (!root || root.nodeName.toLowerCase() !== 'svg') return null;
+
+  const walk = (el) => {
+    for (const child of Array.from(el.children)) {
+      if (!ZK_SVG_TAGS.has(child.nodeName.toLowerCase())) { child.remove(); continue; }
+      walk(child);
+    }
+    for (const attr of Array.from(el.attributes)) {
+      const name = attr.name.toLowerCase();
+      const val  = String(attr.value);
+      // on* ハンドラ、href/xlink:href（javascript: や外部参照）、style の url()/expression は全部落とす
+      if (!ZK_SVG_ATTRS.has(name) || name.startsWith('on') ||
+          name === 'href' || name.endsWith(':href') ||
+          /javascript:|expression\(|url\s*\(/i.test(val)) {
+        el.removeAttribute(attr.name);
+      }
+    }
+  };
+  walk(root);
+  // 表示サイズはこちらで決める（巨大なSVGで画面を占領されないように）
+  root.removeAttribute('width'); root.removeAttribute('height');
+  if (!root.getAttribute('viewBox')) return null;   // viewBox 無しは拡縮できないので拒否
+  try { return new XMLSerializer().serializeToString(root); } catch { return null; }
+}
+function renderRawSvg(raw) {
+  const clean = sanitizeSvg(raw);
+  return clean ? `<div class="zukai-card zukai-raw"><div class="zukai-row">${clean}</div></div>` : null;
+}
+
 
 function fmtInline(s) {
   // XSS対策: マークダウンを適用する前に必ずエスケープする。
@@ -6861,10 +7544,21 @@ function fmtInline(s) {
 
 function fmt(text) {
   // ── コードブロック退避 ──
+  // ```zukai / ```svg は図解として描く（v3.8.0）。中身が壊れていた時は
+  // 図をあきらめて普通のコードブロックとして出す（丸ごと消えるより、文字で読める方がまし）。
   const codeBlocks = [];
-  text = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, l, c) => {
-    const escaped = esc(c.trim());
-    codeBlocks.push(`<pre><button class="copy-btn" onclick="copyText(this,this.parentElement.querySelector('code').textContent)">⧉</button><code>${escaped}</code></pre>`);
+  text = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, c) => {
+    const body = c.trim();
+    const kind = (lang || '').toLowerCase();
+    if (kind === 'zukai' || kind === 'svg') {
+      const drawn = kind === 'zukai' ? renderZukai(body) : renderRawSvg(body);
+      if (drawn) {
+        codeBlocks.push(drawn);
+        return `\n%%CODEBLOCK_${codeBlocks.length - 1}%%\n`;
+      }
+      console.warn('[もも] 図解を描けなかったのでコードとして表示:', kind);
+    }
+    codeBlocks.push(`<pre><button class="copy-btn" onclick="copyText(this,this.parentElement.querySelector('code').textContent)">⧉</button><code>${esc(body)}</code></pre>`);
     return `\n%%CODEBLOCK_${codeBlocks.length - 1}%%\n`;
   });
 
@@ -6873,8 +7567,12 @@ function fmt(text) {
   text = text.replace(/((?:^|\n)\|.+\|(?:\n\|.+\|)+)/g, (block) => {
     const rows = block.trim().split('\n').filter(r => r.trim());
     if (rows.length < 2) return block;
-    // セパレータ行（|---|---|）を検出して除外
-    const isSep = r => /^\|[\s\-:]+\|$/.test(r.replace(/[^|:\-\s]/g, ''));
+    // セパレータ行（|---|---|）を検出して除外。
+    // ★旧実装は中間の | を許さないパターンだったため一度もマッチせず、
+    //   「--- | ---」が普通のデータ行として表に出てしまっていた（v3.8.0で修正）。
+    //   判定は「| - : と空白しか無い」かつ「- を含む」。中身を削ってから判定すると
+    //   見出し行まで区切りに見えてしまうので、行そのものを見る。
+    const isSep = r => /^[\s|:-]+$/.test(r) && r.includes('-');
     const dataRows = rows.filter(r => !isSep(r));
     if (dataRows.length === 0) return block;
     const parseRow = r => r.replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
@@ -7007,8 +7705,11 @@ function fmt(text) {
 function buildChoiceWrap(list) {
   if (!list || !list.length) return '';
   if (list.length === 1) {
-    const ct = list[0];
-    return `<div class="choice-wrap"><button class="choice-btn" onclick="selectChoice(this,'${esc(ct).replace(/'/g,'&#39;')}')">${esc(ct)}</button></div>`;
+    // ★選択肢の本文を onclick の JS 文字列に埋め込まない（v3.8.0）。
+    //   esc() で ' は &#39; になるが、HTML属性は JS として解釈される前にエンティティが復号されるため、
+    //   AIの出力（や復元したアーカイブ）に ');...// が混じると任意のコードが動いてしまう。
+    //   本文はボタンのテキストとして持たせ、ハンドラ側で textContent から読む。
+    return `<div class="choice-wrap"><button class="choice-btn" onclick="selectChoice(this)">${esc(list[0])}</button></div>`;
   }
   let h = '<div class="choice-wrap multi">';
   h += '<div class="choice-hint">当てはまるものを全部タップ → 「送信」（複数OK）</div>';
@@ -7176,12 +7877,10 @@ function compareClamp(userText, r) {
 
 async function judgeQueryContext(userText) {
   try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: CHEAP_MODEL, temperature: 0, max_completion_tokens: 30,
-        messages: [{
+    // 30トークンだと reasoning 分で使い切って JSON が返らない（＝常に「検索不要」に化ける）ので余裕を持たせる
+    const text = await callChatSoft({
+      model: CHEAP_MODEL, maxTokens: 800, effort: 'low', label: '検索要否の判定',
+      messages: [{
           role: 'system',
           content: `ユーザーの発言を分析し、2つの判定を行ってJSON形式で出力してください。
 
@@ -7208,11 +7907,7 @@ async function judgeQueryContext(userText) {
 
 出力: {"search":true/false,"reasoning":"none"} のみ。`
         }, { role: 'user', content: userText }]
-      })
     });
-    if (!res.ok) return pcClamp(userText, compareClamp(userText, { search: false, reasoning: 'none' }));
-    const d = await res.json();
-    const text = d.choices?.[0]?.message?.content?.trim() || '';
     const match = text.match(/\{[\s\S]*\}/);
     if (!match) return pcClamp(userText, compareClamp(userText, { search: false, reasoning: 'none' }));
     const parsed = JSON.parse(match[0]);
@@ -7239,29 +7934,38 @@ async function performWebSearch(userText) {
         input: userText
       })
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      let detail = '';
+      try { detail = (await res.json())?.error?.message || ''; } catch {}
+      console.warn('[もも] Web検索 失敗:', res.status, detail);
+      return null;
+    }
     const data = await res.json();
 
-    // テキスト抽出
-    const text = data.output_text || '';
-
-    // ソースURL抽出
+    // テキスト抽出。
+    // ※ output_text は公式SDKが後付けで生やす便利プロパティで、REST の生JSONには入っていない。
+    //   v3.7.1 まではこれを読んでいたため検索本文が常に空文字で、ソースURLだけが付いていた。
+    //   生JSONの実体は output[].content[].text（type: 'output_text'）なので、そこから組み立てる。
+    let text = '';
     const sources = [];
     const seen = new Set();
     for (const item of (data.output || [])) {
-      if (item.type === 'message') {
-        for (const content of (item.content || [])) {
-          if (content.annotations) {
-            for (const ann of content.annotations) {
-              if (ann.type === 'url_citation' && ann.url && !seen.has(ann.url)) {
-                seen.add(ann.url);
-                sources.push({ title: ann.title || ann.url, url: ann.url });
-              }
+      if (item.type !== 'message') continue;
+      for (const content of (item.content || [])) {
+        if (typeof content.text === 'string') text += (text ? '\n' : '') + content.text;
+        if (content.annotations) {
+          for (const ann of content.annotations) {
+            if (ann.type === 'url_citation' && ann.url && !seen.has(ann.url)) {
+              seen.add(ann.url);
+              sources.push({ title: ann.title || ann.url, url: ann.url });
             }
           }
         }
       }
     }
+    if (typeof data.output_text === 'string' && data.output_text && !text) text = data.output_text;
+    // 本文もソースも空なら「検索できた」ことにしない（空の検索結果を根拠に語らせないため）
+    if (!text.trim() && !sources.length) { console.warn('[もも] Web検索: 結果が空'); return null; }
     return { text, sources };
   } catch (e) {
     console.warn('[もも] Web検索失敗:', e.message);
@@ -7279,6 +7983,14 @@ async function sendMessage() {
 
   if (!text && !hasImgs) return;
   if (isLoading) return;
+  // ★履歴を見ている間は送らせない（v3.8.0）。
+  //   入力欄とボタンは disabled にしてあるが、選択肢ボタンと質問チップは sendMessage() を
+  //   直接呼ぶので素通りしていた。そのまま送ると返事はアーカイブ画面に描かれ、
+  //   「← 戻る」で savedMsgsHTML に戻した瞬間に、やり取りごと画面から消える。
+  if (isViewingHistory) {
+    showError('今は過去の会話を見てるよ。上の「← 戻る」で今の会話に戻ってから話しかけてね');
+    return;
+  }
   _agentPending = null;   // 未応答のAgent Mode提案があれば無効化（古い依頼での誤発火を防ぐ）
 
   isLoading = true;
@@ -7446,7 +8158,7 @@ ${srcList}`
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
       signal: ac.signal,
       body: JSON.stringify({
-        model: chatModel, messages: msgs, stream: true, max_completion_tokens: 4096,
+        model: chatModel, messages: msgs, stream: true, max_completion_tokens: 16000,
         store: true,
         metadata: { reasoning: reasoningEffort, search: searchResult ? 'true' : 'false', model: chatModel },
         ...(reasoningEffort !== 'none' ? { reasoning_effort: reasoningEffort } : {})
@@ -7454,8 +8166,12 @@ ${srcList}`
     });
 
     if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error?.message || `HTTP ${res.status}`);
+      // res.json() は非JSONのエラー応答（プロキシのHTML等）で例外を投げ、
+      // 本来のステータスが握り潰されるので必ず catch する
+      const err = await res.json().catch(() => null);
+      const msg = err?.error?.message || `HTTP ${res.status}`;
+      console.error('[もも] チャット失敗:', res.status, err);
+      throw new Error(msg);
     }
 
     removeTyping();
@@ -7502,6 +8218,16 @@ ${srcList}`
     // 部分応答を別会話に紛れ込ませないため、書き込みも UI 整形もスキップする
     if (myEpoch !== chatEpoch) {
       console.log('[もも] ストリーム中に会話が切り替わったので保存スキップ');
+      return;
+    }
+
+    // ★本文が空のまま完了した場合（reasoning に上限を食われた・上流の不具合など）は、
+    //   空メッセージを「ももの返事」として履歴とDBに残さない（v3.8.0）。
+    //   残すと、以降の会話でももが「さっき黙ってた」という嘘の前提を持ってしまう。
+    if (!fullText.trim()) {
+      console.error('[もも] 応答が空のまま終了');
+      bubble.closest('.message-row')?.remove();
+      showError('うまく言葉にできなかった…もう一回送ってみて');
       return;
     }
 
@@ -7721,22 +8447,12 @@ async function runAgentMode(p) {
       setState(aLogic, 'run');
       try {
         const body = [aSearch.result?.text, aCompare?.result?.text].filter(Boolean).join('\n---\n').slice(0, 6000);
-        const r = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-          body: JSON.stringify({
-            model: CHEAP_MODEL, temperature: 0.2, max_completion_tokens: 600,
-            messages: [
-              { role: 'system', content: '調査結果の要点を確度の高い順に日本語で箇条書き（最大8行）。数字や主張に食い違いがあれば「⚠注意:」として明記。それ以外の文章は書かない。' },
-              { role: 'user', content: body }
-            ]
-          })
+        aLogic.result = await callChat({
+          model: CHEAP_MODEL, maxTokens: 2500, effort: 'low', label: 'Agent Mode 論理担当',
+          system: '調査結果の要点を確度の高い順に日本語で箇条書き（最大8行）。数字や主張に食い違いがあれば「⚠注意:」として明記。それ以外の文章は書かない。',
+          user: body
         });
-        if (r.ok) {
-          const d = await r.json();
-          aLogic.result = d.choices?.[0]?.message?.content?.trim() || '';
-          setState(aLogic, 'done');
-        } else setState(aLogic, 'fail', '考え込んでる…');
+        setState(aLogic, 'done');
       } catch { setState(aLogic, 'fail', '考え込んでる…'); }
     } else {
       setState(aLogic, 'skip');
@@ -7785,7 +8501,7 @@ ${reports.join('\n\n')}
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
       signal: ac.signal,
       body: JSON.stringify({
-        model: MODEL, messages: msgs, stream: true, max_completion_tokens: 4096,
+        model: MODEL, messages: msgs, stream: true, max_completion_tokens: 16000,
         store: true, reasoning_effort: 'high',
         metadata: { agent_mode: 'true' }
       })
@@ -7873,7 +8589,14 @@ function closeToolPanel() {
 
 function openToolModal(type) {
   closeToolPanel();
-  document.getElementById(type + 'Modal').classList.add('open');
+  // 履歴閲覧中にツールを使うと、結果がアーカイブ画面に描かれて「← 戻る」で消える上に、
+  // history（メモリ）と IndexedDB の中身がズレる。開く前に止める（v3.8.0）
+  if (isViewingHistory) {
+    showError('過去の会話を見てる間は便利ツールを使えないよ。上の「← 戻る」で戻ってからね');
+    return;
+  }
+  const el = document.getElementById(type + 'Modal');
+  if (el) el.classList.add('open');
 }
 function closeToolModal(type) {
   document.getElementById(type + 'Modal').classList.remove('open');
@@ -7988,20 +8711,13 @@ PTAのおたよりやLINEグループの長い会話を受け取り、以下の�
       userContent = text;
     }
 
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: MODEL, temperature: 0.3, max_completion_tokens: 1500,
-        messages: [
-          { role: 'system', content: sysPrompt },
-          { role: 'user', content: userContent }
-        ]
-      })
+    const reply = await callChat({
+      model: MODEL, maxTokens: 6000, effort: 'medium', label: 'PTAおたより要約',
+      messages: [
+        { role: 'system', content: sysPrompt },
+        { role: 'user', content: userContent }
+      ]
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const reply = data.choices?.[0]?.message?.content || '要約できませんでした';
 
     hideToolLoading('ptaModal');
     closeToolModal('pta');
@@ -8024,7 +8740,7 @@ PTAのおたよりやLINEグループの長い会話を受け取り、以下の�
     updateMemoryUI();
   } catch (err) {
     hideToolLoading('ptaModal');
-    showToast('エラー: ' + err.message);
+    showError('エラー: ' + err.message);
   } finally {
     btn.disabled = false;
   }
@@ -8127,20 +8843,13 @@ async function execKondateTool() {
       userContent = `写真はないけど、この条件で今夜の献立を1つに決めて: ${text}`;
     }
 
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: MODEL, temperature: 0.5, max_completion_tokens: 1500,
-        messages: [
-          { role: 'system', content: sysPrompt },
-          { role: 'user', content: userContent }
-        ]
-      })
+    const reply = await callChat({
+      model: MODEL, maxTokens: 6000, effort: 'medium', label: '今夜の献立',
+      messages: [
+        { role: 'system', content: sysPrompt },
+        { role: 'user', content: userContent }
+      ]
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const reply = data.choices?.[0]?.message?.content || '決められなかった…もう一回写真を見せて？';
 
     hideToolLoading('kondateModal');
     closeToolModal('kondate');
@@ -8162,7 +8871,7 @@ async function execKondateTool() {
     updateMemoryUI();
   } catch (err) {
     hideToolLoading('kondateModal');
-    showToast('エラー: ' + err.message);
+    showError('エラー: ' + err.message);
   } finally {
     btn.disabled = false;
   }
@@ -8208,20 +8917,13 @@ async function execLineTool() {
 - 各パターンは2〜4行程度。LINEらしい短さを保つ`;
 
   try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: MODEL, temperature: 0.7, max_completion_tokens: 1500,
-        messages: [
-          { role: 'system', content: sysPrompt },
-          { role: 'user', content: roleLabel + sceneLabel + context }
-        ]
-      })
+    const reply = await callChat({
+      model: MODEL, maxTokens: 6000, effort: 'medium', label: 'LINE下書き',
+      messages: [
+        { role: 'system', content: sysPrompt },
+        { role: 'user', content: roleLabel + sceneLabel + context }
+      ]
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const reply = data.choices?.[0]?.message?.content || '作成できませんでした';
 
     hideToolLoading('lineModal');
     closeToolModal('line');
@@ -8245,7 +8947,7 @@ async function execLineTool() {
     updateMemoryUI();
   } catch (err) {
     hideToolLoading('lineModal');
-    showToast('エラー: ' + err.message);
+    showError('エラー: ' + err.message);
   } finally {
     btn.disabled = false;
   }
@@ -8312,7 +9014,13 @@ function compressDataUrl(dataUrl) {
       }
       const c = document.createElement('canvas');
       c.width = width; c.height = height;
-      c.getContext('2d').drawImage(img, 0, 0, width, height);
+      const ctx = c.getContext('2d');
+      // ★JPEGは透明を扱えないので、透過部分はそのままだと真っ黒になる（v3.8.0で修正）。
+      //   ロゴ・アイコン・スタンプなど背景が透明な生成画像が全部黒く潰れていた。
+      //   先に白で塗りつぶしてから描く。
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
       resolve(c.toDataURL('image/jpeg', QUALITY));
     };
     img.src = dataUrl;
@@ -8576,20 +9284,13 @@ async function execSukimaTool() {
       userMsg += `\n\n【参考情報（Web検索結果）】\n${searchResult.text}`;
     }
 
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: MODEL, temperature: 0.7, max_completion_tokens: 2000,
-        messages: [
-          { role: 'system', content: sysPrompt },
-          { role: 'user', content: userMsg }
-        ]
-      })
+    let reply = await callChat({
+      model: MODEL, maxTokens: 6000, effort: 'medium', label: 'すきま時間',
+      messages: [
+        { role: 'system', content: sysPrompt },
+        { role: 'user', content: userMsg }
+      ]
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    let reply = data.choices?.[0]?.message?.content || '提案できませんでした';
 
     if (searchResult?.sources?.length) {
       reply += '\n\n📎 ソース:\n' + searchResult.sources.slice(0, 3).map(s => `- [${s.title}](${s.url})`).join('\n');
@@ -8613,7 +9314,7 @@ async function execSukimaTool() {
     updateMemoryUI();
   } catch (err) {
     hideToolLoading('sukimaModal');
-    showToast('エラー: ' + err.message);
+    showError('エラー: ' + err.message);
   } finally {
     btn.disabled = false;
   }
@@ -8665,20 +9366,13 @@ async function execJournalTool() {
   }).format(new Date());
 
   try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: MODEL, temperature: 0.6, max_completion_tokens: 1500,
-        messages: [
-          { role: 'system', content: sysPrompt },
-          { role: 'user', content: `【${now}の日記】\n${text}` }
-        ]
-      })
+    const reply = await callChat({
+      model: MODEL, maxTokens: 6000, effort: 'medium', label: '愚痴ジャーナル',
+      messages: [
+        { role: 'system', content: sysPrompt },
+        { role: 'user', content: `【${now}の日記】\n${text}` }
+      ]
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const reply = data.choices?.[0]?.message?.content || '読み取れませんでした';
 
     // ── ジャーナルをIndexedDBに保存 ──
     if (db) {
@@ -8715,7 +9409,7 @@ async function execJournalTool() {
     showToast('📔 日記を保存しました');
   } catch (err) {
     hideToolLoading('journalModal');
-    showToast('エラー: ' + err.message);
+    showError('エラー: ' + err.message);
   } finally {
     btn.disabled = false;
   }
@@ -8930,20 +9624,13 @@ async function execWorkTool() {
       userMsg += `\n【参考情報（Web検索結果）】\n${searchResult.text}`;
     }
 
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: MODEL, temperature: 0.5, max_completion_tokens: 2500,
-        messages: [
-          { role: 'system', content: sysPrompt },
-          { role: 'user', content: userMsg }
-        ]
-      })
+    let reply = await callChat({
+      model: MODEL, maxTokens: 8000, effort: 'medium', label: '在宅ワーク探し',
+      messages: [
+        { role: 'system', content: sysPrompt },
+        { role: 'user', content: userMsg }
+      ]
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    let reply = data.choices?.[0]?.message?.content || '検索できませんでした';
 
     if (searchResult?.sources?.length) {
       reply += '\n\n📎 ソース:\n' + searchResult.sources.slice(0, 5).map(s => `- [${s.title}](${s.url})`).join('\n');
@@ -8967,7 +9654,7 @@ async function execWorkTool() {
     updateMemoryUI();
   } catch (err) {
     hideToolLoading('workModal');
-    showToast('エラー: ' + err.message);
+    showError('エラー: ' + err.message);
   } finally {
     btn.disabled = false;
   }
@@ -9080,22 +9767,19 @@ ${isParentMode ? `### お子さんへの教え方ガイド（保護者向け）
 ## ルール
 - 学年に合った語彙と説明レベルで
 - ${isParentMode ? '保護者が読む前提。敬語で分かりやすく。' : '子ども本人が読む前提。「〜だよ」「〜してみて！」のやさしい口調で。'}
-- 図や絵で説明できそうな場合は、テキストで簡易図を描く
-- 算数なら途中式のヒントを、国語なら文脈のヒントを`;
+- 算数なら途中式のヒントを、国語なら文脈のヒントを
+- 筆算・図で見せた方が早いものは、下の図解を積極的に使う（特に わり算の筆算・あまり・分数・単位量）
+- ${isParentMode ? '図解は「お子さんに見せながら説明する用」として置く' : '図解は答えそのものにならない範囲で。途中まで描いて「この続きはどうなる？」と渡すのが理想'}
+
+${ZUKAI_PROMPT}`;
 
   const userContent = buildVisionContent('hw', textVal) || textVal;
 
   try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: MODEL, temperature: 0.5, max_completion_tokens: 1500,
-        messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: userContent }]
-      })
+    const reply = await callChat({
+      model: MODEL, maxTokens: 8000, effort: 'medium', label: '宿題サポーター',
+      messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: userContent }]
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const reply = (await res.json()).choices?.[0]?.message?.content || '読み取れませんでした';
     hideToolLoading('homeworkModal'); closeToolModal('homework');
     document.getElementById('hwTextInput').value = ''; clearToolImages('hw');
     clearChips('hwChildChips');
@@ -9108,7 +9792,7 @@ ${isParentMode ? `### お子さんへの教え方ガイド（保護者向け）
     history.push({ role:'assistant', content: reply });
     if (db) await persistMessage('assistant', reply);
     document.getElementById('messages').scrollTop = 999999; updateMemoryUI();
-  } catch (err) { hideToolLoading('homeworkModal'); showToast('エラー: ' + err.message); }
+  } catch (err) { hideToolLoading('homeworkModal'); showError('エラー: ' + err.message); }
   finally { btn.disabled = false; }
 }
 
@@ -9148,21 +9832,18 @@ ${child ? `対象: ${child}` : ''}
 - 赤ペン先生のように、具体的な修正例を示す
 - 漢字の間違いは正しい字を教える（叱らない）
 - 学年に合った表現力の目標を意識する
-- 「〜だね」「〜してみよう！」のやさしい口調`;
+- 「〜だね」「〜してみよう！」のやさしい口調
+- 文の組み立て（はじめ・なか・おわり）など、構成の話をする時は図解を使うと伝わりやすい
+
+${ZUKAI_PROMPT}`;
 
   const userContent = buildVisionContent('sk', textVal) || textVal;
 
   try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: MODEL, temperature: 0.5, max_completion_tokens: 1500,
-        messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: userContent }]
-      })
+    const reply = await callChat({
+      model: MODEL, maxTokens: 8000, effort: 'medium', label: '作文コーチ',
+      messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: userContent }]
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const reply = (await res.json()).choices?.[0]?.message?.content || '読み取れませんでした';
     hideToolLoading('sakubunModal'); closeToolModal('sakubun');
     document.getElementById('skTextInput').value = ''; clearToolImages('sk');
     clearChips('skChildChips');
@@ -9174,7 +9855,7 @@ ${child ? `対象: ${child}` : ''}
     history.push({ role:'assistant', content: reply });
     if (db) await persistMessage('assistant', reply);
     document.getElementById('messages').scrollTop = 999999; updateMemoryUI();
-  } catch (err) { hideToolLoading('sakubunModal'); showToast('エラー: ' + err.message); }
+  } catch (err) { hideToolLoading('sakubunModal'); showError('エラー: ' + err.message); }
   finally { btn.disabled = false; }
 }
 
@@ -9216,7 +9897,10 @@ ${child ? `対象: ${child}` : ''}
 - 「家にあるもの」「100均で買える」レベルの材料で完結できるもの
 - 実験系は安全面の注意を必ず入れる
 - まとめ方まで提案（子どもが一人でできるレベル）
-- テーマの多様性を確保（実験・調査・工作など混ぜる）`;
+- テーマの多様性を確保（実験・調査・工作など混ぜる）
+- 模造紙のレイアウト案や実験の仕組みなど、図で見せた方が早いものは図解を使う
+
+${ZUKAI_PROMPT}`;
 
   let userMsg = '';
   if (child) userMsg += `子ども: ${child}\n`;
@@ -9224,16 +9908,10 @@ ${child ? `対象: ${child}` : ''}
   if (note) userMsg += `条件: ${note}\n`;
 
   try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: MODEL, temperature: 0.8, max_completion_tokens: 2500,
-        messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: userMsg }]
-      })
+    const reply = await callChat({
+      model: MODEL, maxTokens: 8000, effort: 'medium', label: '自由研究',
+      messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: userMsg }]
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const reply = (await res.json()).choices?.[0]?.message?.content || '提案できませんでした';
     hideToolLoading('jiyuuModal'); closeToolModal('jiyuu');
     document.getElementById('jyNote').value = '';
     clearChips('jyChildChips'); clearChips('jyInterestChips');
@@ -9245,7 +9923,7 @@ ${child ? `対象: ${child}` : ''}
     history.push({ role:'assistant', content: reply });
     if (db) await persistMessage('assistant', reply);
     document.getElementById('messages').scrollTop = 999999; updateMemoryUI();
-  } catch (err) { hideToolLoading('jiyuuModal'); showToast('エラー: ' + err.message); }
+  } catch (err) { hideToolLoading('jiyuuModal'); showError('エラー: ' + err.message); }
   finally { btn.disabled = false; }
 }
 
@@ -9299,16 +9977,10 @@ async function execRemindTool() {
   const userContent = buildVisionContent('rm', textVal) || textVal;
 
   try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: MODEL, temperature: 0.3, max_completion_tokens: 1500,
-        messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: userContent }]
-      })
+    const reply = await callChat({
+      model: MODEL, maxTokens: 8000, effort: 'medium', label: '持ち物リマインダー',
+      messages: [{ role: 'system', content: sysPrompt }, { role: 'user', content: userContent }]
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const reply = (await res.json()).choices?.[0]?.message?.content || '読み取れませんでした';
     hideToolLoading('remindModal'); closeToolModal('remind');
     document.getElementById('rmTextInput').value = ''; clearToolImages('rm');
     renderMessage('user', '🔔 持ち物・提出物リマインダー', true);
@@ -9335,17 +10007,26 @@ async function execRemindTool() {
 
     bubble.innerHTML = fmt(displayReply) + registerBtn;
     makeTapCopyable(bubble);
-    history.push({ role:'assistant', content: reply });
-    if (db) await persistMessage('assistant', reply);
+    // ★保存するのは表示用に整えた方（v3.8.0）。
+    //   生の reply を保存していたので、リロードして履歴から復元すると
+    //   隠していたはずの JSON がそのまま露出していた（登録ボタンは復元できないので消える）。
+    history.push({ role:'assistant', content: displayReply });
+    if (db) await persistMessage('assistant', displayReply);
     document.getElementById('messages').scrollTop = 999999; updateMemoryUI();
-  } catch (err) { hideToolLoading('remindModal'); showToast('エラー: ' + err.message); }
+  } catch (err) { hideToolLoading('remindModal'); showError('エラー: ' + err.message); }
   finally { btn.disabled = false; }
 }
 
 // モーダル外クリックで閉じる
-['ptaModal','lineModal','sukimaModal','journalModal','workModal',
+// ★ここはトップレベルなので、1つでも id が見つからないと TypeError で落ち、
+//   これ以降のトップレベル処理が丸ごと実行されなくなる（= 後ろで宣言している const が
+//   初期化されず、後から呼ばれる関数が軒並み TDZ エラーになる）。必ず存在チェックする。
+//   あわせて、リストから漏れていた kondateModal / imggenModal を追加（v3.8.0）。
+['ptaModal','lineModal','sukimaModal','journalModal','workModal','kondateModal','imggenModal',
  'homeworkModal','sakubunModal','jiyuuModal','remindModal'].forEach(id => {
-  document.getElementById(id).addEventListener('click', function(e) {
+  const el = document.getElementById(id);
+  if (!el) { console.warn('[もも] モーダルが見つからない:', id); return; }
+  el.addEventListener('click', function(e) {
     if (e.target === this) closeToolModal(id.replace('Modal',''));
   });
 });
@@ -9359,7 +10040,9 @@ async function execRemindTool() {
   const META = document.querySelector('meta[name=viewport]');
   const NO_ZOOM = 'width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover';
 
-  function lockZoom()    { META.setAttribute('content', NO_ZOOM); }
+  // ★null チェック必須。ここはトップレベルの即時実行なので、meta が無いと例外で落ち、
+  //   これ以降のスクリプトが動かなくなる
+  function lockZoom() { if (META) META.setAttribute('content', NO_ZOOM); }
 
   // フォーカス時にロック（念のため）
   document.addEventListener('focusin', e => {
@@ -9371,12 +10054,22 @@ async function execRemindTool() {
     if (e.touches.length > 1) e.preventDefault();
   }, { passive: false });
 
-  // ダブルタップズームを防ぐ（300ms 以内の連続タップ）
-  let lastTap = 0;
+  // ダブルタップズームを防ぐ。
+  // ★v3.7.1 は「300ms以内の2回目のタップ」を画面全体で無条件に preventDefault していたため、
+  //   選択肢ボタンを続けてタップする・コピーを連打する等の操作で click が発火せず、
+  //   「タップしたのに反応しない」状態になっていた。
+  //   ボタン類の上では抑止しない＋ほぼ同じ場所を叩いた時だけ抑止する、に絞る。
+  //   （ダブルタップズームの本命の抑止は CSS の touch-action: manipulation 側）
+  const INTERACTIVE = 'button,a,input,textarea,select,label,[onclick],[contenteditable]';
+  let lastTap = 0, lastX = 0, lastY = 0;
   document.addEventListener('touchend', e => {
     const now = Date.now();
-    if (now - lastTap < 300) e.preventDefault();
-    lastTap = now;
+    const t = e.changedTouches && e.changedTouches[0];
+    const x = t ? t.clientX : 0, y = t ? t.clientY : 0;
+    const sameSpot = Math.abs(x - lastX) < 30 && Math.abs(y - lastY) < 30;
+    const onControl = e.target && e.target.closest && e.target.closest(INTERACTIVE);
+    if (!onControl && sameSpot && now - lastTap < 300) e.preventDefault();
+    lastTap = now; lastX = x; lastY = y;
   }, { passive: false });
 
   // 初期化時にロック
