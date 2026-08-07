@@ -3306,7 +3306,7 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 //         ・思い出の本に画面用の記法がそのまま刷られていたのを修正（bookPlain を追加）。
 //           **太字** / ### 見出し / [choice:] / 表の区切り行に加えて、v3.8.0 で足した
 //           ```zukai の JSON まで本文に載っていた。図は「（図）」に置き換える。
-const APP_VERSION   = 'v3.13.1';
+const APP_VERSION   = 'v3.13.2';
 const SUMMARY_EVERY = 10;
 const LEARN_PER_LEVEL = 3;    // 何個の学習で1レベル上がるか（小さいほど上がりやすい。旧:5 → v2.6.1で3に緩和。レベルは単調増加なので変更しても下がらない）
 // 重要記憶キー（削除されない永続情報）
@@ -5622,6 +5622,21 @@ async function newChat() {
   topicSavedFlag    = false;
   topicSavedArcId   = null;
   document.getElementById('topicBar').classList.remove('show');
+
+  // 履歴閲覧の退避も畳む。これを残すと、履歴を開いたまま New を押したあと
+  // 「← 戻る」で savedMsgsHTML と savedHistory が書き戻され、
+  // 今アーカイブしたばかりの会話が画面にもメモリにも丸ごと復活する。
+  // 本体(idb)は空なので、以後の送信はその幽霊に足されていく。
+  // resumeArchive は同じ後片付けをしているのに、newChat だけ漏れていた。
+  savedHistory = [];
+  savedMsgsHTML = '';
+  isViewingHistory = false;
+  viewingArchiveId = null;
+  document.getElementById('viewingBar')?.classList.remove('show');
+  const _inp = document.getElementById('input');
+  if (_inp) _inp.disabled = false;
+  const _snd = document.getElementById('sendBtn');
+  if (_snd) _snd.disabled = false;
 
   document.getElementById('messages').innerHTML = `
     <div class="empty-state" id="emptyState">
