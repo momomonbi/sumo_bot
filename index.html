@@ -3294,7 +3294,7 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 //         ・思い出の本に画面用の記法がそのまま刷られていたのを修正（bookPlain を追加）。
 //           **太字** / ### 見出し / [choice:] / 表の区切り行に加えて、v3.8.0 で足した
 //           ```zukai の JSON まで本文に載っていた。図は「（図）」に置き換える。
-const APP_VERSION   = 'v3.11.3';
+const APP_VERSION   = 'v3.11.4';
 const SUMMARY_EVERY = 10;
 const LEARN_PER_LEVEL = 3;    // 何個の学習で1レベル上がるか（小さいほど上がりやすい。旧:5 → v2.6.1で3に緩和。レベルは単調増加なので変更しても下がらない）
 // 重要記憶キー（削除されない永続情報）
@@ -10498,6 +10498,8 @@ const K = { facts:'obs_facts', hesit:'obs_hesit', ghosts:'obs_ghosts', pend:'obs
 const REC_KEY = 'obs_recording';   // 打鍵・下書きの記録ON/OFF（localStorage）
 
 const recOn = () => { try { return localStorage.getItem(REC_KEY) !== '0'; } catch { return true; } };
+// 送信アニメの調べ用表示（本体側の ANIM が見る設定と同じキー）
+const animDbg = () => { try { return localStorage.getItem('momo_animdebug') === '1'; } catch { return false; } };
 const setRec = (v) => { try { localStorage.setItem(REC_KEY, v ? '1' : '0'); } catch {} paint(); };
 const hasDb  = () => { try { return !!db; } catch { return false; } };
 const viewing= () => { try { return !!isViewingHistory; } catch { return false; } };
@@ -11308,9 +11310,20 @@ async function paintRec(el) {
     + `<button id="obsWipeG">消した下書きを消す</button>`
     + `<button id="obsWipeH">詰まった語を消す</button>`
     + `<button id="obsWipeA" class="danger">観測ノートを全部消す</button></div>`
+    + `<h3>調べ用</h3>`
+    + `<div class="obs-empty" style="text-align:left">送信のアニメが出ないときに、`
+    + `どこで止まっているかを画面に出します。普段は切っておいて構いません。</div>`
+    + `<div class="obs-row"><button id="obsAnimDbg" class="${animDbg() ? 'on' : ''}">`
+    + `${animDbg() ? '● アニメの調べ ON' : 'アニメの調べ OFF'}</button></div>`
     + `<div class="obs-empty" style="text-align:left">消した下書き ${g.length}件 / 詰まった語 ${h.length}件</div>`
     + `<div id="obsGhosts"></div>`;
   el.querySelector('#obsToggle').addEventListener('click', () => setRec(!recOn()));
+  el.querySelector('#obsAnimDbg').addEventListener('click', () => {
+    const on = !animDbg();
+    try { localStorage.setItem('momo_animdebug', on ? '1' : '0'); } catch {}
+    showToast(on ? '調べ用の表示をONにしました。1通送ると下に出ます' : '調べ用の表示をOFFにしました');
+    paint();
+  });
   el.querySelector('#obsWipeG').addEventListener('click', async () => {
     if (!confirm('消した下書きの記録を消します。元に戻せません。')) return;
     await wipe(K.ghosts); showToast('消しました'); paint();
@@ -11424,6 +11437,12 @@ const ARC     = 30;     // 吸い込みの弧の高さ（1文字ごとに散ら�
 
 const reduced = () => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; }
                         catch { return false; } };
+// 調べ用の表示を出すか。URL の #animdebug か、観測ノートの「記録」のスイッチ。
+const ANIM_DBG_KEY = 'momo_animdebug';
+function ANIM_DEBUG() {
+  try { return location.hash === '#animdebug' || localStorage.getItem(ANIM_DBG_KEY) === '1'; }
+  catch { return false; }
+}
 
 // CSS と同じ曲線を JS で使う（cubic-bezier のニュートン法による近似解）
 function bezier(x1, y1, x2, y2) {
@@ -11709,10 +11728,11 @@ function wrap() {
         run(from).catch(e => console.warn('[もも] 送信アニメ', e?.message));
     } catch (e) { console.warn('[もも] 送信アニメ', e?.message); }
 
-    // ── 調べ用（URL の末尾に #animdebug を付けたときだけ出る） ──
+    // ── 調べ用（観測ノートの「記録」でONにしたときだけ出る） ──
     // スマホは開発者コンソールが開けないので、どこで止まったかを画面に出す。
+    // ホーム画面から起動しているとURLを触れないので、設定でも出せるようにしてある。
     // 普段は一切動かない。1回送るだけで全分岐が同時に分かる。
-    if (location.hash === '#animdebug') setTimeout(() => {
+    if (ANIM_DEBUG()) setTimeout(() => {
       try {
         const L = document.getElementById('animLayer');
         const g = document.querySelector('#animLayer .anim-ghost');
