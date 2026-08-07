@@ -1888,6 +1888,112 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
 @keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
 @keyframes fadeUp  { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes dotIn   { from { opacity: 0; transform: scale(0.5); } to { opacity: 0.6; transform: scale(1); } }
+/* ── 観測ノート（追加機能） ─────────────────────────────── */
+.obs-note{max-width:760px;margin:0 auto 14px;padding:0 4px;font-size:13px;line-height:1.75}
+.obs-note h5{margin:0 0 6px;font-size:11px;letter-spacing:.09em;font-weight:600;
+  color:rgba(232,232,226,.45);display:flex;align-items:baseline;gap:8px}
+.obs-note .obs-b{white-space:pre-wrap;overflow-wrap:anywhere;color:rgba(232,232,226,.72)}
+.obs-note .obs-rs{font-size:10.5px;color:rgba(232,232,226,.38);font-weight:400}
+.obs-quiet{border-left:2px solid #d99a5b;padding-left:11px;color:rgba(232,232,226,.5);font-size:12.5px}
+.obs-quiet b{color:rgba(232,232,226,.8);font-weight:600}
+.obs-quiet .obs-more{background:none;border:1px solid rgba(255,255,255,.16);border-radius:7px;
+  padding:2px 9px;font-size:11px;color:rgba(232,232,226,.5);margin-left:8px;cursor:pointer}
+.obs-quiet .obs-full{margin-top:7px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;
+  color:rgba(232,232,226,.62);border-left:2px solid rgba(255,255,255,.14);padding-left:9px}
+.obs-welcome{border:1px solid rgba(255,255,255,.14);border-radius:12px;padding:11px 13px;
+  background:rgba(255,255,255,.03)}
+.obs-welcome .obs-pend{margin-top:9px;padding-top:9px;border-top:1px solid rgba(255,255,255,.09)}
+.obs-welcome .obs-pend ul{margin:0;padding-left:17px}
+.obs-welcome .obs-pend li{margin:0 0 4px;overflow-wrap:anywhere}
+.obs-ask{border:1px solid rgba(158,203,255,.5);border-radius:12px;padding:12px 14px;
+  background:rgba(158,203,255,.08)}
+.obs-ask h5{color:#9ecbff}
+.obs-ask .obs-q{margin-bottom:10px;overflow-wrap:anywhere}
+.obs-ask .obs-ch{display:flex;flex-direction:column;gap:6px}
+.obs-ask .obs-ch button{text-align:left;background:rgba(255,255,255,.04);
+  border:1px solid rgba(255,255,255,.16);border-radius:9px;padding:8px 11px;font:inherit;
+  font-size:13px;color:inherit;cursor:pointer;transition:.15s}
+.obs-ask .obs-ch button:hover{border-color:#9ecbff}
+.obs-note .obs-foot{margin-top:9px;display:flex;align-items:center;gap:10px;font-size:11.5px;
+  color:rgba(232,232,226,.38)}
+.obs-note .obs-foot button{background:none;border:none;color:inherit;text-decoration:underline;
+  padding:0;font:inherit;font-size:11.5px;cursor:pointer}
+.obs-merged{border-left:2px solid #9ecbff;padding-left:11px}
+.obs-merged details{margin-top:7px}
+.obs-merged summary{font-size:11px;color:rgba(232,232,226,.38);cursor:pointer;list-style:none}
+.obs-merged summary::-webkit-details-marker{display:none}
+.obs-merged summary::before{content:'\25B8 '}
+.obs-merged details[open] summary::before{content:'\25BE '}
+.obs-merged .obs-qa{font-size:12px;color:rgba(232,232,226,.62);white-space:pre-wrap;
+  overflow-wrap:anywhere;border-left:2px solid rgba(255,255,255,.14);padding-left:9px;margin-top:6px}
+
+/* パネル */
+#obsPanel{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1200;display:none;
+  align-items:flex-start;justify-content:center;padding:44px 14px 18px}
+#obsPanel.on{display:flex}
+#obsPanel .obs-sheet{width:100%;max-width:520px;max-height:100%;background:#151518;
+  border:1px solid rgba(255,255,255,.14);border-radius:14px;display:flex;flex-direction:column;
+  overflow:hidden}
+#obsPanel .obs-h{padding:12px 15px;border-bottom:1px solid rgba(255,255,255,.09);display:flex;
+  align-items:center;gap:10px;font-size:13px;font-weight:600}
+#obsPanel .obs-h .sp{flex:1}
+#obsPanel .obs-h button{background:none;border:1px solid rgba(255,255,255,.16);border-radius:8px;
+  padding:5px 10px;font:inherit;font-size:12px;color:rgba(232,232,226,.62);cursor:pointer}
+#obsTabs{display:flex;gap:6px;padding:9px 13px 0;flex-wrap:wrap}
+#obsTabs .obs-tab{background:none;border:1px solid rgba(255,255,255,.14);border-radius:8px;
+  padding:5px 11px;font:inherit;font-size:12px;color:rgba(232,232,226,.5);cursor:pointer}
+#obsTabs .obs-tab.on{border-color:#9ecbff;color:#9ecbff;background:rgba(158,203,255,.12)}
+#obsBody{overflow-y:auto;padding:11px 13px 16px;flex:1}
+.obs-empty{color:rgba(232,232,226,.38);font-size:12.5px;padding:10px 2px;line-height:1.9;text-align:center}
+.obs-fact,.obs-ses{border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:9px 11px;
+  margin-bottom:8px;background:rgba(255,255,255,.03);font-size:13px;line-height:1.65}
+.obs-ses{cursor:pointer;transition:.15s}
+.obs-ses:hover{border-color:#9ecbff}
+.obs-k{font-size:10.5px;color:rgba(232,232,226,.38);margin-top:4px;display:flex;
+  align-items:center;gap:7px;flex-wrap:wrap}
+.obs-fact .obs-k:first-child{margin-top:0;margin-bottom:3px}
+.obs-k b{font-weight:600;padding:1px 6px;border-radius:4px;font-size:10px;
+  background:rgba(255,255,255,.09);color:rgba(232,232,226,.72)}
+.obs-k .obs-sp{flex:1}
+.obs-k button{background:none;border:1px solid rgba(255,255,255,.16);border-radius:6px;
+  padding:2px 8px;font:inherit;font-size:11px;color:rgba(232,232,226,.5);cursor:pointer}
+.obs-fact.k-decision   .obs-k b{background:rgba(158,203,255,.16);color:#9ecbff}
+.obs-fact.k-constraint .obs-k b{background:rgba(240,163,90,.16);color:#f0a35a}
+.obs-fact.k-number     .obs-k b{background:rgba(127,214,166,.16);color:#7fd6a6}
+.obs-fact.k-deadline   .obs-k b{background:rgba(255,139,139,.16);color:#ff8b8b}
+.obs-v{overflow-wrap:anywhere}
+.obs-fact.sup{opacity:.45}
+.obs-fact.sup .obs-v{text-decoration:line-through}
+.obs-sup{font-size:11px;color:#f0a35a;margin-top:3px}
+.obs-src{font-size:11px;color:rgba(232,232,226,.38);margin-top:3px;overflow-wrap:anywhere}
+.obs-fact details{margin-top:6px}
+.obs-fact summary{font-size:11px;color:rgba(232,232,226,.38);cursor:pointer;list-style:none}
+.obs-fact summary::-webkit-details-marker{display:none}
+.obs-fact summary::before{content:'\25B8 '}
+.obs-fact details[open] summary::before{content:'\25BE '}
+.obs-ev{font-size:11.5px;color:rgba(232,232,226,.62);white-space:pre-wrap;overflow-wrap:anywhere;
+  border-left:2px solid rgba(255,255,255,.14);padding-left:8px;margin-top:5px;
+  max-height:150px;overflow-y:auto}
+.obs-ses.e-resolved  .obs-k b{background:rgba(127,214,166,.16);color:#7fd6a6}
+.obs-ses.e-deferred  .obs-k b{background:rgba(158,203,255,.16);color:#9ecbff}
+.obs-ses.e-derailed  .obs-k b{background:rgba(240,163,90,.16);color:#f0a35a}
+.obs-ses.e-exhausted .obs-k b{background:rgba(255,139,139,.16);color:#ff8b8b}
+.obs-ses.tomb{opacity:.3;cursor:default;font-style:italic}
+.obs-bar{height:2px;border-radius:2px;background:rgba(255,255,255,.12);margin-top:7px;overflow:hidden}
+.obs-bar i{display:block;height:100%;background:#9ecbff}
+.obs-ask2{margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.09);
+  font-size:12px;color:rgba(232,232,226,.62);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.obs-ask2 button{background:none;border:1px solid rgba(255,255,255,.16);border-radius:7px;
+  padding:3px 9px;font:inherit;font-size:11.5px;color:rgba(232,232,226,.62);cursor:pointer}
+.obs-row{display:flex;gap:7px;flex-wrap:wrap;margin:8px 0}
+.obs-row button{background:none;border:1px solid rgba(255,255,255,.16);border-radius:8px;
+  padding:6px 11px;font:inherit;font-size:12px;color:rgba(232,232,226,.62);cursor:pointer}
+.obs-row button.on{border-color:#9ecbff;color:#9ecbff;background:rgba(158,203,255,.12)}
+.obs-row button.danger:hover{border-color:#ff8b8b;color:#ff8b8b}
+.btn-header.obs-btn{position:relative}
+#obsBadge{position:absolute;top:-4px;right:-4px;min-width:15px;height:15px;padding:0 4px;
+  border-radius:8px;background:#9ecbff;color:#0d0d0f;font-size:9.5px;font-weight:700;
+  line-height:15px;text-align:center}
 </style>
 </head>
 <body>
@@ -2011,6 +2117,7 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
       </div>
       <button class="btn-header icon" onclick="openPwdSettings()" title="パスワード設定" aria-label="パスワード設定">🔒</button>
       <button class="btn-header icon" onclick="openBackupModal()" title="バックアップ・機種変引継ぎ" aria-label="バックアップ">📦</button>
+      <button class="btn-header icon obs-btn" onclick="OBS.open()" title="観測ノート" aria-label="観測ノート">✎<span id="obsBadge" style="display:none"></span></button>
       <button class="btn-header icon" onclick="openSearch()" title="会話を検索" aria-label="会話を検索">🔍</button>
       <button class="btn-header icon" onclick="openGallery()" title="画像一覧" aria-label="画像一覧">🖼</button>
       <button class="btn-header accent" onclick="openHistory()">履歴</button>
@@ -3036,7 +3143,31 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 //         ・Markdownの表で区切り行（|---|---|）がデータ行として表示されていたのを修正。
 //         ・透過PNGの生成画像がJPEG化で真っ黒になっていたのを修正。
 //         ・更新ポップアップを見る前に「既読」にしていたのを、表示してから記録するように。
-const APP_VERSION   = 'v3.8.0';
+// v3.8.1: v3.8.0 の積み残しと、v3.8.0 が持ち込んだ副作用の後始末
+// v3.9.0: 観測ノートを追加（打鍵と沈黙を読む6つの機能）
+//   ① 手打ちと貼付を分けて、自分で打った「決めたこと」だけをノートに積む（貼付は根拠として下に付く）
+//   ② 同じ語で何度も手が止まったときだけ、一度だけそれを言う（普段は黙っている）
+//   ③ 離席から戻ると、経緯の要約と「置き去りの宿題」が出る（要約は離席中に作っておく）
+//   ⑤ 送らずに消した下書きを覚えておき、同じ内容が繰り返されたときだけ触れる
+//   ⑥ 書けずに全部消すのが続いたら、ももが質問する側に回る（やりとりは枝として残る）
+//   ⑦ 会話の終わり方で記憶の薄れ方が変わる。薄くなったら「忘れていい？」と聞く
+//   既存の処理には手を入れず、末尾の1ブロックを足すだけにしてある
+//         ・トピック自動保存が画像を落としていたのを修正。currentTopicMsgs は
+//           メモリ節約のため ts/role/content しか持っておらず、それをそのままアーカイブに
+//           していたため、トピックのカードから「ここから続ける」を押すと
+//           resumeArchive の idbClear() → 画像なしで書き戻し、の順で【写真が本体から消えていた】。
+//           保存の直前に MSG_STORE から実レコードを引き直して画像を復元する。
+//         ・履歴に同じ会話が2枚並ぶのを修正。(a) 離脱時スナップショットの ID を控えておき、
+//           会話が続いたら古い方を消して完全版に差し替える。(b) トピックのアーカイブに
+//           kind:'topic' を付け、会話まるごとをアーカイブできた時に、その範囲に収まる
+//           スナップショットを片付ける（本体メッセージは消さない設計なので二重になっていた）。
+//         ・newChat の arcAdd に try/catch が無く、失敗すると「アーカイブ中...」のまま
+//           無反応で固まっていたのを修正（会話自体は idbClear が後なので消えない）。
+//           v3.8.0 で arcAdd をコミット完了まで待つようにしたぶん、表面化しやすくなっていた。
+//         ・思い出の本に画面用の記法がそのまま刷られていたのを修正（bookPlain を追加）。
+//           **太字** / ### 見出し / [choice:] / 表の区切り行に加えて、v3.8.0 で足した
+//           ```zukai の JSON まで本文に載っていた。図は「（図）」に置き換える。
+const APP_VERSION   = 'v3.9.0';
 const SUMMARY_EVERY = 10;
 const LEARN_PER_LEVEL = 3;    // 何個の学習で1レベル上がるか（小さいほど上がりやすい。旧:5 → v2.6.1で3に緩和。レベルは単調増加なので変更しても下がらない）
 // 重要記憶キー（削除されない永続情報）
@@ -3446,7 +3577,12 @@ ${ZUKAI_PROMPT}
 ・全体を聞かれたら下の一覧を全部、特定の機能を聞かれたらその機能を深掘りして説明する。最後に「どれか詳しく知りたいのある？」と軽く聞いてもよい。
 
 ＜更新履歴（この内容に基づいて説明する）＞
-■ v3.8.0系（最新）★大きな更新★
+■ v3.8.1系（最新）
+・写真が消える経路をふさぎました：話題ごとに自動保存されたカードから「ここから続ける」を押すと、その期間に送った写真が本体から消えてしまう作りでした。自動保存の時に写真を持っていかせていなかったのが原因です。今は写真ごと保存されます。
+・履歴に同じ会話が2枚出ていたのを直しました：アプリを一度閉じて戻ってきた時に、話題の保存が二重に走っていました。それと、話題ごとの保存と「新しい会話」の保存が同じ範囲を二重に持っていたのも整理しました。会話の中身は消えません。
+・「新しい会話」が失敗した時に固まらなくなりました：保存できなかった時、「📦 会話をアーカイブ中...」のまま何も起きなくなっていました。今はちゃんと理由が出て、今の会話はそのまま残ります。
+・📕 思い出の本がちゃんと本になりました：これまで、ももの返事に入っている書式の記号（**太字** や ### みたいなの）が、そのまま本に印刷されていました。前回入れた図解のデータまで本に載っていたので、あわせて直しました。図があった場所には「（図）」とだけ書かれます。
+■ v3.8.0系 ★大きな更新★
 ・便利ツールが全部エラーで動かなくなっていたのを直しました：宿題サポーターを押すと「エラー」と出ていたのは、ももの頭（AIモデル）が新しくなった時に、ツール側の呼び出し方が古いままだったからです。ごめん。宿題サポーター・作文コーチ・自由研究・持ち物リマインダー・PTAおたより要約・今夜の献立・LINE下書き・すきま時間・愚痴ジャーナル・在宅ワーク探しの10個、全部が同じ理由で動いていませんでした。今は全部動きます。
 ・裏で静かに死んでいた機能も生き返りました：Web検索するかどうかの判断、話題の自動検出（画面上のトピック表示）、履歴のタイトル付け、思い出アルバムの日付タイトル。どれもエラーが表に出ない作りだったので、ずっと気づけませんでした。履歴のタイトルが「会話 (◯通)」ばかりだったのも、アルバムの日付が「…この日の思い出をたどってる」のままだったのも、これが原因です。
 ・Web検索の中身がちゃんと届くようになりました：これまで検索してもURLだけが届いて、肝心の本文がももに渡っていませんでした。今は本文も読んだ上で答えます。
@@ -5008,25 +5144,22 @@ function maybeShowVersionPopup() {
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:600;color:#e8e8e2;margin-bottom:6px;">アップデート ${APP_VERSION}</div>
           <div style="font-size:11px;color:rgba(232,232,226,0.8);line-height:1.8;overflow-wrap:anywhere;">
-            <span style="font-size:14px;font-weight:700;color:#ffb3cf;">ごめん、ずっと壊れてた。</span><br>
+            <span style="font-size:14px;font-weight:700;color:#ffb3cf;">観測ノート、はじめました。</span><br>
             <br>
-            宿題サポーターがエラーになってたやつ、<br>
-            原因わかって直した。<br>
+            右上の <b>✎</b> を押すと開くよ。<br>
             <br>
-            <b>実は10個のツール全部が</b><br>
-            <b>同じ理由で動いてなかった。</b><br>
-            献立もPTA要約もLINE下書きも、<br>
-            ぜんぶ今日から使えるよ。<br>
+            ・ 自分で打った<b>「決めたこと」</b>だけ積む<br>
+            　（貼り付けた資料は根拠として下に付く）<br>
+            ・ 席をはずして戻ると<b>経緯と宿題</b>が出る<br>
+            ・ 終わり方で<b>記憶の薄れ方</b>が変わる<br>
+            　（保留は薄れない。放置は自然に消える）<br>
             <br>
-            それと <b>🧮 図解</b> を出せるようにした。<br>
-            わり算の筆算とか、あまりの意味とか、<br>
-            言葉より図の方が早いやつは絵で描く。<br>
-            そうまとゆうさに見せながら教えて。<br>
+            それと、書いては消すのが続いたら<br>
+            <b>ももが質問する側に回る</b>。<br>
+            言葉にならないときは、聞くほうが早いから。<br>
             <br>
-            <b>思い出も記憶も、何ひとつ消えてない。</b><br>
-            むしろ思い出の本が厚くなったはず。<br>
-            <br>
-            📋 詳しくは「<b>最近の更新なに？</b>」で聞いてね
+            記録はこの端末の中だけ。<br>
+            ノートの「記録」タブで、いつでも消せるよ。<br>
           </div>
           <div style="font-size:10px;color:rgba(232,232,226,0.5);margin-top:7px;">画面のどこかをタップで閉じる</div>
         </div>
@@ -5246,14 +5379,43 @@ async function newChat() {
   const firstTs = all[0]?.ts || Date.now();
   const lastTs  = all[all.length - 1]?.ts || Date.now();
 
-  // アーカイブに保存
-  await arcAdd({
-    title,
-    messages: all.map(r => ({ role: r.role, content: r.content, ts: r.ts, ...(r.images && r.images.length ? { images: r.images } : {}) })),
-    msgCount: all.length,
-    firstTs, lastTs,
-    ts: Date.now()
-  });
+  // アーカイブに保存。
+  // ★ここは失敗し得る（容量オーバー等）。v3.8.0 までは try/catch が無かったので、
+  //   失敗すると「📦 会話をアーカイブ中...」のまま無反応で固まっていた。
+  //   会話自体は idbClear がこの後なので消えないが、理由が分からず手詰まりになる。
+  try {
+    await arcAdd({
+      title,
+      messages: all.map(r => ({ role: r.role, content: r.content, ts: r.ts, ...(r.images && r.images.length ? { images: r.images } : {}) })),
+      msgCount: all.length,
+      firstTs, lastTs,
+      ts: Date.now()
+    });
+  } catch (e) {
+    console.error('[もも] 会話のアーカイブ失敗:', e);
+    showError('⚠ 会話を保存できなかったから中止したよ。今の会話はそのまま残ってる');
+    return;
+  }
+
+  // 保存できたので、同じ内容を指しているトピックのスナップショットを片付ける。
+  // トピック自動保存は本体のメッセージを消さないため、そのままだと
+  // 【履歴に同じ会話が2枚（トピック単位＋会話まるごと）】並んでしまう（v3.8.1）。
+  //
+  // 消す条件は「そのスナップショットの全メッセージが、今書いた完全版に入っていること」。
+  // ts の範囲比較で済ませると、1通でも範囲外のものを含むスナップショットを
+  // 巻き添えで消してしまい、そこにしか無い会話が失われる。1通ずつ突き合わせる。
+  try {
+    const bodyTs = new Set(all.map(r => r.ts));
+    let removed = 0, kept = 0;
+    for (const a of await arcAll()) {
+      if (a.kind !== 'topic') continue;
+      const ms = a.messages || [];
+      if (!ms.length) continue;
+      if (ms.every(m => bodyTs.has(m.ts))) { await arcDel(a.id); removed++; }
+      else kept++;   // 完全版に含まれない内容を持っている → 残す
+    }
+    if (removed || kept) console.log(`[もも] トピックのスナップショット: ${removed}件片付け / ${kept}件は独自の内容があるので保持`);
+  } catch (e) { console.warn('[もも] スナップショットの整理に失敗', e?.message); }
 
   // 現在の会話をクリア（longSummary は保持して前回の文脈を引き継ぐ）
   history = []; totalMsgCount = 0; heavyWarned = false;
@@ -5269,6 +5431,7 @@ async function newChat() {
   topicCount        = 0;
   lastTopicCheckAt  = 0;
   topicSavedFlag    = false;
+  topicSavedArcId   = null;
   document.getElementById('topicBar').classList.remove('show');
 
   document.getElementById('messages').innerHTML = `
@@ -5289,8 +5452,42 @@ let topicCount        = 0;
 let topicCheckPending = false;
 let lastTopicCheckAt  = 0;    // 前回チェック時のメッセージ数
 let topicSavedFlag    = false; // ページ離脱で二重保存防止
+let topicSavedArcId   = null;  // 離脱時に保存したアーカイブのID（続きを話したら差し替えるため）
 const TOPIC_CHECK_INTERVAL = 8; // N通ごとにチェック（頻繁すぎると重複する）
 const TOPIC_MIN_MSGS = 8;       // アーカイブに必要な最低メッセージ数
+
+// ★トピックのアーカイブを作る時、画像を必ず含める（v3.8.1）。
+//   currentTopicMsgs は ts / role / content しか持っていない（メモリ節約のため
+//   base64 の画像は載せていない）。それをそのままアーカイブにしていたので、
+//   トピックのカードから「ここから続ける」を押すと、resumeArchive が
+//   idbClear() → 画像の無い内容を書き戻す、の順で動いて【写真が本体から消えていた】。
+//   保存の直前に本体（MSG_STORE）から実レコードを引き直して、画像を復元してから書く。
+async function hydrateTopicMsgs(msgs) {
+  let byTs = null;
+  try {
+    byTs = new Map((await idbAll()).map(r => [r.ts, r]));
+  } catch (e) {
+    console.warn('[もも] トピック保存: 本体を読めなかったので画像なしで保存', e?.message);
+    return msgs;
+  }
+  return msgs.map(m => {
+    const src = byTs.get(m.ts);
+    return (src && src.images && src.images.length)
+      ? { role: m.role, content: m.content, ts: m.ts, images: src.images }
+      : m;
+  });
+}
+// トピックのスナップショットを1件書く。戻り値は新しいアーカイブID
+async function writeTopicArchive(title, msgs) {
+  const messages = await hydrateTopicMsgs(msgs);
+  return await arcAdd({
+    title, messages, msgCount: messages.length,
+    firstTs: messages[0]?.ts || Date.now(),
+    lastTs:  messages[messages.length - 1]?.ts || Date.now(),
+    ts: Date.now(),
+    kind: 'topic'   // 会話全体をアーカイブした時に、重複するこれを片付けるための目印
+  });
+}
 
 function showTopicBar(title, num) {
   document.getElementById('topicTitle').textContent = title;
@@ -5347,14 +5544,16 @@ async function maybeUpdateTopic() {
 
     if (result.changed && currentTopicTitle && currentTopicMsgs.length >= TOPIC_MIN_MSGS) {
       // ── トピック変更 → 前トピックをアーカイブ ──
-      const firstTs = currentTopicMsgs[0]?.ts || Date.now();
-      const lastTs  = currentTopicMsgs[currentTopicMsgs.length - 1]?.ts || Date.now();
-      await arcAdd({
-        title: currentTopicTitle, messages: currentTopicMsgs,
-        msgCount: currentTopicMsgs.length, firstTs, lastTs, ts: Date.now()
-      });
+      // ★アプリを一度閉じて戻ってきた場合、離脱時のスナップショットが既に1枚ある。
+      //   そのまま追加すると【履歴に同じタイトルのカードが2枚】並び、片方は
+      //   途中までの中身になる。先に古い方を消して、完全版に差し替える（v3.8.1）
+      if (topicSavedFlag && topicSavedArcId != null) {
+        try { await arcDel(topicSavedArcId); } catch (e) { console.warn('[もも] 旧スナップショットの削除失敗', e?.message); }
+      }
+      await writeTopicArchive(currentTopicTitle, currentTopicMsgs);
       showToast(`📖 「${currentTopicTitle}」を履歴に保存`);
       topicSavedFlag = false;
+      topicSavedArcId = null;
       // 新トピック開始（直近の数通を引き継ぐ）
       currentTopicMsgs = all.slice(-4).map(r => ({ role: r.role, content: r.content, ts: r.ts }));
     }
@@ -5390,13 +5589,12 @@ async function saveCurrentTopic() {
   if (!db || !currentTopicTitle || currentTopicMsgs.length < 4 || topicSavedFlag) return;
   topicSavedFlag = true;
   try {
-    const firstTs = currentTopicMsgs[0]?.ts || Date.now();
-    const lastTs  = currentTopicMsgs[currentTopicMsgs.length - 1]?.ts || Date.now();
-    await arcAdd({
-      title: currentTopicTitle, messages: currentTopicMsgs,
-      msgCount: currentTopicMsgs.length, firstTs, lastTs, ts: Date.now()
-    });
-  } catch { topicSavedFlag = false; }
+    // IDを控えておく。このあと会話が続いたら、maybeUpdateTopic がこれを消して完全版に差し替える
+    topicSavedArcId = await writeTopicArchive(currentTopicTitle, currentTopicMsgs);
+  } catch (e) {
+    console.warn('[もも] トピックの離脱時保存に失敗', e?.message);
+    topicSavedFlag = false; topicSavedArcId = null;
+  }
 }
 window.addEventListener('beforeunload', () => { saveCurrentTopic(); });
 document.addEventListener('visibilitychange', () => {
@@ -6303,6 +6501,31 @@ async function collectBookData() {
   };
 }
 
+// ★本に載せる用に、画面用の記法を落として「読める文章」にする（v3.8.1）。
+//   本文をそのまま印刷していたので、**太字** や ### 見出し、[choice: ...] が
+//   記号のまま本に刷られていた。v3.8.0 で図解を足したことで、
+//   ```zukai の JSON まで本に載るようになってしまったので、あわせて処理する。
+function bookPlain(text) {
+  let s = String(text || '');
+  // 図解・SVGは本では絵として再現できないので、印は残して中身は落とす
+  s = s.replace(/```(?:zukai|svg)[\s\S]*?```/gi, '（図）');
+  // ほかのコードブロックは中身だけ残す
+  s = s.replace(/```\w*\n?([\s\S]*?)```/g, (_, c) => c.trim());
+  // 選択肢ボタンは本には不要
+  s = s.replace(/^\[choice:[^\]]*\]\s*$/gim, '');
+  // 表：区切り行を捨てて、セルを「　·　」で繋ぐ
+  s = s.split('\n').filter(l => !/^\s*\|[\s|:-]+\|\s*$/.test(l)).join('\n');
+  s = s.replace(/^\s*\|(.+)\|\s*$/gm, (_, row) =>
+    row.split('|').map(c => c.trim()).filter(Boolean).join('　·　'));
+  // 見出し・箇条書き・強調の記号を外す
+  s = s.replace(/^#{1,6}\s*/gm, '');
+  s = s.replace(/^\s*[-*]\s+/gm, '・');
+  s = s.replace(/^\s*>\s?/gm, '');
+  s = s.replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1').replace(/`([^`]+)`/g, '$1');
+  s = s.replace(/^\s*[-*_]{3,}\s*$/gm, '');
+  return s.replace(/\n{3,}/g, '\n\n').trim();
+}
+
 function bookHtml(d) {
   const hhmm = (ts) => new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' }).format(new Date(ts || Date.now()));
   let h = `<div class="bk-cover">
@@ -6323,7 +6546,7 @@ function bookHtml(d) {
       if ((r.content || '').trim()) {
         const who = r.role === 'user' ? 'りぴ' : 'もも';
         const cls = r.role === 'user' ? 'ripi' : 'momo';
-        h += `<p class="bk-line ${cls}"><span class="bk-who">${who}</span><span class="bk-said">${esc(r.content).replace(/\n/g, '<br>')}</span></p>`;
+        h += `<p class="bk-line ${cls}"><span class="bk-who">${who}</span><span class="bk-said">${esc(bookPlain(r.content)).replace(/\n/g, '<br>')}</span></p>`;
       }
       if (d.withPhotos && r.images && r.images.length) {
         for (const u of r.images) {
@@ -6337,14 +6560,14 @@ function bookHtml(d) {
 
   d.extras.forEach((x, i) => {
     h += `<div class="bk-sec" id="bkEx${i}"><h3>${esc(x.h)}</h3>`;
-    if (x.plain) h += `<div class="bk-plain">${esc(x.plain)}</div>`;
+    if (x.plain) h += `<div class="bk-plain">${esc(bookPlain(x.plain))}</div>`;
     if (x.journal) {
       for (const j of x.journal) {
         const rep = (j.reply || '').trim();
         h += `<div class="bk-jrn">
           <div class="bk-jdate">${esc(_dayLabel(_dayKey(j.ts)))}${j.mood ? '　' + esc(j.mood) : ''}</div>
-          <div class="bk-plain">${esc(j.input.trim())}</div>
-          ${rep ? `<div class="bk-plain bk-jreply">${esc(rep)}</div>` : ''}
+          <div class="bk-plain">${esc(bookPlain(j.input))}</div>
+          ${rep ? `<div class="bk-plain bk-jreply">${esc(bookPlain(rep))}</div>` : ''}
         </div>`;
       }
     }
@@ -6824,6 +7047,7 @@ async function resumeArchive() {
   topicCount        = 0;
   lastTopicCheckAt  = 0;
   topicSavedFlag    = false;
+  topicSavedArcId   = null;
   document.getElementById('topicBar').classList.remove('show');
 
   // UIを再描画（直近 API_CONTEXT 件のみ）
@@ -10074,6 +10298,953 @@ async function execRemindTool() {
 
   // 初期化時にロック
   lockZoom();
+})();
+</script>
+
+<!-- 観測ノート -->
+<div id="obsPanel" onclick="if(event.target.id==='obsPanel')OBS.close()">
+  <div class="obs-sheet">
+    <div class="obs-h">観測ノート<span class="sp"></span>
+      <button onclick="OBS.close()">閉じる</button></div>
+    <div id="obsTabs">
+      <button class="obs-tab on" data-tab="facts" onclick="OBS.setTab('facts')">決めたこと</button>
+      <button class="obs-tab" data-tab="pend" onclick="OBS.setTab('pend')">置き去りの宿題</button>
+      <button class="obs-tab" data-tab="mem" onclick="OBS.setTab('mem')">記憶</button>
+      <button class="obs-tab" data-tab="rec" onclick="OBS.setTab('rec')">記録</button>
+    </div>
+    <div id="obsBody"></div>
+  </div>
+</div>
+
+<script>
+/* ============================================================================
+   観測ノート（打鍵と沈黙を読む追加機能）
+   既存のコード・仕様には手を入れず、この1ブロックを足すだけで成立させる。
+   - 記録は meta ストアに置く（DBのバージョンとスキーマは触らない）
+   - 既存関数は上書きせず、sendMessage / newChat は「包む」だけ
+   - 失敗は全て握りつぶしてコンソールに出す。ここが壊れても会話は止めない
+   ①手打ちと貼付の分離 ②黙る監視者 ③おかえり要約と宿題 ⑤消した下書き
+   ⑥聞き役に回る ⑦終わり方と忘却
+   ========================================================================== */
+const OBS = (() => {
+'use strict';
+
+// ── 設定（しきい値はここだけ） ────────────────────────────────
+const CFG = {
+  idle:  { t1: 2500, t2: 15000, t3: 120000, t4: 900000 },
+  stall: { z: 3.5, ignoreOverMs: 60000, minSamples: 20, repeat: 3, minSessions: 2 },
+  clear: { minLen: 12, ratio: 0.6, streak: 3, windowMs: 180000, maxQ: 4 },
+  ghost: { minLen: 12, jaccard: 0.34, clusterMin: 2 },
+  decay: { tau: { resolved: 3, deferred: Infinity, derailed: 2, exhausted: 1 }, forget: 0.15 },
+  budget:{ watch: 1, ghost: 1 },
+  caps:  { facts: 200, hesit: 500, ghosts: 200, pend: 60, sessions: 120, branches: 60 },
+};
+const K = { facts:'obs_facts', hesit:'obs_hesit', ghosts:'obs_ghosts', pend:'obs_pend',
+            sessions:'obs_sessions', branches:'obs_branches', summary:'obs_summary' };
+const REC_KEY = 'obs_recording';   // 打鍵・下書きの記録ON/OFF（localStorage）
+
+const recOn = () => { try { return localStorage.getItem(REC_KEY) !== '0'; } catch { return true; } };
+const setRec = (v) => { try { localStorage.setItem(REC_KEY, v ? '1' : '0'); } catch {} paint(); };
+const hasDb  = () => { try { return !!db; } catch { return false; } };
+const viewing= () => { try { return !!isViewingHistory; } catch { return false; } };
+
+// ── 保存（meta ストアの1キー＝1コレクション） ────────────────
+const cache = {};
+async function load(k) {
+  if (k in cache) return cache[k];
+  let v = null;
+  try { if (hasDb()) v = await idbGetM(k); } catch (e) { console.warn('[観測] 読み込み失敗', k, e?.message); }
+  // DBを待っている間に誰かが書いていたら、そちらを優先する。
+  // ここで無条件に代入すると、待っている間の書き込みを黙って捨ててしまう。
+  if (k in cache) return cache[k];
+  cache[k] = Array.isArray(v) ? v : [];
+  return cache[k];
+}
+async function save(k) {
+  try { if (hasDb()) await idbSetM(k, cache[k] || []); }
+  catch (e) { console.warn('[観測] 保存失敗', k, e?.message); }
+}
+async function push(k, rec, cap) {
+  const a = await load(k);
+  rec.id = rec.id || (Date.now() + '-' + Math.floor(performance.now() * 1000 % 100000));
+  a.push(rec);
+  if (cap && a.length > cap) a.splice(0, a.length - cap);
+  await save(k);
+  return rec;
+}
+async function wipe(k) { cache[k] = []; await save(k); }
+
+// ── イベントバス（機能同士を直接呼ばない） ───────────────────
+const Bus = (() => {
+  const m = new Map();
+  return {
+    on(t, f) { (m.get(t) ?? m.set(t, new Set()).get(t)).add(f); return f; },
+    emit(t, p) { const s = m.get(t); if (!s) return;
+      for (const f of [...s]) { try { f(p); } catch (e) { console.warn('[観測]', t, e); } } },
+  };
+})();
+
+// ── 語の切り出し（助詞・記号・数字を落とす） ─────────────────
+const Tok = (() => {
+  const seg = (typeof Intl !== 'undefined' && Intl.Segmenter)
+    ? new Intl.Segmenter('ja', { granularity: 'word' }) : null;
+  const STOP = new Set(['これ','それ','あれ','この','その','あの','ここ','そこ','どこ','こと','もの',
+    'ため','よう','です','ます','した','する','ある','いる','なる','思う','ちょっと','やっぱり',
+    'たぶん','けど','でも','ので','から','という','あと','まあ','なんか','みたい','ほんと']);
+  function words(text) {
+    const s = String(text || ''); if (!s) return [];
+    const raw = seg ? [...seg.segment(s)].filter(x => x.isWordLike).map(x => x.segment)
+                    : s.split(/[\s、。,.!?！？「」（）()\[\]]+/);
+    const out = [];
+    for (const w of raw) {
+      const t = w.normalize('NFKC').toLowerCase().trim();
+      if (!t || /^\d+$/.test(t)) continue;
+      if (/^[^\p{L}\p{N}]+$/u.test(t)) continue;
+      if (/^[ぁ-ん]{1,2}$/.test(t)) continue;
+      if (t.length < 2 && !/[一-鿿]/.test(t)) continue;
+      if (STOP.has(t)) continue;
+      out.push(t);
+    }
+    return out;
+  }
+  function jac(a, b) {
+    if (!a.size || !b.size) return 0;
+    let i = 0; for (const x of a) if (b.has(x)) i++;
+    return i / (a.size + b.size - i);
+  }
+  return { words, first: t => words(t)[0] || null, jac };
+})();
+const nrm = s => String(s ?? '').trim().toLowerCase().replace(/[\s　、。,.「」（）()]/g, '');
+
+// ── 打鍵の観測（IME対応が要） ─────────────────────────────────
+const Tele = (() => {
+  let el = null, composing = false, justEnded = false;
+  let lastLen = 0, lastAt = Date.now();
+  let pasted = [], broken = false;
+  let dels = { TAIL: 0, MID: 0, CLEAR: 0 };
+
+  function classify(inputType) {
+    const s = el.selectionStart, e = el.selectionEnd, len = el.value.length;
+    const sel = e - s, removed = sel > 0 ? sel : 1;
+    if (len - removed <= 0) return 'CLEAR';
+    if (len >= CFG.clear.minLen && removed / len >= CFG.clear.ratio) return 'CLEAR';
+    if (sel > 0) return 'MID';
+    if (/^delete\w*Backward$/.test(inputType) && s === len) return 'TAIL';
+    return 'MID';
+  }
+  function shift(at, d) {
+    if (broken) return;
+    for (const r of pasted) {
+      if (d > 0) { if (at <= r.start) r.start += d; else if (at < r.start + r.len) r.len += d; }
+      else {
+        const del = -d, to = at + del;
+        if (to <= r.start) r.start -= del;
+        else if (at >= r.start + r.len) { /* 影響なし */ }
+        else { const cut = Math.min(to, r.start + r.len) - Math.max(at, r.start);
+               r.len -= cut; if (r.start > at) r.start = at; if (r.len < 0) r.len = 0; }
+      }
+    }
+    pasted = pasted.filter(r => r.len > 0);
+  }
+  function ranges() {
+    const total = el ? el.value.length : 0;
+    if (broken) return { typed: [{ start: 0, len: total }], pasted: [] };
+    const ps = pasted.map(r => ({ ...r })).filter(r => r.start >= 0 && r.start + r.len <= total);
+    if (ps.length !== pasted.length) return { typed: [{ start: 0, len: total }], pasted: [] };
+    const ts = []; let cur = 0;
+    for (const r of [...ps].sort((a, b) => a.start - b.start)) {
+      if (r.start > cur) ts.push({ start: cur, len: r.start - cur });
+      cur = Math.max(cur, r.start + r.len);
+    }
+    if (cur < total) ts.push({ start: cur, len: total - cur });
+    return { typed: ts, pasted: ps };
+  }
+  const textOf = rs => rs.map(r => el.value.substr(r.start, r.len)).join(' ').trim();
+
+  function attach(target) {
+    el = target; lastLen = el.value.length; lastAt = Date.now();
+    el.addEventListener('compositionstart', () => { composing = true; });
+    el.addEventListener('compositionend', () => {
+      composing = false; justEnded = true; queueMicrotask(() => { justEnded = false; });
+      lastAt = Date.now(); lastLen = el.value.length;   // 確定挿入は打鍵間隔の外れ値
+    });
+    el.addEventListener('beforeinput', (e) => {
+      if (composing || e.isComposing) return;           // 変換操作は分類しない
+      if (!e.inputType) return;
+      if (e.inputType.startsWith('delete')) {
+        const kind = classify(e.inputType);
+        dels[kind]++;
+        Bus.emit('del', { kind, text: el.value, caret: el.selectionStart });
+      } else {
+        const s = el.selectionStart, t = el.selectionEnd;
+        if (t - s >= CFG.ghost.minLen) Bus.emit('overwrite', { text: el.value.slice(s, t) });
+      }
+    });
+    el.addEventListener('paste', (e) => {
+      const text = (e.clipboardData || window.clipboardData)?.getData('text') ?? '';
+      if (!text) return;
+      const start = el.selectionStart, sel = el.selectionEnd - el.selectionStart;
+      setTimeout(() => {
+        if (sel) shift(start, -sel);
+        shift(start, text.length);
+        pasted.push({ start, len: text.length });
+      }, 0);
+    });
+    el.addEventListener('input', (e) => {
+      const len = el.value.length, d = len - lastLen;
+      if (!composing && !justEnded) {
+        if (d > 0) {
+          Bus.emit('key', { gap: Date.now() - lastAt, caret: el.selectionStart });
+          lastAt = Date.now();
+        }
+        if (d !== 0 && !e.isComposing) shift(Math.max(0, el.selectionStart - Math.max(d, 0)), d);
+      }
+      lastLen = len;
+      Bus.emit('resume', null);
+    });
+    document.addEventListener('visibilitychange', () => {
+      Bus.emit(document.hidden ? 'hidden' : 'visible', null);
+    });
+  }
+  function snapshot() {
+    const r = ranges();
+    const snap = { typedText: textOf(r.typed), pastedText: textOf(r.pasted), dels: { ...dels } };
+    reset();
+    return snap;
+  }
+  function reset() {
+    pasted = []; broken = false; dels = { TAIL: 0, MID: 0, CLEAR: 0 };
+    lastLen = el ? el.value.length : 0; lastAt = Date.now();
+  }
+  return { attach, snapshot, reset, get composing() { return composing; } };
+})();
+
+// ── 沈黙 ─────────────────────────────────────────────────────
+const Idle = (() => {
+  let timers = [], hiddenAt = null;
+  const clear = () => { timers.forEach(clearTimeout); timers = []; };
+  function arm() {
+    clear();
+    for (const [k, ms] of Object.entries(CFG.idle))
+      timers.push(setTimeout(() => Bus.emit('idle:' + k, { ms }), ms));
+  }
+  Bus.on('resume', arm);
+  Bus.on('hidden', () => { hiddenAt = Date.now(); clear(); });
+  Bus.on('visible', () => {
+    const away = hiddenAt ? Date.now() - hiddenAt : 0;
+    hiddenAt = null; Bus.emit('returned', { away }); arm();
+  });
+  return { arm };
+})();
+
+// ── 裏タスク（沈黙のあいだだけ動く。打鍵で止める） ───────────
+const Q = (() => {
+  const jobs = new Map();
+  let list = [], idle = false, running = null, ac = null;
+  const def = (kind, fn) => jobs.set(kind, fn);
+  function add(kind, payload, key) {
+    if (key) list = list.filter(t => t.key !== key);   // 後勝ち
+    list.push({ kind, payload, key: key || null, tries: 0 });
+    pump();
+  }
+  async function pump() {
+    if (running || !idle || !list.length) return;
+    const t = list.shift(); running = t;
+    ac = new AbortController();
+    try { await jobs.get(t.kind)?.(t.payload, ac.signal); }
+    catch (e) {
+      if (ac.signal.aborted && t.tries < 2) { t.tries++; list.unshift(t); }
+      else console.warn('[観測] タスク失敗', t.kind, e?.message);
+    }
+    finally { running = null; ac = null; setTimeout(pump, 0); }
+  }
+  Bus.on('idle:t2', () => { idle = true; pump(); });
+  Bus.on('resume', () => { idle = false; try { ac?.abort(); } catch {} });
+  Bus.on('hidden', () => { idle = true; pump(); });   // 離席は最上位の沈黙
+  return { def, add, force(v) { idle = v; if (v) pump(); } };
+})();
+
+// ── LLM（既存の callChatSoft をそのまま使う） ────────────────
+async function ask(system, user, opt) {
+  const o = opt || {};
+  let t = '';
+  try {
+    t = await callChatSoft({
+      model: o.model || (typeof CHEAP_MODEL !== 'undefined' ? CHEAP_MODEL : undefined),
+      maxTokens: o.maxTokens || 3000, effort: 'low', label: o.label || '観測',
+      messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+    });
+  } catch { return null; }
+  return String(t || '').trim() || null;
+}
+async function askJson(system, user, opt) {
+  const t = await ask(system + '\n\n出力はJSONのみ。前置き・説明・```は書かない。', user, opt);
+  if (!t) return null;
+  try { return JSON.parse(t.replace(/^\s*```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()); }
+  catch { console.warn('[観測] JSONで返ってこなかった'); return null; }
+}
+
+// 会話の中身は「キューに積んだ時点」で確定させる。
+// 裏で走っている間に New で history が空になると、別の会話を要約してしまう。
+function convoNow(n) {
+  try {
+    return history.slice(-(n || 20)).map(m => (m.role === 'user' ? 'りぴ: ' : 'もも: ') +
+      (typeof m.content === 'string' ? m.content : '[画像]')).join('\n').slice(-5000);
+  } catch { return ''; }
+}
+function turnsNow() { try { return history.length; } catch { return 0; } }
+
+// ── 会話に静かに差し込む小さなカード ─────────────────────────
+function card(cls, html) {
+  if (viewing()) return null;
+  const msgs = document.getElementById('messages');
+  if (!msgs) return null;
+  document.getElementById('emptyState')?.remove();
+  const d = document.createElement('div');
+  d.className = 'obs-note ' + cls;
+  d.innerHTML = html;
+  msgs.appendChild(d);
+  msgs.scrollTop = 999999;
+  return d;
+}
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+/* ══════════════════════════════════════════════════════════════
+   ① コピペ検出 × 決定事項ペイン
+   貼られた資料は文脈、手打ちの一行が意志。手打ちだけを確定事項に上げる。
+   ══════════════════════════════════════════════════════════════ */
+const KINDS = { decision: '決めた', constraint: '条件', number: '数字', deadline: '期限' };
+const FACT_SYS = `あなたは打ち込まれた文から「決まったこと」だけを抜き出す係です。
+入力は本人が自分の指で打った文だけです。貼り付けた資料は入っていません。
+
+抜き出すもの: 決めたこと / 守る条件 / 確定した数字 / 期限
+抜き出さないもの:
+・言い切っていないもの（検討中、〜かも、どう思う？）
+・質問、感想、雑談、あいさつ
+・原文にない情報。数字と日付は原文のまま写す。
+・該当が無ければ facts を空配列にする。空でよい。
+
+kind は decision / constraint / number / deadline から選ぶ。
+subject は「何についてか」を2〜8文字の名詞で書く（例: 予算, 提出日, 会場）。
+同じ対象には必ず同じ subject を使う。あとで食い違いを見つけるのに使う。
+value は決まった内容を30文字以内で。
+
+{"facts":[{"kind":"number","subject":"予算","value":"3000円まで"}]}`;
+
+Q.def('facts', async (p) => {
+  const typed = String(p.typed || '').trim();
+  if (typed.length < 4) return;                       // 手打ちが無い＝全部貼付なら何もしない
+  const pasted = String(p.pasted || '');
+  const out = await askJson(FACT_SYS,
+    '手打ち:\n' + typed.slice(0, 3000) +
+    (pasted ? `\n\n（同時に ${pasted.length} 文字の貼付があるが、これは対象外）` : ''),
+    { label: '確定事項' });
+  if (!out || !Array.isArray(out.facts) || !out.facts.length) return;
+
+  const all = await load(K.facts);
+  for (const f of out.facts.slice(0, 6)) {
+    const value = String(f?.value || '').trim(); if (!value) continue;
+    const rec = {
+      kind: KINDS[f.kind] ? f.kind : 'decision',
+      subject: String(f.subject || '').trim().slice(0, 24),
+      value: value.slice(0, 120),
+      evidence: pasted.slice(0, 3000),      // 貼付は根拠としてぶら下げる
+      src: typed.slice(0, 60), sid: Session.id(),
+      status: 'active', supersededBy: null, at: Date.now(),
+    };
+    await push(K.facts, rec, CFG.caps.facts);
+    // 同じ対象で値が変わったら、古いほうを「更新済み」にする。消さない。
+    for (const old of all) {
+      if (old === rec || old.status !== 'active') continue;
+      if (old.kind !== rec.kind) continue;
+      if (nrm(old.subject) !== nrm(rec.subject)) continue;
+      if (nrm(old.value) === nrm(rec.value)) continue;
+      old.status = 'superseded'; old.supersededBy = rec.id;
+    }
+  }
+  await save(K.facts);
+  paint();
+});
+
+/* ══════════════════════════════════════════════════════════════
+   ② 打鍵が遅くなった箇所 × 黙っている監視者
+   迷った箇所だけ溜めて、普段は何も言わない。
+   同じ語で3回詰まり、しかも別の日にも詰まっているときだけ、1度だけ言う。
+   ══════════════════════════════════════════════════════════════ */
+const Watch = (() => {
+  let gaps = [], budget = CFG.budget.watch, pend = null, timer = null;
+  const med = a => { if (!a.length) return 0; const s = [...a].sort((x, y) => x - y), m = s.length >> 1;
+                     return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+  function z(v) {                                   // 平均と標準偏差は使わない（1回の長考で壊れる）
+    const m = med(gaps), mad = med(gaps.map(x => Math.abs(x - m)));
+    return mad ? 0.6745 * (v - m) / mad : 0;
+  }
+  Bus.on('key', (r) => {
+    if (!r || typeof r.gap !== 'number') return;
+    if (r.gap >= CFG.stall.ignoreOverMs) return;     // 60秒超は電話・離席。標本にも入れない
+    if (gaps.length >= CFG.stall.minSamples && z(r.gap) > CFG.stall.z) {
+      pend = { caret: r.caret || 0, gap: r.gap };
+      clearTimeout(timer);
+      timer = setTimeout(() => { grab().catch(() => {}); }, 1500);
+    }
+    gaps.push(r.gap);
+    if (gaps.length > 400) gaps.splice(0, gaps.length - 400);
+  });
+
+  async function grab() {
+    const p = pend; pend = null;
+    if (!p || !recOn()) return;
+    const el = document.getElementById('input'); if (!el) return;
+    const from = Math.max(0, p.caret - 1);
+    const token = Tok.first(el.value.slice(from, from + 14));
+    if (!token) return;
+    await push(K.hesit, { token, gap: p.gap, sid: Session.id(), at: Date.now() }, CFG.caps.hesit);
+    speak(token);
+  }
+  async function speak(token) {
+    if (budget <= 0) return;
+    const rows = (await load(K.hesit)).filter(r => r.token === token);
+    if (rows.length < CFG.stall.repeat) return;
+    if (new Set(rows.map(r => r.sid)).size < CFG.stall.minSessions) return;  // 一度きりの連発では言わない
+    budget--;
+    card('obs-quiet', `「<b>${esc(token)}</b>」、毎回ここで手が止まりますね。`);
+  }
+  return { reset() { gaps = []; budget = CFG.budget.watch; } };
+})();
+
+/* ══════════════════════════════════════════════════════════════
+   ③ おかえり要約 × 未解決キュー
+   要約は忘れた文脈の補充、キューは忘れた意志の補充。役割が違うので重複させない。
+   離席した瞬間に作り始める。戻ってから作り始めるのでは間に合わない。
+   ══════════════════════════════════════════════════════════════ */
+const BACK_SYS = `あなたは会話の記録係です。相手が席を外している間に、
+戻ってきたとき用の短い引き継ぎを作ります。
+
+出力は2つ。役割が違うので、同じ内容を両方に書いてはいけない。
+・recap    = 忘れた文脈の補充。「何の話をしていたか」という事実。
+・pendings = 忘れた意志の補充。「まだ片付いていないこと」だけ。
+             recap の文をそのまま写さない。やることの形で書く。
+
+・recap は3行以内、各行40文字以内、時系列で。
+・oneLine は会話全体を30文字以内の1行に。
+・pendings は最大4件。片付いていないものが無ければ空配列。無理に作らない。
+・reason は unanswered（答えられていない）/ deferred（後回し）/ blocked（何か待ち）。
+・会話にないことを足さない。
+
+{"oneLine":"...","recap":["..."],"pendings":[{"text":"...","reason":"deferred"}]}`;
+
+Q.def('back', async (p) => {
+  if (!p || (p.turns || 0) < 2 || !p.convo) return;
+  const out = await askJson(BACK_SYS, p.convo, { label: 'おかえり要約' });
+  if (!out) return;
+  const recap = (Array.isArray(out.recap) ? out.recap : [])
+    .map(s => String(s || '').trim()).filter(Boolean).slice(0, 3);
+  const oneLine = String(out.oneLine || recap[0] || '').trim();
+  if (!oneLine && !recap.length) return;
+  const box = await load(K.summary);
+  box.length = 0; box.push({ oneLine, recap, at: Date.now() });
+  await save(K.summary);
+
+  // 要約に書いた文がそのままキューに落ちてくることがあるので、コード側でも弾く
+  const keys = recap.map(nrm);
+  const cur = await load(K.pend);
+  const seen = new Set(cur.filter(p => p.status === 'open').map(p => nrm(p.text)));
+  for (const p of (Array.isArray(out.pendings) ? out.pendings : []).slice(0, 4)) {
+    const text = String(p?.text || '').trim(); const k = nrm(text);
+    if (!text || !k || seen.has(k)) continue;
+    if (keys.some(r => r && (r === k || r.includes(k) || k.includes(r)))) continue;
+    seen.add(k);
+    await push(K.pend, { text: text.slice(0, 120), status: 'open',
+      reason: ['unanswered','deferred','blocked'].includes(p.reason) ? p.reason : 'deferred',
+      at: Date.now() }, CFG.caps.pend);
+  }
+  paint();
+});
+
+const REASON = { unanswered: '答えが出ていない', deferred: '後回しにした', blocked: '何か待ち' };
+const ENDLBL = { resolved: '片づいた', deferred: '保留', derailed: '話が逸れた', exhausted: '力尽きた' };
+
+Bus.on('hidden', () => {
+  Q.add('back', { convo: convoNow(), turns: turnsNow() }, 'back');
+  Mem.queueEnd();
+});
+Bus.on('returned', (e) => { welcome(e?.away || 0).catch(() => {}); });
+
+async function welcome(away) {
+  Q.force(false);
+  const MIN = 60000, HOUR = 3600000, DAY = 86400000;
+  if (away < 10 * MIN || viewing()) return;
+  // 離席中に作り終わっているはず。まだなら少しだけ待つ
+  let s = null;
+  for (let i = 0; i < 12; i++) {
+    s = (await load(K.summary))[0];
+    if (s && (s.oneLine || (s.recap || []).length)) break;
+    await new Promise(r => setTimeout(r, 250));
+  }
+  if (!s || (!s.oneLine && !(s.recap || []).length)) return;
+  const ago = away >= DAY ? Math.floor(away / DAY) + '日'
+            : away >= HOUR ? Math.floor(away / HOUR) + '時間'
+            : Math.max(1, Math.round(away / MIN)) + '分';
+  let h = `<h5>おかえり<span class="obs-rs">${ago}ぶり</span></h5>`;
+  if (away < HOUR) {
+    h += `<div class="obs-b">${esc(s.oneLine || s.recap[0])}</div>`;
+  } else {
+    const lines = (s.recap || []).length ? s.recap : [s.oneLine];
+    h += `<div class="obs-b">${lines.map(l => '・' + esc(l)).join('\n')}</div>`;
+    if (away >= DAY) {
+      const last = (await load(K.sessions)).filter(x => x.endKind && x.id !== Session.id())
+                     .sort((a, b) => (b.endedAt || 0) - (a.endedAt || 0))[0];
+      if (last) h += `<div class="obs-b" style="margin-top:6px">前回は「${esc(ENDLBL[last.endKind] || last.endKind)}」で終わっています</div>`;
+      const ps = (await load(K.pend)).filter(p => p.status === 'open')
+                   .sort((a, b) => b.at - a.at).slice(0, 4);
+      if (ps.length) h += `<div class="obs-pend"><h5>置き去りの宿題</h5><ul>`
+        + ps.map(p => `<li>${esc(p.text)}<span class="obs-rs">${esc(REASON[p.reason] || '')}</span></li>`).join('')
+        + `</ul></div>`;
+    }
+  }
+  card('obs-welcome', h);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ⑤ 未送信の下書き回収 × 同じ轍
+   単発は「言い忘れ」。同じ形が繰り返されて初めて「触れられない論点」になる。
+   ══════════════════════════════════════════════════════════════ */
+const Ghost = (() => {
+  let budget = CFG.budget.ghost;
+  async function keep(text, kind) {
+    if (!recOn()) return null;
+    const t = String(text || '').trim();
+    if (t.length < CFG.ghost.minLen) return null;
+    const mine = new Set(Tok.words(t));
+    let cluster = 'c' + Date.now(), best = 0;
+    for (const g of await load(K.ghosts)) {
+      const s = Tok.jac(mine, new Set(Tok.words(g.text)));
+      if (s > best) { best = s; if (s >= CFG.ghost.jaccard && g.cluster) cluster = g.cluster; }
+    }
+    return push(K.ghosts, { text: t.slice(0, 2000), kind, cluster, shown: false, at: Date.now() },
+                CFG.caps.ghosts);
+  }
+  Bus.on('del', (e) => { if (e.kind === 'CLEAR') keep(e.text, 'cleared'); });
+  Bus.on('overwrite', (e) => keep(e.text, 'overwritten'));
+  const abandon = () => { const el = document.getElementById('input');
+                          if (el) keep(el.value, 'abandoned'); };
+  Bus.on('hidden', abandon);
+  Bus.on('idle:t4', abandon);
+
+  // 書いた直後には出さない。手が空いていて、話が一段落したときだけ。
+  Bus.on('idle:t3', () => { recall().catch(() => {}); });
+  async function recall() {
+    if (budget <= 0 || !recOn() || viewing()) return;
+    try { if (isLoading) return; } catch {}
+    if (Ask.active) return;
+    const el = document.getElementById('input');
+    if (el && el.value.trim()) return;
+    const byC = new Map();
+    for (const g of await load(K.ghosts)) {
+      if (!g.cluster) continue;
+      (byC.get(g.cluster) ?? byC.set(g.cluster, []).get(g.cluster)).push(g);
+    }
+    let target = null;
+    for (const [, gs] of byC) {
+      if (gs.length < CFG.ghost.clusterMin) continue;   // 単発には触れない
+      if (gs.every(g => g.shown)) continue;
+      if (!target || gs.length > target.length) target = gs;
+    }
+    if (!target) return;
+    budget--;
+    for (const g of target) g.shown = true;
+    await save(K.ghosts);
+    const n = target.length;
+    const d = card('obs-quiet',
+      `同じことを、${n}回 書いて消していますね。<button class="obs-more">読み返す</button>`);
+    d?.querySelector('.obs-more')?.addEventListener('click', function () {
+      this.remove();
+      const f = document.createElement('div');
+      f.className = 'obs-full';
+      f.textContent = target.map(g => g.text).join('\n\n— — —\n\n');
+      d.appendChild(f);
+      document.getElementById('messages').scrollTop = 999999;
+    });
+  }
+  return { keep, reset() { budget = CFG.budget.ghost; } };
+})();
+
+/* ══════════════════════════════════════════════════════════════
+   ⑥ 主導権交代 × 会話のgit
+   書けずに消し続けているとき、ももが聞く側に回る。
+   そのヒアリング区間を丸ごと1本の枝として残し、あとから辿れるようにする。
+   ══════════════════════════════════════════════════════════════ */
+const Ask = (() => {
+  let clears = [], active = false, qn = 0, qa = [], node = null, branch = null;
+
+  const Q_SYS = `相手は書こうとして全部消す、を何度も繰り返しています。
+言いたいことがまだ言葉になっていない状態です。あなたが聞く側に回ってください。
+
+・1回に1問だけ。短く、やさしく。
+・必ず選択肢を出す（自由に書いてと言うと、さらに詰まります）。
+・選択肢は2〜4個、それぞれ20文字以内。相手の状況を言い当てにいく。
+・最後の選択肢は必ず「どれでもない」系の逃げ道にする。
+・責めない。「なぜ」で始めない。
+・これまでの会話に沿った質問にする。一般論を聞かない。
+
+{"question":"いま詰まっているのは、どのあたり？","choices":["何を聞けばいいか分からない","言葉が出てこない","前提から説明が要る","どれでもない"]}`;
+
+  const M_SYS = `聞き取りのやりとりを、本人が書いたつもりの1つの文にまとめてください。
+・120文字以内、1〜3文。
+・本人の言葉として書く（「〜とのことです」にしない）。
+・選ばれなかった選択肢のことは書かない。答えから分かること以外を足さない。
+出力はまとめた文だけ。前置きも記号も付けない。`;
+
+  Bus.on('del', (e) => {
+    if (e.kind !== 'CLEAR' || active || viewing()) return;
+    const now = Date.now();
+    clears = clears.filter(t => now - t < CFG.clear.windowMs);
+    clears.push(now);
+    if (clears.length >= CFG.clear.streak) { clears = []; enter().catch(() => {}); }
+  });
+
+  async function enter() {
+    if (active) return;
+    active = true; qn = 0; qa = [];
+    branch = { sid: Session.id(), kind: 'interview', startedAt: Date.now(),
+               endedAt: null, reason: null, qa: [], merged: null };
+    await next();
+  }
+  async function next() {
+    if (!active) return;
+    if (qn >= CFG.clear.maxQ) { await leave('maxQ'); return; }
+    let ctx = '';
+    try { ctx = history.slice(-6).map(m => (m.role === 'user' ? 'りぴ: ' : 'もも: ') +
+      (typeof m.content === 'string' ? m.content : '[画像]')).join('\n'); } catch {}
+    const asked = qa.map((x, i) => `Q${i + 1}: ${x.q}\nA${i + 1}: ${x.a}`).join('\n');
+    const out = await askJson(Q_SYS,
+      (ctx ? 'これまでの会話:\n' + ctx + '\n\n' : '') +
+      (asked ? 'すでに聞いたこと:\n' + asked + '\n\n' : '') + '次の1問を出してください。',
+      { label: '聞き役' });
+    const q = String(out?.question || '').trim();
+    const cs = (Array.isArray(out?.choices) ? out.choices : [])
+      .map(c => String(c || '').trim()).filter(Boolean).slice(0, 4);
+    if (!q || !cs.length) { await leave('unavailable'); return; }   // 作れないなら黙って引く
+    qn++; show(q, cs);
+  }
+  function show(q, cs) {
+    hide();
+    node = card('obs-ask',
+      `<h5>ちょっと聞かせて</h5><div class="obs-q">${esc(q)}</div><div class="obs-ch"></div>`
+      + `<div class="obs-foot"><span>${qn} / ${CFG.clear.maxQ}</span>`
+      + `<button data-quit="1">自分で書く</button></div>`);
+    if (!node) { active = false; return; }
+    const ch = node.querySelector('.obs-ch');
+    for (const c of cs) {
+      const b = document.createElement('button');
+      b.textContent = c;
+      b.addEventListener('click', () => answer(q, c));
+      ch.appendChild(b);
+    }
+    node.querySelector('[data-quit]').addEventListener('click', () => leave('self').catch(() => {}));
+  }
+  const hide = () => { if (node) { node.remove(); node = null; } };
+  async function answer(q, a) { qa.push({ q, a }); hide(); await next(); }
+
+  async function leave(reason) {
+    if (!active) return;
+    active = false; hide();
+    const pairs = qa.slice(); qa = [];
+    const b = branch; branch = null;
+    if (!b) return;
+    b.endedAt = Date.now(); b.reason = reason; b.qa = pairs;
+    if (!pairs.length) { await push(K.branches, b, CFG.caps.branches); return; }
+
+    const detail = pairs.map((x, i) => `Q${i + 1} ${x.q}\nA${i + 1} ${x.a}`).join('\n\n');
+    let sum = await ask(M_SYS, detail, { label: '聞き取りまとめ' });
+    sum = String(sum || '').trim() || pairs.map(x => x.a).join('。');
+    b.merged = sum;
+    await push(K.branches, b, CFG.caps.branches);
+
+    // 本流は汚さない。まとめた1文を入力欄に入れて、送るかどうかは本人が決める。
+    const d = card('obs-merged',
+      `<h5>聞き取りのまとめ</h5><div class="obs-b">${esc(sum)}</div>`
+      + `<details><summary>やりとり ${pairs.length}問</summary><div class="obs-qa">${esc(detail)}</div></details>`
+      + `<div class="obs-foot"><span>入力欄に入れました。直してから送ってね</span></div>`);
+    const el = document.getElementById('input');
+    if (el && !el.value.trim()) {
+      el.value = sum;
+      try { autoResize(el); } catch {}
+      el.focus();
+    }
+    return d;
+  }
+  return { get active() { return active; }, enter, leave,
+           reset() { clears = []; active = false; qa = []; branch = null; hide(); } };
+})();
+
+/* ══════════════════════════════════════════════════════════════
+   ⑦ 終わり方の分類 × 忘却UI
+   「力尽き」で終わった会話は速く薄れ、「保留」は薄れない。
+   終わり方が記憶の寿命を決める。放置したものが消え、宙吊りのものだけ残る。
+   ══════════════════════════════════════════════════════════════ */
+const Session = (() => {
+  let cur = null;
+  async function start() {
+    cur = { sid: 'S' + Date.now(), startedAt: Date.now(), touchedAt: Date.now(),
+            endedAt: null, endKind: null, title: null };
+    await push(K.sessions, cur, CFG.caps.sessions);
+    return cur;
+  }
+  return { start, id: () => cur?.sid || 'S0', get cur() { return cur; },
+           async touch() { if (cur) { cur.touchedAt = Date.now(); await save(K.sessions); } } };
+})();
+
+const Mem = (() => {
+  const DAY = 86400000;
+  const SYS = `あなたは会話の終わり方を見分ける係です。次の4つから1つ選びます。
+ resolved  = 用が済んで終わった。結論が出た、答えが得られた。
+ deferred  = 結論を出さずに意図的に後回しにした。「また今度」。
+ derailed  = 本題から逸れたまま終わった。別の話に移った。
+ exhausted = 力尽きた。噛み合わないまま、疲れて終わった。
+
+title は会話全体を20文字以内の1行で（体言止め、記号なし）。
+迷ったら deferred。deferred は忘れられずに残るので、
+誤って消してしまうより残しておくほうが害が少ない。
+
+{"endKind":"deferred","title":"自由研究のテーマ選び"}`;
+
+  Q.def('end', async (p) => {
+    const cur = p?.ses; if (!cur || cur.endKind) return;
+    if ((p.turns || 0) < 2 || !p.convo) return;
+    const out = await askJson(SYS, p.convo, { label: '終わり方' });
+    cur.endKind = ENDLBL[out?.endKind] ? out.endKind : 'deferred';   // 分からなければ消えないほうへ
+    cur.title = String(out?.title || '').trim().slice(0, 40) || null;
+    cur.endedAt = Date.now();
+    await save(K.sessions);
+    paint();
+  });
+  // 積む時点で会話と対象セッションを確定させる（裏で走る間に New されても取り違えない）
+  const queueEnd = () => Q.add('end',
+    { ses: Session.cur, convo: convoNow(), turns: turnsNow() }, 'end');
+  Bus.on('idle:t4', queueEnd);
+
+  function weight(s, now) {
+    const tau = CFG.decay.tau[s.endKind];
+    if (tau === undefined || !isFinite(tau)) return 1;        // 保留は薄れない
+    const d = Math.max(0, ((now ?? Date.now()) - (s.touchedAt || s.endedAt || 0)) / DAY);
+    return Math.exp(-d / tau);
+  }
+  async function recall(sid) {                                 // 思い出すと濃さが戻る
+    const s = (await load(K.sessions)).find(x => x.sid === sid);
+    if (!s || s.forgottenAt) return;
+    s.touchedAt = Date.now();
+    await save(K.sessions); paint();
+  }
+  async function forget(sid) {                                 // 物理削除ではなく墓標に落とす
+    const all = await load(K.sessions);
+    const i = all.findIndex(x => x.sid === sid);
+    if (i < 0) return;
+    all[i] = { id: all[i].id, sid, endKind: all[i].endKind || null, forgottenAt: Date.now() };
+    cache[K.facts]  = (await load(K.facts)).filter(f => f.sid !== sid);
+    cache[K.hesit]  = (await load(K.hesit)).filter(f => f.sid !== sid);
+    await save(K.sessions); await save(K.facts); await save(K.hesit);
+    paint();
+  }
+  return { queueEnd, weight, recall, forget };
+})();
+
+/* ══════════════════════════════════════════════════════════════
+   観測ノート（パネル）
+   ══════════════════════════════════════════════════════════════ */
+let tab = 'facts';
+function open(t) { if (t) tab = t;
+  document.getElementById('obsPanel')?.classList.add('on'); paint(); }
+function close() { document.getElementById('obsPanel')?.classList.remove('on'); }
+
+async function paint() {
+  const badge = document.getElementById('obsBadge');
+  if (badge) {
+    const n = (await load(K.facts)).filter(f => f.status === 'active').length
+            + (await load(K.pend)).filter(p => p.status === 'open').length;
+    badge.textContent = n ? String(n) : '';
+    badge.style.display = n ? '' : 'none';
+  }
+  const el = document.getElementById('obsBody');
+  if (!el || !document.getElementById('obsPanel')?.classList.contains('on')) return;
+  document.querySelectorAll('#obsTabs .obs-tab').forEach(b =>
+    b.classList.toggle('on', b.dataset.tab === tab));
+  el.innerHTML = '';
+  if (tab === 'facts')  return paintFacts(el);
+  if (tab === 'pend')   return paintPend(el);
+  if (tab === 'mem')    return paintMem(el);
+  return paintRec(el);
+}
+
+async function paintFacts(el) {
+  const list = (await load(K.facts)).slice().sort((a, b) => a.at - b.at);
+  if (!list.length) { el.innerHTML = '<div class="obs-empty">自分で打った「決めたこと」がここに積まれます。<br>貼り付けた資料は根拠として下にぶら下がります。</div>'; return; }
+  for (const f of list) {
+    const d = document.createElement('div');
+    d.className = 'obs-fact k-' + f.kind + (f.status === 'superseded' ? ' sup' : '');
+    let h = `<div class="obs-k"><b>${esc(KINDS[f.kind] || f.kind)}</b>${esc(f.subject || '')}</div>`
+          + `<div class="obs-v">${esc(f.value || '')}</div>`;
+    if (f.status === 'superseded') h += `<div class="obs-sup">あとで変わりました（履歴として残しています）</div>`;
+    if (f.src) h += `<div class="obs-src">「${esc(f.src)}」</div>`;
+    if (f.evidence) h += `<details><summary>根拠にした貼付 ${f.evidence.length}文字</summary>`
+                       + `<div class="obs-ev">${esc(f.evidence.slice(0, 1500))}</div></details>`;
+    d.innerHTML = h;
+    el.appendChild(d);
+  }
+}
+async function paintPend(el) {
+  const list = (await load(K.pend)).filter(p => p.status === 'open').sort((a, b) => b.at - a.at);
+  if (!list.length) { el.innerHTML = '<div class="obs-empty">置き去りになっている宿題はありません。</div>'; return; }
+  for (const p of list) {
+    const d = document.createElement('div');
+    d.className = 'obs-fact';
+    d.innerHTML = `<div class="obs-v">${esc(p.text)}</div>`
+      + `<div class="obs-k"><b>${esc(REASON[p.reason] || '')}</b>`
+      + `<span class="obs-sp"></span><button data-done="${esc(p.id)}">片づいた</button></div>`;
+    d.querySelector('[data-done]').addEventListener('click', async () => {
+      p.status = 'done'; await save(K.pend); paint();
+    });
+    el.appendChild(d);
+  }
+}
+async function paintMem(el) {
+  const now = Date.now();
+  const list = (await load(K.sessions)).filter(s => s.sid !== Session.id())
+                 .sort((a, b) => (b.touchedAt || b.forgottenAt || 0) - (a.touchedAt || a.forgottenAt || 0));
+  if (!list.length) { el.innerHTML = '<div class="obs-empty">まだ過去の会話がありません。<br>終わり方によって、薄れる速さが変わります。</div>'; return; }
+  for (const s of list) {
+    const d = document.createElement('div');
+    if (s.forgottenAt) {
+      d.className = 'obs-ses tomb';
+      d.innerHTML = `<div class="obs-v">忘れました</div><div class="obs-k">`
+                  + `<b>${esc(ENDLBL[s.endKind] || '—')}</b>`
+                  + `${new Date(s.forgottenAt).toLocaleDateString('ja-JP')} に忘却</div>`;
+      el.appendChild(d); continue;
+    }
+    const w = Mem.weight(s, now);
+    d.className = 'obs-ses e-' + (s.endKind || 'none');
+    d.style.opacity = (s.endKind ? Math.max(.25, Math.min(1, .25 + .75 * w)) : 1).toFixed(2);
+    let h = `<div class="obs-v">${esc(s.title || '（題のない会話）')}</div>`
+          + `<div class="obs-k"><b>${esc(ENDLBL[s.endKind] || 'まだ終わっていない')}</b>`
+          + `${new Date(s.touchedAt || s.startedAt || 0).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
+          + `<span class="obs-sp"></span>濃さ ${Math.round(w * 100)}%</div>`
+          + `<div class="obs-bar"><i style="width:${Math.round(w * 100)}%"></i></div>`;
+    if (s.endKind && w < CFG.decay.forget)
+      h += `<div class="obs-ask2">これ、忘れていい？`
+         + `<button data-f="${esc(s.sid)}">忘れる</button>`
+         + `<button data-k="${esc(s.sid)}">残す</button></div>`;
+    d.innerHTML = h;
+    d.addEventListener('click', async (ev) => {
+      const f = ev.target.getAttribute?.('data-f'), k = ev.target.getAttribute?.('data-k');
+      if (f) { await Mem.forget(f); showToast('忘れました'); return; }
+      if (k) { await Mem.recall(k); showToast('残しました'); return; }
+      await Mem.recall(s.sid);                 // 開くたびに少し濃くなる（想起による強化）
+    });
+    el.appendChild(d);
+  }
+}
+async function paintRec(el) {
+  const g = await load(K.ghosts), h = await load(K.hesit);
+  el.innerHTML =
+    `<div class="obs-empty" style="text-align:left">記録はこの端末の中だけに置いています。`
+    + `AIに渡すのは要約した結果だけで、打鍵そのものや消した下書きは送っていません。</div>`
+    + `<div class="obs-row"><button id="obsToggle" class="${recOn() ? 'on' : ''}">`
+    + `${recOn() ? '● 記録 ON' : '記録 OFF'}</button>`
+    + `<button id="obsWipeG">消した下書きを消す</button>`
+    + `<button id="obsWipeH">詰まった語を消す</button>`
+    + `<button id="obsWipeA" class="danger">観測ノートを全部消す</button></div>`
+    + `<div class="obs-empty" style="text-align:left">消した下書き ${g.length}件 / 詰まった語 ${h.length}件</div>`
+    + `<div id="obsGhosts"></div>`;
+  el.querySelector('#obsToggle').addEventListener('click', () => setRec(!recOn()));
+  el.querySelector('#obsWipeG').addEventListener('click', async () => {
+    if (!confirm('消した下書きの記録を消します。元に戻せません。')) return;
+    await wipe(K.ghosts); showToast('消しました'); paint();
+  });
+  el.querySelector('#obsWipeH').addEventListener('click', async () => {
+    if (!confirm('詰まった語の記録を消します。元に戻せません。')) return;
+    await wipe(K.hesit); showToast('消しました'); paint();
+  });
+  el.querySelector('#obsWipeA').addEventListener('click', async () => {
+    if (!confirm('観測ノートの記録を全部消します。元に戻せません。\n（会話そのものは消えません）')) return;
+    for (const k of Object.values(K)) await wipe(k);
+    showToast('全部消しました'); paint();
+  });
+  const box = el.querySelector('#obsGhosts');
+  for (const x of g.slice().sort((a, b) => b.at - a.at)) {
+    const d = document.createElement('div');
+    d.className = 'obs-fact';
+    d.innerHTML = `<div class="obs-ev">${esc(x.text)}</div><div class="obs-k">`
+      + `<b>${esc({ cleared: '全消し', overwritten: '上書き', abandoned: '書いたまま' }[x.kind] || x.kind)}</b>`
+      + `${new Date(x.at).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
+      + `<span class="obs-sp"></span><button data-d="1">消す</button></div>`;
+    d.querySelector('[data-d]').addEventListener('click', async () => {
+      cache[K.ghosts] = (await load(K.ghosts)).filter(y => y.id !== x.id);
+      await save(K.ghosts); paint();
+    });
+    box.appendChild(d);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   既存アプリへの接続（包むだけ。中身は書き換えない）
+   ══════════════════════════════════════════════════════════════ */
+function onSubmit(text, snap) {
+  Tele.reset();                     // 入力欄が空になったので打鍵の基準を張り直す
+  Ask.leave('self').catch(() => {});
+  Session.touch();
+  const cur = Session.cur;
+  if (cur && cur.endedAt) { cur.endedAt = null; cur.endKind = null; save(K.sessions); }
+  Q.add('facts', { typed: snap?.typedText || text, pasted: snap?.pastedText || '' }, 'facts');
+  Idle.arm();
+}
+
+async function boot() {
+  const el = document.getElementById('input');
+  if (!el) return;
+  Tele.attach(el);
+  Idle.arm();
+  // DBが開くのを待ってから読み込む（開かなくてもメモリだけで動く）
+  for (let i = 0; i < 40 && !hasDb(); i++) await new Promise(r => setTimeout(r, 250));
+  await Session.start();
+  paint();
+
+  // sendMessage を包む。中身は触らず、送信の前後に観測を挟むだけ。
+  if (typeof window.sendMessage === 'function' && !window.sendMessage.__obs) {
+    const orig = window.sendMessage;
+    const wrapped = async function () {
+      const box = document.getElementById('input');
+      const before = box ? box.value.trim() : '';
+      const snap = before ? Tele.snapshot() : null;
+      const r = await orig.apply(this, arguments);
+      if (before && box && !box.value.trim()) onSubmit(before, snap);   // 実際に送られたときだけ
+      else if (snap) Tele.reset();
+      return r;
+    };
+    wrapped.__obs = true;
+    window.sendMessage = wrapped;
+  }
+  // newChat を包む。会話の切り替わりを「終わり」として扱う。
+  if (typeof window.newChat === 'function' && !window.newChat.__obs) {
+    const orig = window.newChat;
+    const wrapped = async function () {
+      Q.force(true); Mem.queueEnd();
+      const r = await orig.apply(this, arguments);
+      Ask.reset(); Watch.reset(); Ghost.reset(); Tele.reset();
+      await Session.start(); paint();
+      return r;
+    };
+    wrapped.__obs = true;
+    window.newChat = wrapped;
+  }
+}
+
+if (document.readyState === 'loading')
+  document.addEventListener('DOMContentLoaded', () => boot().catch(e => console.warn('[観測]', e)));
+else boot().catch(e => console.warn('[観測]', e));
+
+return { open, close, paint, setTab(t) { tab = t; paint(); },
+         _t: { Tele, Idle, Q, Bus, Tok, Ask, Mem, Watch, Ghost, Session, load, K, CFG, boot, recOn, setRec } };
 })();
 </script>
 </body>
