@@ -2012,7 +2012,6 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
   color: var(--accent); text-shadow: 0 0 9px rgba(200,240,160,0.5);
   backface-visibility: hidden;
 }
-@media (prefers-reduced-motion: reduce) { html:not([data-anim="on"]) #animLayer { display: none; } }
 /* つかうAIの選択（起動画面） */
 .btn-engine{flex:1;background:none;border:1px solid rgba(255,255,255,0.16);border-radius:9px;
   padding:9px 6px;font-family:inherit;font-size:12.5px;color:rgba(232,232,226,0.6);
@@ -3307,7 +3306,7 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 //         ・思い出の本に画面用の記法がそのまま刷られていたのを修正（bookPlain を追加）。
 //           **太字** / ### 見出し / [choice:] / 表の区切り行に加えて、v3.8.0 で足した
 //           ```zukai の JSON まで本文に載っていた。図は「（図）」に置き換える。
-const APP_VERSION   = 'v3.13.0';
+const APP_VERSION   = 'v3.13.1';
 const SUMMARY_EVERY = 10;
 const LEARN_PER_LEVEL = 3;    // 何個の学習で1レベル上がるか（小さいほど上がりやすい。旧:5 → v2.6.1で3に緩和。レベルは単調増加なので変更しても下がらない）
 // 重要記憶キー（削除されない永続情報）
@@ -10539,8 +10538,6 @@ const K = { facts:'obs_facts', hesit:'obs_hesit', ghosts:'obs_ghosts', pend:'obs
 const REC_KEY = 'obs_recording';   // 打鍵・下書きの記録ON/OFF（localStorage）
 
 const recOn = () => { try { return localStorage.getItem(REC_KEY) !== '0'; } catch { return true; } };
-// 送信アニメを出すか（本体側の ANIM が見るキーと同じ）。既定はON。
-const animOn = () => { try { return localStorage.getItem('momo_force_anim') !== '0'; } catch { return true; } };
 // 送信アニメの調べ用表示（本体側の ANIM が見る設定と同じキー）
 const setRec = (v) => { try { localStorage.setItem(REC_KEY, v ? '1' : '0'); } catch {} paint(); };
 const hasDb  = () => { try { return !!db; } catch { return false; } };
@@ -11096,6 +11093,9 @@ const Ask = (() => {
 
   Bus.on('del', (e) => {
     if (e.kind !== 'CLEAR' || active || viewing()) return;
+    // 会話の頭では出さない。まだ何も話していないのに聞き役に回られると、
+    // ただ話の腰を折るだけになる。何を聞くべきかも分からない。
+    if (turnsNow() < 6) return;
     const now = Date.now();
     clears = clears.filter(t => now - t < CFG.clear.windowMs);
     clears.push(now);
@@ -11352,20 +11352,8 @@ async function paintRec(el) {
     + `<button id="obsWipeG">消した下書きを消す</button>`
     + `<button id="obsWipeH">詰まった語を消す</button>`
     + `<button id="obsWipeA" class="danger">観測ノートを全部消す</button></div>`
-    + `<h3>見た目</h3>`
-    + `<div class="obs-empty" style="text-align:left">送った文字が飛ぶ動きです。既定で出ます。`
-    + `動きが苦手なときや、端末の「視差効果を減らす」にそろえたいときは切ってください。</div>`
-    + `<div class="obs-row"><button id="obsAnim" class="${animOn() ? 'on' : ''}">`
-    + `${animOn() ? '● 送信アニメを出す' : '送信アニメを出さない'}</button></div>`
-    + `<div class="obs-empty" style="text-align:left">消した下書き ${g.length}件 / 詰まった語 ${h.length}件</div>`
     + `<div id="obsGhosts"></div>`;
   el.querySelector('#obsToggle').addEventListener('click', () => setRec(!recOn()));
-  el.querySelector('#obsAnim')?.addEventListener('click', () => {
-    const on = !animOn();
-    try { ANIM.setForce(on); } catch {}
-    showToast(on ? '送信のアニメを出すようにしました' : '送信のアニメを止めました');
-    paint();
-  });
   el.querySelector('#obsWipeG').addEventListener('click', async () => {
     if (!confirm('消した下書きの記録を消します。元に戻せません。')) return;
     await wipe(K.ghosts); showToast('消しました'); paint();
@@ -11477,21 +11465,10 @@ const PRE     = 0.05;   // 飛ぶ直前に「選ばれた」と分かるよう�
 const MAX_P   = 44;     // 吸い込む文字の最大数（長文でも粒は増やさない）
 const ARC     = 30;     // 吸い込みの弧の高さ（1文字ごとに散らす）
 
-// このアプリでは送信アニメが体験の中心なので、既定で出す。
-// 端末の「視差効果を減らす」は端末全体に効く設定で、これを尊重すると
+// このアプリでは送信アニメが体験の中心なので、常に出す。
+// 端末の「視差効果を減らす」は端末全体に効く設定で、これに従うと
 // もも だけが黙って動かなくなり、壊れているようにしか見えない。
-// 動きが苦手な場合に備えて、切る手段は観測ノートの「記録」に用意してある。
-const FORCE_KEY = 'momo_force_anim';
-const forceAnim = () => { try { return localStorage.getItem(FORCE_KEY) !== '0'; } catch { return true; } };
-function applyAnimPref() {
-  // CSS 側（#animLayer を消す指定）も同じ判断を見るように、印を html に付ける
-  try { document.documentElement.dataset.anim = forceAnim() ? 'on' : 'off'; } catch {}
-}
-function setForceAnim(v) { try { localStorage.setItem(FORCE_KEY, v ? '1' : '0'); } catch {} applyAnimPref(); }
-applyAnimPref();
-const reduced = () => { if (forceAnim()) return false;
-                        try { return matchMedia('(prefers-reduced-motion: reduce)').matches; }
-                        catch { return false; } };
+const reduced = () => false;
 
 // CSS と同じ曲線を JS で使う（cubic-bezier のニュートン法による近似解）
 function bezier(x1, y1, x2, y2) {
@@ -11791,7 +11768,7 @@ function boot() { if (bound) return; bound = true; wrap(); }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
 else boot();
 
-return { run, fly, suck, _wrap: wrap, force: forceAnim, setForce: setForceAnim };
+return { run, fly, suck, _wrap: wrap };
 })();
 </script>
 
