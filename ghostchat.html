@@ -1,0 +1,941 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ghostchat</title>
+<style>
+:root{
+  --bg:#0c0c0e; --surface:#141418; --surface2:#1b1b21;
+  --line:rgba(255,255,255,.08); --line2:rgba(255,255,255,.14);
+  --ink:#e9e9e4; --dim:rgba(233,233,228,.62); --faint:rgba(233,233,228,.38);
+  --accent:#9ecbff; --accent-dim:rgba(158,203,255,.14);
+  --warn:#f0a35a; --good:#7fd6a6; --bad:#ff8b8b;
+  --r:12px;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+  font-size:15px;line-height:1.7;overscroll-behavior:none;touch-action:pan-y manipulation;
+  -webkit-text-size-adjust:100%}
+button{font:inherit;color:inherit;cursor:pointer}
+
+/* ── layout ─────────────────────────────── */
+#app{display:flex;flex-direction:column;height:100dvh}
+header{display:flex;align-items:center;gap:10px;padding:10px 14px;
+  border-bottom:1px solid var(--line);flex-shrink:0}
+header h1{font-size:15px;font-weight:600;letter-spacing:.02em;margin:0}
+header h1 span{color:var(--faint);font-weight:400}
+.spacer{flex:1}
+.hbtn{background:none;border:1px solid var(--line2);border-radius:8px;
+  padding:5px 10px;font-size:12px;color:var(--dim);transition:.15s}
+.hbtn:hover{border-color:var(--accent);color:var(--accent)}
+.hbtn.on{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
+
+#main{flex:1;display:flex;min-height:0}
+#chat{flex:1;display:flex;flex-direction:column;min-width:0}
+#log{flex:1;overflow-y:auto;padding:18px 16px 8px;scroll-behavior:smooth}
+
+/* ── messages ───────────────────────────── */
+.msg{max-width:760px;margin:0 auto 16px;display:flex;gap:11px}
+.who{width:26px;height:26px;border-radius:7px;flex-shrink:0;display:grid;
+  place-items:center;font-size:11px;font-weight:600;margin-top:2px}
+.msg.user .who{background:var(--surface2);color:var(--faint)}
+.msg.bot  .who{background:var(--accent-dim);color:var(--accent)}
+.body{flex:1;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.msg.user .body{color:var(--dim)}
+.msg.sys{max-width:760px;margin:0 auto 16px;font-size:12.5px;color:var(--faint);
+  border-left:2px solid var(--line2);padding-left:11px}
+
+/* ── composer ───────────────────────────── */
+#composer{border-top:1px solid var(--line);padding:10px 16px 14px;flex-shrink:0}
+#cwrap{max-width:760px;margin:0 auto;display:flex;gap:9px;align-items:flex-end}
+#input{flex:1;background:var(--surface);border:1px solid var(--line2);
+  border-radius:var(--r);color:var(--ink);font:inherit;padding:11px 13px;
+  resize:none;max-height:180px;min-height:46px;outline:none;transition:border-color .15s}
+#input:focus{border-color:var(--accent)}
+#send{background:var(--accent);color:#0c0c0e;border:none;border-radius:var(--r);
+  padding:0 17px;height:46px;font-weight:600;transition:.15s}
+#send:disabled{opacity:.3;cursor:default}
+
+/* ── right pane ─────────────────────────── */
+#pane{width:300px;border-left:1px solid var(--line);display:flex;flex-direction:column;
+  background:var(--surface);flex-shrink:0}
+#pane.hidden{display:none}
+.pane-h{padding:11px 14px;border-bottom:1px solid var(--line);
+  font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+.pane-b{flex:1;overflow-y:auto;padding:10px 12px}
+.empty{color:var(--faint);font-size:12.5px;padding:8px 2px;line-height:1.8}
+
+/* ── toast ──────────────────────────────── */
+#toast{position:fixed;left:50%;bottom:82px;transform:translateX(-50%) translateY(8px);
+  background:var(--surface2);border:1px solid var(--line2);border-radius:9px;
+  padding:8px 14px;font-size:12.5px;max-width:88vw;text-align:center;
+  opacity:0;pointer-events:none;transition:.25s;z-index:900;line-height:1.6}
+#toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ── setup ──────────────────────────────── */
+#setup{position:fixed;inset:0;background:var(--bg);display:grid;place-items:center;
+  z-index:1000;padding:22px}
+#setup .card{width:100%;max-width:400px}
+#setup h2{font-size:19px;margin:0 0 6px}
+#setup p{color:var(--dim);font-size:13px;margin:0 0 20px;line-height:1.8}
+#setup input{width:100%;background:var(--surface);border:1px solid var(--line2);
+  border-radius:9px;color:var(--ink);font:inherit;padding:11px 13px;outline:none}
+#setup input:focus{border-color:var(--accent)}
+#setup button{width:100%;margin-top:11px;background:var(--accent);color:#0c0c0e;
+  border:none;border-radius:9px;padding:11px;font-weight:600}
+#setup .note{font-size:11.5px;color:var(--faint);margin-top:14px;line-height:1.8}
+
+@media(max-width:860px){ #pane{position:fixed;inset:0 0 0 auto;width:min(300px,86vw);z-index:500} }
+</style>
+</head>
+<body>
+
+<div id="setup">
+  <div class="card">
+    <h2>ghostchat</h2>
+    <p>打鍵の挙動と沈黙を読むチャット。<br>APIキーはこの端末のブラウザにだけ保存されます。</p>
+    <input id="keyInput" type="password" placeholder="sk-..." autocomplete="off" spellcheck="false">
+    <button id="keyGo">はじめる</button>
+    <div class="note">記録は既定でオフです。打鍵ログと未送信テキストは、あなたが明示的に有効化するまで一切保存しません。</div>
+  </div>
+</div>
+
+<div id="app" style="display:none">
+  <header>
+    <h1>ghostchat <span id="hsub"></span></h1>
+    <div class="spacer"></div>
+    <button class="hbtn" id="btnPane">確定事項</button>
+    <button class="hbtn" id="btnPriv">記録 OFF</button>
+  </header>
+  <div id="main">
+    <div id="chat">
+      <div id="log"></div>
+      <div id="composer">
+        <div id="cwrap">
+          <textarea id="input" rows="1" placeholder="なんでも" spellcheck="false"></textarea>
+          <button id="send">送信</button>
+        </div>
+      </div>
+    </div>
+    <aside id="pane" class="hidden">
+      <div class="pane-h">確定事項</div>
+      <div class="pane-b" id="paneBody"><div class="empty">手打ちで書いた「決めたこと」がここに積まれます。</div></div>
+    </aside>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- ===== S0 CONFIG ===== -->
+<script>
+// 閾値・定数は全てここに集約する。これ以外の場所にマジックナンバーを書かないこと。
+const CFG = {
+  idle:      { t1: 2500, t2: 15000, t3: 120000, t4: 900000 },
+  telemetry: { ringMax: 5000, ghostMinLen: 12, rawRetentionDays: 7 },
+  hesitation:{ zThreshold: 3.5, ignoreOverMs: 60000, minSamples: 20 },
+  clear:     { minLenForClear: 12, bulkDeleteRatio: 0.6 },
+  askMode:   { clearStreak: 3, windowMs: 180000, maxQuestions: 4 },
+  budget:    { observerPerSession: 1, ghostRecallPerSession: 1 },
+  queue:     { concurrency: 1, maxAttempts: 2 },
+  decay:     { tau: { resolved: 3, deferred: Infinity, derailed: 2, exhausted: 1 },
+               forgetThreshold: 0.15 },
+  // ── LLM ────────────────────────────────────────────────────────────────
+  // 指示書の原案は claude-sonnet-4-6 / maxTokens 1000 だったが、この実装では
+  // 同リポジトリの既存アプリと同じ OpenAI 互換エンドポイントを使う（S6に隔離済み）。
+  // maxTokens を 1000 → 4000 に上げているのは、gpt-5.x が reasoning モデルで
+  // max_completion_tokens に「考えるぶん」も含まれるため。1000 だと推論だけで
+  // 使い切って本文が空文字で返る（＝機能が黙って死ぬ）。
+  llm:       { model: 'gpt-5.6-terra',   // 会話・要約など質を要するもの
+               taskModel: 'gpt-5.6-luna', // 抽出・分類など裏方（最安）
+               maxTokens: 4000,
+               effort: 'low' },
+  // ── 一般 ───────────────────────────────────────────────────────────────
+  ui:        { toastMs: 3200, errToastMs: 6000, maxLogNodes: 400 },
+  history:   { apiContext: 24 },     // APIに送る直近メッセージ数
+};
+// 記録の既定はOFF。Phase 3 の機微データはこのフラグが true の間しか書かない。
+const PRIV_KEY = 'ghostchat_privacy_optin';
+const API_KEY  = 'ghostchat_api_key';
+</script>
+
+<!-- ===== S1 STORE ===== -->
+<script>
+// IndexedDB ラッパ。API は get / put / del / query / clearStore / exportAll の6本。
+// IndexedDB が使えない環境ではメモリのみのフォールバックに落ちて警告を出す（受け入れ基準）。
+const DB_NAME = 'ghostchat', DB_VER = 1;
+const STORES = {
+  sessions:    { key:'id', auto:true,  idx:[['lastTouchedAt','lastTouchedAt']] },
+  messages:    { key:'id', auto:true,  idx:[['sessionId','sessionId'],['branchId','branchId']] },
+  inputEvents: { key:'id', auto:true,  idx:[['sessionId','sessionId'],['ts','ts']] },
+  hesitations: { key:'id', auto:true,  idx:[['normToken','normToken'],['sessionId','sessionId']] },
+  ghosts:      { key:'id', auto:true,  idx:[['sessionId','sessionId'],['clusterId','clusterId']] },
+  facts:       { key:'id', auto:true,  idx:[['sessionId','sessionId'],['status','status']] },
+  pendings:    { key:'id', auto:true,  idx:[['status','status'],['sessionId','sessionId']] },
+  branches:    { key:'id', auto:true,  idx:[['sessionId','sessionId']] },
+  tasks:       { key:'id', auto:true,  idx:[['state','state'],['dedupeKey','dedupeKey']] },
+  kv:          { key:'key',auto:false, idx:[] },
+};
+
+let _db = null, _mem = null;
+
+function openStore() {
+  return new Promise((resolve) => {
+    let req;
+    try { req = indexedDB.open(DB_NAME, DB_VER); }
+    catch (e) { resolve(memFallback('IndexedDBを開けませんでした')); return; }
+    req.onupgradeneeded = (e) => {
+      const d = e.target.result;
+      for (const [name, def] of Object.entries(STORES)) {
+        if (d.objectStoreNames.contains(name)) continue;
+        const os = d.createObjectStore(name, { keyPath: def.key, autoIncrement: def.auto });
+        for (const [iname, path] of def.idx) os.createIndex(iname, path, { unique:false });
+      }
+    };
+    req.onsuccess = (e) => {
+      _db = e.target.result;
+      _db.onversionchange = () => { try { _db.close(); } catch {} _db = null; };
+      resolve(true);
+    };
+    req.onerror   = () => resolve(memFallback('IndexedDBを開けませんでした'));
+    req.onblocked = () => resolve(memFallback('別のタブが開いています'));
+  });
+}
+function memFallback(why) {
+  _mem = {}; for (const n of Object.keys(STORES)) _mem[n] = new Map();
+  _mem._seq = 1;
+  console.warn('[ghostchat] メモリのみで起動:', why);
+  toast('⚠ この環境では記録を保存できません。今回の内容はタブを閉じると消えます', CFG.ui.errToastMs);
+  return false;
+}
+
+// 書き込みは request.onsuccess ではなく transaction の complete を待つ。
+// onsuccess は「受理された」だけで、コミットは後。容量超過で abort しても
+// onsuccess は発火済みなので、待たないと「保存できたのに消えている」になる。
+function _tx(name, mode, fn) {
+  return new Promise((res, rej) => {
+    let tx; try { tx = _db.transaction(name, mode); } catch (e) { rej(e); return; }
+    let out;
+    try { const r = fn(tx.objectStore(name)); if (r) r.onsuccess = e => { out = e.target.result; }; }
+    catch (e) { rej(e); return; }
+    tx.oncomplete = () => res(out);
+    tx.onabort    = () => rej(tx.error || new Error('tx aborted'));
+    tx.onerror    = () => rej(tx.error || new Error('tx error'));
+  });
+}
+
+const Store = {
+  ready: false,
+  async init() { this.ready = await openStore(); return this.ready; },
+
+  async get(store, key) {
+    if (_mem) return _mem[store].get(key) ?? null;
+    return _tx(store, 'readonly', s => s.get(key)).then(v => v === undefined ? null : v);
+  },
+
+  async put(store, rec) {
+    if (_mem) {
+      const def = STORES[store];
+      if (def.auto && rec[def.key] == null) rec[def.key] = _mem._seq++;
+      _mem[store].set(rec[def.key], rec);
+      return rec[def.key];
+    }
+    return _tx(store, 'readwrite', s => s.put(rec));
+  },
+
+  async del(store, key) {
+    if (_mem) { _mem[store].delete(key); return; }
+    return _tx(store, 'readwrite', s => s.delete(key));
+  },
+
+  // index を省略すると全件。range は IDBKeyRange か生の値（== 一致）。
+  async query(store, index, range) {
+    if (_mem) {
+      const all = [..._mem[store].values()];
+      if (!index) return all;
+      if (range == null) return all;
+      const want = (range && range.only !== undefined) ? range.only : range;
+      return all.filter(r => r[index] === want);
+    }
+    return _tx(store, 'readonly', s => {
+      const src = index ? s.index(index) : s;
+      const r = (range != null && range.only !== undefined) ? IDBKeyRange.only(range.only) : range;
+      return src.getAll(r ?? undefined);
+    }).then(v => v || []);
+  },
+
+  async clearStore(store) {
+    if (_mem) { _mem[store].clear(); return; }
+    return _tx(store, 'readwrite', s => s.clear());
+  },
+
+  async exportAll() {
+    const out = { app:'ghostchat', version:DB_VER, exportedAt:new Date().toISOString(), stores:{} };
+    for (const n of Object.keys(STORES)) {
+      try { out.stores[n] = await this.query(n); } catch { out.stores[n] = []; }
+    }
+    return out;
+  },
+};
+</script>
+
+<!-- ===== S2 BUS ===== -->
+<script>
+// on / off / emit のみ。同期発火。
+// 機能モジュールは互いを直接呼ばず、必ずここを経由して結合する。
+// これを守らないと Phase 3 で破綻する。
+const Bus = (() => {
+  const map = new Map();
+  return {
+    on(type, fn)  { (map.get(type) ?? map.set(type, new Set()).get(type)).add(fn); return fn; },
+    off(type, fn) { map.get(type)?.delete(fn); },
+    emit(type, payload) {
+      const s = map.get(type); if (!s) return;
+      // 1つのハンドラが投げても他を巻き込まない（裏機能は必ず degradable に）
+      for (const fn of [...s]) { try { fn(payload); } catch (e) { console.warn('[bus]', type, e); } }
+    },
+  };
+})();
+</script>
+
+<!-- ===== S3 TELEMETRY ===== -->
+<script>
+// 入力欄1つを購読する。IME対応が最重要 —— ここを怠ると打鍵解析が全て無意味になる。
+const Tele = (() => {
+  const ring = [];                 // メモリ上のリングバッファ（IndexedDBへは flush 時のみ）
+  let composing = false;           // compositionstart 〜 end
+  let compositionStartedAt = 0;
+  let lastCommitAt = 0;            // 「確定済みテキストが増えた」最後の時刻
+  let lastLen = 0;
+  let pasted = [];                 // [{start,len}] 貼付範囲（編集に追随して補正）
+  let rangesBroken = false;        // 補正が破綻したら範囲を捨てる
+  let deleteCounts = { TAIL:0, MID:0, CLEAR:0 };
+  let el = null;
+
+  const now = () => Date.now();
+  const privacyOn = () => localStorage.getItem(PRIV_KEY) === '1';
+
+  function push(kind, extra) {
+    const rec = { kind, ts: now(), isComposing: composing, len: el ? el.value.length : 0, ...extra };
+    ring.push(rec);
+    if (ring.length > CFG.telemetry.ringMax) ring.splice(0, ring.length - CFG.telemetry.ringMax);
+    return rec;
+  }
+
+  // ── 削除の3分類 ──────────────────────────────────────────────
+  // MID が最も情報量が高い（言いにくいことを削っている）。1つにまとめないこと。
+  function classifyDelete(inputType) {
+    const start = el.selectionStart, end = el.selectionEnd, len = el.value.length;
+    const selLen = end - start;
+    const removed = selLen > 0 ? selLen : 1;
+    if (len - removed <= 0) return 'CLEAR';
+    if (len >= CFG.clear.minLenForClear && removed / len >= CFG.clear.bulkDeleteRatio) return 'CLEAR';
+    if (selLen > 0) return 'MID';
+    if (/^delete\w*Backward$/.test(inputType) && start === len) return 'TAIL';
+    return 'MID';
+  }
+
+  // ── paste 範囲の追随 ─────────────────────────────────────────
+  function shiftRanges(at, delta) {
+    if (rangesBroken) return;
+    for (const r of pasted) {
+      if (delta > 0) { if (at <= r.start) r.start += delta; else if (at < r.start + r.len) r.len += delta; }
+      else {
+        const del = -delta, from = at, to = at + del;
+        if (to <= r.start) r.start -= del;
+        else if (from >= r.start + r.len) { /* 影響なし */ }
+        else { // 範囲に食い込んだ削除 —— 正確に追えないので破棄側に倒す
+          const cut = Math.min(to, r.start + r.len) - Math.max(from, r.start);
+          r.len -= cut; if (r.start > from) r.start = from;
+          if (r.len <= 0) r.len = 0;
+        }
+      }
+    }
+    pasted = pasted.filter(r => r.len > 0);
+  }
+  function currentRanges() {
+    // 誤った範囲を残すより、無いほうがよい（指示書の方針）
+    if (rangesBroken) return { typed: [{ start:0, len: el.value.length }], pasted: [] };
+    const total = el.value.length;
+    const ps = pasted.map(r => ({ ...r })).filter(r => r.start >= 0 && r.start + r.len <= total);
+    if (ps.length !== pasted.length) return { typed: [{ start:0, len: total }], pasted: [] };
+    const ts = []; let cur = 0;
+    for (const r of [...ps].sort((a,b)=>a.start-b.start)) {
+      if (r.start > cur) ts.push({ start:cur, len:r.start-cur });
+      cur = Math.max(cur, r.start + r.len);
+    }
+    if (cur < total) ts.push({ start:cur, len:total-cur });
+    return { typed: ts, pasted: ps };
+  }
+  function textOf(ranges) { return ranges.map(r => el.value.substr(r.start, r.len)).join(' ').trim(); }
+
+  // ── 購読 ────────────────────────────────────────────────────
+  function attach(target) {
+    el = target; lastLen = el.value.length; lastCommitAt = now();
+
+    // IME: この区間のイベントは削除分類・停滞判定から完全に除外する
+    el.addEventListener('compositionstart', () => {
+      composing = true; compositionStartedAt = now();
+      push('composition', { phase:'start' });
+      Bus.emit('input:composition', { phase:'start' });
+    });
+    el.addEventListener('compositionupdate', () => { push('composition', { phase:'update' }); });
+    el.addEventListener('compositionend', () => {
+      // 変換確定の直前の停止時間は「変換の長考」として別枠に記録する。
+      // 停滞判定には使わないが、後で使える可能性があるので捨てない。
+      const think = now() - compositionStartedAt;
+      push('composition', { phase:'end', composeMs: think });
+      composing = false;
+      // compositionend と input の順序はブラウザ差があるので、直後の1発は変換由来として扱う
+      justEndedComposition = true;
+      queueMicrotask(() => { justEndedComposition = false; });
+      lastCommitAt = now(); lastLen = el.value.length;   // 確定挿入は打鍵間隔の外れ値なので基準を張り直す
+      Bus.emit('input:composition', { phase:'end', composeMs: think });
+    });
+
+    el.addEventListener('beforeinput', (e) => {
+      if (composing || e.isComposing) return;              // 変換操作は分類しない
+      if (!e.inputType || !e.inputType.startsWith('delete')) return;
+      const kind = classifyDelete(e.inputType);
+      deleteCounts[kind]++;
+      const rec = push('delete', { inputType:e.inputType, deleteKind:kind,
+        caret:el.selectionStart, selLen:el.selectionEnd - el.selectionStart });
+      Bus.emit('input:delete', rec);
+    });
+
+    el.addEventListener('paste', (e) => {
+      const text = (e.clipboardData || window.clipboardData)?.getData('text') ?? '';
+      if (!text) return;
+      const start = el.selectionStart, selLen = el.selectionEnd - el.selectionStart;
+      // 挿入は input 後に確定するので、次tickで位置を確定させる
+      setTimeout(() => {
+        if (selLen) shiftRanges(start, -selLen);
+        shiftRanges(start, text.length);
+        pasted.push({ start, len: text.length });
+        push('paste', { at:start, len:text.length });
+        Bus.emit('input:paste', { at:start, len:text.length });
+      }, 0);
+    });
+
+    el.addEventListener('input', (e) => {
+      const len = el.value.length, delta = len - lastLen;
+      if (!composing && !justEndedComposition) {
+        // 打鍵間隔は「確定済みテキストが増えた時刻」の差分で測る。
+        // 生の keydown 間隔では測らない（変換中は keyCode 229 で実キーが取れない）。
+        if (delta > 0) {
+          const gap = now() - lastCommitAt;
+          const rec = push('keystroke', { gap, delta, caret: el.selectionStart });
+          Bus.emit('input:keystroke', rec);
+          lastCommitAt = now();
+        }
+        if (delta !== 0 && !e.isComposing) {
+          const at = Math.max(0, el.selectionStart - Math.max(delta, 0));
+          shiftRanges(at, delta);
+        }
+      }
+      lastLen = len;
+      Bus.emit('idle:resume', null);
+    });
+
+    el.addEventListener('focus', () => push('focus', {}));
+    el.addEventListener('blur',  () => { push('blur', {}); flush('blur'); });
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) { push('hidden', {}); flush('hidden'); Bus.emit('visibility:hidden', null); }
+      else Bus.emit('visibility:visible', null);
+    });
+    window.addEventListener('beforeunload', () => { flush('unload'); });
+  }
+  let justEndedComposition = false;
+
+  // ── flush ───────────────────────────────────────────────────
+  // keydown ごとの IndexedDB 書き込みは禁止。契機は 送信 / idle:t2 / hidden / unload のみ。
+  let flushing = false;
+  async function flush(why) {
+    if (flushing || !ring.length) return;
+    if (!privacyOn()) { ring.length = 0; return; }   // OFF の間は書かない（バッファも捨てる）
+    flushing = true;
+    const batch = ring.splice(0, ring.length);
+    try {
+      const sid = Session.id();
+      for (const r of batch) await Store.put('inputEvents', { ...r, sessionId: sid });
+    } catch (e) { console.warn('[tele] flush失敗', e?.message); }
+    finally { flushing = false; }
+  }
+  Bus.on('idle:t2', () => flush('t2'));
+
+  async function purgeOld() {
+    if (!Store.ready) return;
+    const cutoff = Date.now() - CFG.telemetry.rawRetentionDays * 86400000;
+    try {
+      const all = await Store.query('inputEvents');
+      for (const r of all) if ((r.ts || 0) < cutoff) await Store.del('inputEvents', r.id);
+    } catch (e) { console.warn('[tele] 古いログの削除失敗', e?.message); }
+  }
+
+  function snapshotForSend() {
+    const ranges = currentRanges();
+    const snap = {
+      typedRanges: ranges.typed, pastedRanges: ranges.pasted,
+      typedText: textOf(ranges.typed), pastedText: textOf(ranges.pasted),
+      deleteCounts: { ...deleteCounts },
+    };
+    reset();
+    return snap;
+  }
+  function reset() {
+    pasted = []; rangesBroken = false;
+    deleteCounts = { TAIL:0, MID:0, CLEAR:0 };
+    lastLen = el ? el.value.length : 0; lastCommitAt = now();
+  }
+
+  return { attach, flush, purgeOld, snapshotForSend, reset,
+           get composing(){ return composing; },
+           get ringSize(){ return ring.length; } };
+})();
+</script>
+
+<!-- ===== S4 IDLE ===== -->
+<script>
+// 最終入力からの経過で t1〜t4 を段階発火。入力再開で idle:resume を出して張り直す。
+// visibilitychange の hidden は独立に記録する —— タブを閉じた離席と、
+// 開いたまま考え込んでいる状態は別物として扱う。
+const Idle = (() => {
+  let timers = [], lastAt = Date.now(), fired = new Set();
+  let hiddenAt = null;
+
+  function clear() { timers.forEach(clearTimeout); timers = []; }
+  function arm() {
+    clear(); fired.clear(); lastAt = Date.now();
+    for (const [k, ms] of Object.entries(CFG.idle)) {
+      timers.push(setTimeout(() => { fired.add(k); Bus.emit('idle:' + k, { since: ms }); }, ms));
+    }
+  }
+  Bus.on('idle:resume', () => arm());
+  Bus.on('visibility:hidden',  () => { hiddenAt = Date.now(); clear(); });
+  Bus.on('visibility:visible', () => {
+    const away = hiddenAt ? Date.now() - hiddenAt : 0;
+    hiddenAt = null;
+    Bus.emit('idle:returned', { awayMs: away });
+    arm();
+  });
+
+  return { arm, get idleMs(){ return Date.now() - lastAt; },
+           reached(k){ return fired.has(k); } };
+})();
+</script>
+
+<!-- ===== S5 QUEUE ===== -->
+<script>
+// idle:t2 以上でのみ起動。dedupeKey が同じ queued は後勝ちで置換。
+// interruptible は idle:resume で AbortController により中断して queued に戻す。
+// 失敗は maxAttempts まで再試行、超えたら failed にして静かに諦める（ユーザーに通知しない）。
+const Queue = (() => {
+  const handlers = new Map();
+  const running = new Map();          // taskId -> AbortController
+  let idleEnough = false, pumping = false;
+
+  function def(kind, fn) { handlers.set(kind, fn); }
+
+  async function add(kind, payload, opt = {}) {
+    const task = {
+      kind, payload, state:'queued',
+      priority: opt.priority ?? 0,
+      dedupeKey: opt.dedupeKey ?? null,
+      interruptible: opt.interruptible !== false,
+      createdAt: Date.now(), startedAt: null, attempts: 0,
+    };
+    try {
+      if (task.dedupeKey) {
+        const same = (await Store.query('tasks', 'dedupeKey', { only: task.dedupeKey }))
+          .filter(t => t.state === 'queued');
+        for (const t of same) await Store.del('tasks', t.id);   // 後勝ちで置換
+      }
+      task.id = await Store.put('tasks', task);
+    } catch (e) { console.warn('[queue] 登録失敗', e?.message); return null; }
+    pump();
+    return task.id;
+  }
+
+  async function pump() {
+    if (pumping || !idleEnough) return;
+    if (running.size >= CFG.queue.concurrency) return;
+    pumping = true;
+    try {
+      const queued = (await Store.query('tasks', 'state', { only: 'queued' }))
+        .sort((a,b) => (b.priority - a.priority) || (a.createdAt - b.createdAt));
+      while (running.size < CFG.queue.concurrency && queued.length && idleEnough) {
+        const t = queued.shift();
+        run(t);   // 意図的に await しない（並列度は running で制御）
+      }
+    } catch (e) { console.warn('[queue] pump失敗', e?.message); }
+    finally { pumping = false; }
+  }
+
+  async function run(task) {
+    const fn = handlers.get(task.kind);
+    if (!fn) { task.state = 'failed'; await Store.put('tasks', task).catch(()=>{}); return; }
+    const ac = new AbortController();
+    running.set(task.id, ac);
+    task.state = 'running'; task.startedAt = Date.now(); task.attempts++;
+    await Store.put('tasks', task).catch(()=>{});
+    try {
+      await fn(task.payload, ac.signal, task);
+      task.state = 'done';
+    } catch (e) {
+      if (ac.signal.aborted) task.state = 'queued';                  // 中断 → 戻す
+      else if (task.attempts < CFG.queue.maxAttempts) task.state = 'queued';
+      else { task.state = 'failed'; console.warn('[queue] 諦めた', task.kind, e?.message); }
+    } finally {
+      running.delete(task.id);
+      await Store.put('tasks', task).catch(()=>{});
+      if (task.state === 'done') setTimeout(() => Store.del('tasks', task.id).catch(()=>{}), 0);
+      pump();
+    }
+  }
+
+  Bus.on('idle:t2', () => { idleEnough = true; pump(); });
+  Bus.on('idle:resume', () => {
+    idleEnough = false;
+    for (const [id, ac] of running) { try { ac.abort(); } catch {} }
+  });
+
+  // 起動時に running のまま残っているタスクは queued に戻す（クラッシュ復旧）
+  async function recover() {
+    try {
+      const stuck = await Store.query('tasks', 'state', { only: 'running' });
+      for (const t of stuck) { t.state = 'queued'; await Store.put('tasks', t); }
+      if (stuck.length) console.log('[queue] 復旧:', stuck.length);
+      return stuck.length;
+    } catch { return 0; }
+  }
+
+  return { def, add, recover, pump,
+           get runningCount(){ return running.size; },
+           _forceIdle(v){ idleEnough = v; if (v) pump(); } };
+})();
+</script>
+
+<!-- ===== S6 LLM ===== -->
+<script>
+// エンドポイントはここ1箇所に隔離する。差し替えるときはこの関数だけを触る。
+// null が返っても呼び出し側は必ず正常動作すること。例外を上に投げない。
+const LLM = (() => {
+  const ENDPOINT = 'https://api.openai.com/v1/chat/completions';
+  const key = () => { try { return localStorage.getItem(API_KEY) || ''; } catch { return ''; } };
+
+  function strip(s) {
+    return String(s).replace(/^\s*```(?:json)?\s*/i, '').replace(/```\s*$/,'').trim();
+  }
+
+  async function once({ system, messages, signal, expectJson, model, maxTokens }) {
+    const body = {
+      model: model || CFG.llm.model,
+      max_completion_tokens: maxTokens || CFG.llm.maxTokens,
+      // reasoning モデルなので temperature は送らない（送ると 400 で即死する）
+      reasoning_effort: CFG.llm.effort,
+      messages: [
+        ...(system ? [{ role:'system', content:
+            expectJson ? system + '\n\n出力はJSONのみ。前置き・説明・コードフェンス（```）は一切書かない。'
+                       : system }] : []),
+        ...messages,
+      ],
+    };
+    const res = await fetch(ENDPOINT, {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'Authorization':`Bearer ${key()}` },
+      signal, body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      let detail = '';
+      try { detail = (await res.json())?.error?.message || ''; } catch {}
+      throw new Error(detail || `HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    const text = data.choices?.[0]?.message?.content?.trim() || '';
+    if (!text) throw new Error(data.choices?.[0]?.finish_reason === 'length'
+      ? '出力が長すぎて途中で切れた' : '応答が空');
+    return text;
+  }
+
+  async function callLLM(opt) {
+    const tries = opt.expectJson ? 2 : 1;
+    for (let i = 0; i < tries; i++) {
+      try {
+        const text = await once(opt);
+        if (!opt.expectJson) return text;
+        try { return JSON.parse(strip(text)); }
+        catch { if (i === tries - 1) { console.warn('[llm] JSON解釈失敗'); return null; } }
+      } catch (e) {
+        if (e?.name === 'AbortError') throw e;              // 中断は上に伝える（queueが戻す）
+        console.warn('[llm] 失敗', e?.message);
+        if (i === tries - 1) return null;
+      }
+    }
+    return null;
+  }
+
+  // ストリーミング（本体の会話用）。失敗しても例外を投げず false を返す。
+  async function stream({ system, messages, onDelta, signal }) {
+    try {
+      const res = await fetch(ENDPOINT, {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json', 'Authorization':`Bearer ${key()}` },
+        signal,
+        body: JSON.stringify({
+          model: CFG.llm.model, max_completion_tokens: CFG.llm.maxTokens,
+          reasoning_effort: CFG.llm.effort, stream: true,
+          messages: [...(system ? [{ role:'system', content:system }] : []), ...messages],
+        }),
+      });
+      if (!res.ok) {
+        let d=''; try { d = (await res.json())?.error?.message || ''; } catch {}
+        throw new Error(d || `HTTP ${res.status}`);
+      }
+      const reader = res.body.getReader(), dec = new TextDecoder();
+      let buf = '', full = '';
+      for (;;) {
+        const { done, value } = await reader.read(); if (done) break;
+        buf += dec.decode(value, { stream:true });
+        const lines = buf.split('\n'); buf = lines.pop() || '';
+        for (const ln of lines) {
+          const t = ln.trim();
+          if (!t.startsWith('data: ') || t === 'data: [DONE]') continue;
+          try {
+            const d = JSON.parse(t.slice(6)).choices?.[0]?.delta?.content || '';
+            if (d) { full += d; onDelta(d, full); }
+          } catch {}
+        }
+      }
+      return full;
+    } catch (e) {
+      if (e?.name === 'AbortError') return null;
+      console.error('[llm] stream失敗', e?.message);
+      return { error: e?.message || '通信に失敗しました' };
+    }
+  }
+
+  return { callLLM, stream, hasKey: () => !!key() };
+})();
+</script>
+
+<!-- ===== S7 FEATURES ===== -->
+<script>
+// Phase 1 以降で機能①②③⑤⑥⑦がここに入る。
+// 全て「無くても成立する」形で書き、失敗は try/catch で握りつぶしてコンソールのみに出す。
+const Session = (() => {
+  let cur = null;
+  async function start() {
+    const rec = { startedAt: Date.now(), lastTouchedAt: Date.now(), endedAt: null,
+                  endKind: null, weight: 1 };
+    try { rec.id = await Store.put('sessions', rec); } catch { rec.id = 0; }
+    cur = rec; return rec;
+  }
+  async function touch() {
+    if (!cur) return;
+    cur.lastTouchedAt = Date.now();
+    try { await Store.put('sessions', cur); } catch {}
+  }
+  return { start, touch, id: () => cur?.id ?? 0, get current(){ return cur; } };
+})();
+
+// 会話の本体。裏機能が全部落ちても、これだけで普通のチャットとして成立すること。
+const Chat = (() => {
+  let history = [];        // {role, content}
+  let busy = false;
+
+  async function send(text, snap) {
+    if (busy || !text.trim()) return;
+    busy = true; UI.setBusy(true);
+
+    UI.addMsg('user', text);
+    history.push({ role:'user', content:text });
+    const mid = await persist('user', text, snap);
+    Bus.emit('input:submit', { messageId: mid, text, snap });
+
+    const bubble = UI.addMsg('bot', '');
+    const ac = new AbortController();
+    const out = await LLM.stream({
+      system: SYS_CHAT,
+      messages: history.slice(-CFG.history.apiContext),
+      signal: ac.signal,
+      onDelta: (_, full) => UI.setMsg(bubble, full),
+    });
+
+    if (out && out.error) {
+      UI.setMsg(bubble, '');
+      bubble.closest('.msg')?.remove();
+      UI.toastErr('エラー: ' + out.error);
+    } else if (typeof out === 'string' && out.trim()) {
+      history.push({ role:'assistant', content:out });
+      await persist('assistant', out, null);
+    } else {
+      bubble.closest('.msg')?.remove();
+      UI.toastErr('うまく返せませんでした。もう一度どうぞ');
+    }
+
+    busy = false; UI.setBusy(false);
+    Session.touch();
+    Idle.arm();
+  }
+
+  async function persist(role, text, snap) {
+    try {
+      return await Store.put('messages', {
+        sessionId: Session.id(), branchId: null, parentId: null,
+        role, text, sentAt: Date.now(),
+        typedRanges: snap?.typedRanges ?? null,
+        pastedRanges: snap?.pastedRanges ?? null,
+        deleteCounts: snap?.deleteCounts ?? null,
+      });
+    } catch (e) { console.warn('[chat] 保存失敗', e?.message); return null; }
+  }
+
+  const SYS_CHAT = `あなたは日本語で応答する対話相手です。
+・簡潔に。冗長な前置き・要約・確認の繰り返しをしない。
+・相手が考えている途中なら、急かさず短く返す。
+・分からないことは分からないと言う。作り話をしない。`;
+
+  return { send, get history(){ return history; }, get busy(){ return busy; } };
+})();
+</script>
+
+<!-- ===== S8 UI ===== -->
+<script>
+const UI = (() => {
+  const $ = (id) => document.getElementById(id);
+  let logEl, inputEl, sendEl, toastEl, toastTimer;
+
+  function esc(s){ return String(s).replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  function addMsg(role, text) {
+    const row = document.createElement('div');
+    row.className = 'msg ' + (role === 'user' ? 'user' : 'bot');
+    row.innerHTML = `<div class="who">${role==='user'?'you':'gc'}</div><div class="body"></div>`;
+    const body = row.querySelector('.body');
+    body.textContent = text;
+    logEl.appendChild(row);
+    trim(); scroll();
+    return body;
+  }
+  function addSys(text) {
+    const row = document.createElement('div');
+    row.className = 'msg sys'; row.textContent = text;
+    logEl.appendChild(row); trim(); scroll(); return row;
+  }
+  function setMsg(body, text) { body.textContent = text; scroll(); }
+  function trim() { while (logEl.children.length > CFG.ui.maxLogNodes) logEl.firstChild.remove(); }
+  function scroll() { logEl.scrollTop = logEl.scrollHeight; }
+
+  function toast(msg, ms) {
+    if (!toastEl) return;
+    toastEl.textContent = msg; toastEl.classList.add('on');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('on'), ms || CFG.ui.toastMs);
+  }
+  const toastErr = (m) => toast(m, CFG.ui.errToastMs);
+
+  function setBusy(b) { sendEl.disabled = b; }
+
+  function autoGrow() {
+    inputEl.style.height = 'auto';
+    inputEl.style.height = Math.min(inputEl.scrollHeight, 180) + 'px';
+  }
+
+  function submit() {
+    const text = inputEl.value;
+    if (!text.trim() || Chat.busy) return;
+    const snap = Tele.snapshotForSend();
+    inputEl.value = ''; autoGrow();
+    Tele.flush('submit');
+    Chat.send(text, snap);
+  }
+
+  function boot() {
+    logEl = $('log'); inputEl = $('input'); sendEl = $('send'); toastEl = $('toast');
+    sendEl.addEventListener('click', submit);
+    inputEl.addEventListener('input', autoGrow);
+    inputEl.addEventListener('keydown', (e) => {
+      // IME変換中の Enter は確定であって送信ではない
+      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !Tele.composing) {
+        e.preventDefault(); submit();
+      }
+    });
+    $('btnPane').addEventListener('click', () => $('pane').classList.toggle('hidden'));
+    Tele.attach(inputEl);
+    Idle.arm();
+    $('hsub').textContent = Store.ready ? '' : '· メモリのみ';
+  }
+
+  return { boot, addMsg, addSys, setMsg, toast, toastErr, setBusy, esc, scroll };
+})();
+function toast(m, ms) { UI.toast(m, ms); }
+</script>
+
+<!-- ===== S9 PRIVACY ===== -->
+<script>
+// インジケータ・削除・エクスポート。Phase 3 の前提条件としてここを先に完成させる。
+const Privacy = (() => {
+  const isOn = () => { try { return localStorage.getItem(PRIV_KEY) === '1'; } catch { return false; } };
+  function set(v) {
+    try { localStorage.setItem(PRIV_KEY, v ? '1' : '0'); } catch {}
+    render();
+    Bus.emit('privacy:changed', { on: v });
+  }
+  function render() {
+    const b = document.getElementById('btnPriv'); if (!b) return;
+    const on = isOn();
+    b.textContent = on ? '● 記録 ON' : '記録 OFF';
+    b.classList.toggle('on', on);
+  }
+  function toggle() {
+    if (isOn()) { set(false); toast('記録を止めました'); return; }
+    const ok = confirm(
+      '打鍵の記録をオンにします。\n\n' +
+      '記録するもの:\n' +
+      '・キーを打った/消した/貼った、というイベントと時刻\n' +
+      '・書いたのに送らずに消したテキスト\n\n' +
+      '・すべてこの端末のブラウザの中だけに保存されます\n' +
+      '・外部に送信しません（AIには要約した結果だけを渡します）\n' +
+      '・いつでも一覧を見て、消せます\n\nオンにしますか？');
+    if (ok) { set(true); toast('記録をオンにしました。ヘッダに●が出ている間だけ記録します'); }
+  }
+  return { isOn, set, toggle, render };
+})();
+</script>
+
+<!-- ===== BOOT ===== -->
+<script>
+(async function boot() {
+  const setup = document.getElementById('setup');
+  const app   = document.getElementById('app');
+
+  async function start(k) {
+    try { localStorage.setItem(API_KEY, k); } catch {}
+    setup.style.display = 'none';
+    app.style.display = 'flex';
+    await Store.init();
+    await Session.start();
+    UI.boot();
+    Privacy.render();
+    document.getElementById('btnPriv').addEventListener('click', Privacy.toggle);
+    await Queue.recover();
+    Tele.purgeOld();
+    document.getElementById('input').focus();
+  }
+
+  let saved = ''; try { saved = localStorage.getItem(API_KEY) || ''; } catch {}
+  if (saved) { start(saved); return; }
+
+  const go = () => {
+    const k = document.getElementById('keyInput').value.trim();
+    if (!k.startsWith('sk-')) { document.getElementById('keyInput').focus(); return; }
+    start(k);
+  };
+  document.getElementById('keyGo').addEventListener('click', go);
+  document.getElementById('keyInput').addEventListener('keydown', e => { if (e.key==='Enter') go(); });
+})();
+</script>
+</body>
+</html>
