@@ -1997,7 +1997,7 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
 /* ── 送信アニメーション（文字が吹き出し→思考中アイコンへ吸い込まれる） ── */
 #animLayer {
   position: fixed; inset: 0; z-index: 592;
-  pointer-events: none; overflow: hidden; contain: strict;
+  pointer-events: none; overflow: hidden; contain: layout paint;
 }
 .anim-ghost {
   position: absolute; left: 0; top: 0;
@@ -3294,7 +3294,7 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 //         ・思い出の本に画面用の記法がそのまま刷られていたのを修正（bookPlain を追加）。
 //           **太字** / ### 見出し / [choice:] / 表の区切り行に加えて、v3.8.0 で足した
 //           ```zukai の JSON まで本文に載っていた。図は「（図）」に置き換える。
-const APP_VERSION   = 'v3.11.1';
+const APP_VERSION   = 'v3.11.2';
 const SUMMARY_EVERY = 10;
 const LEARN_PER_LEVEL = 3;    // 何個の学習で1レベル上がるか（小さいほど上がりやすい。旧:5 → v2.6.1で3に緩和。レベルは単調増加なので変更しても下がらない）
 // 重要記憶キー（削除されない永続情報）
@@ -11508,6 +11508,7 @@ function fly(from, answered) {
   if (!to0.width || !to0.height) { msgs.style.scrollBehavior = prevSB; return Promise.resolve(null); }
 
   const cs = getComputedStyle(bubble);
+  const L = layer();
   const ghost = bubble.cloneNode(true);
   ghost.removeAttribute('id');
   ghost.querySelectorAll('.bubble-copy-btn, button').forEach(b => b.remove());
@@ -11516,7 +11517,7 @@ function fly(from, answered) {
   ghost.className = 'bubble anim-ghost';
   ghost.style.width = to0.width + 'px';
   ghost.style.color = cs.color;      // 色だけは祖先セレクタ依存なので明示する
-  layer().appendChild(ghost);
+  L.appendChild(ghost);
 
   bubble.style.opacity = '0';
   const scale0 = from.fontSize / (parseFloat(cs.fontSize) || 15);
@@ -11550,9 +11551,14 @@ function fly(from, answered) {
       const p = Math.min(1, (now - t0) / D_FLY);
       const e = EASE_FLY(p);
       const to = bubble.getBoundingClientRect();     // 着地点を毎フレーム追う
+      // ★層そのものの原点を引く。getBoundingClientRect はレイアウトビューポート基準だが、
+      //   position:fixed の層は iOS でキーボードが出ている間ビジュアルビューポート基準になり、
+      //   両者の原点がずれる。引かないと、そのぶん丸ごと画面の外に描かれて何も見えない。
+      //   ずれは飛行中にも動く（キーボードが閉じる）ので毎フレーム読み直す。
+      const O  = L.getBoundingClientRect();
       const s  = scale0 + (1 - scale0) * e;
-      const x  = from.left + (to.left - from.left) * e;
-      const y  = from.top  + (to.top  - from.top)  * e;
+      const x  = from.left + (to.left - from.left) * e - O.left;
+      const y  = from.top  + (to.top  - from.top)  * e - O.top;
       ghost.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${s})`;
       ghost.style.opacity   = String(0.45 + 0.55 * e);
       if (p < 1) requestAnimationFrame(step);
@@ -11614,7 +11620,8 @@ function suck(bubble, answered) {
     const s = document.createElement('span');
     s.className = 'anim-char';
     s.textContent = c.ch;
-    s.style.transform = `translate3d(${c.x}px, ${c.y}px, 0)`;
+    const O0 = L.getBoundingClientRect();
+    s.style.transform = `translate3d(${c.x - O0.left}px, ${c.y - O0.top}px, 0)`;
     s.style.opacity = '0';
     L.appendChild(s);
     return {
@@ -11642,19 +11649,22 @@ function suck(bubble, answered) {
       }
       const p = Math.min(1, (now - t0) / D_SUCK);
       const r = wave.getBoundingClientRect();        // 吸い込み先も毎フレーム追う
-      const tx = r.left + r.width / 2, ty = r.top + r.height / 2;
+      const O = L.getBoundingClientRect();            // fly() と同じ理由で層の原点を引く
+      const tx = r.left + r.width / 2 - O.left, ty = r.top + r.height / 2 - O.top;
       for (const q of parts) {
         if (p < q.d) {
           // まだ飛んでいない。直前だけ、その場で光らせて「選ばれた」と分かるようにする。
           const g = Math.max(0, Math.min(1, (p - (q.d - PRE)) / PRE));
-          q.el.style.transform = `translate3d(${q.x}px, ${q.y}px, 0) scale(${1 + 0.28 * g})`;
+          q.el.style.transform =
+            `translate3d(${q.x - O.left}px, ${q.y - O.top}px, 0) scale(${1 + 0.28 * g})`;
           q.el.style.opacity = String(g);
           continue;
         }
         const local = Math.min(1, (p - q.d) / SHOT);   // 1粒あたりは短時間＝速い
         const e = EASE_SUCK(local);
-        const x = q.x + (tx - q.x) * e + Math.sin(e * Math.PI) * q.sway;
-        const y = q.y + (ty - q.y) * e - Math.sin(e * Math.PI) * q.arc;
+        const x0 = q.x - O.left, y0 = q.y - O.top;
+        const x = x0 + (tx - x0) * e + Math.sin(e * Math.PI) * q.sway;
+        const y = y0 + (ty - y0) * e - Math.sin(e * Math.PI) * q.arc;
         q.el.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${1.28 - 1.18 * e})`;
         q.el.style.opacity = String(Math.max(0, 1 - Math.pow(e, 1.7)));
       }
