@@ -2037,6 +2037,19 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
   font-family:'DM Mono',monospace;font-size:11.5px;line-height:1.8;
   color:rgba(232,232,226,0.85);overflow-wrap:anywhere;
   user-select:text;-webkit-user-select:text}
+/* 新しい版のお知らせ */
+#updBar{position:fixed;left:12px;right:12px;top:calc(env(safe-area-inset-top,0px) + 10px);
+  margin:0 auto;max-width:420px;z-index:1100;box-sizing:border-box;
+  background:#1a1a20;border:1px solid rgba(200,240,160,0.4);border-radius:12px;
+  padding:11px 13px;display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+  box-shadow:0 8px 32px rgba(0,0,0,0.6);font-size:13px;
+  animation:fadeUp 0.4s cubic-bezier(.22,1,.36,1) both}
+#updBar span{flex:1;min-width:120px;color:rgba(232,232,226,0.85)}
+#updBar b{color:var(--accent);font-weight:600}
+#updBar button{background:var(--accent);color:#0d0d0f;border:none;border-radius:8px;
+  padding:7px 13px;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer}
+#updBar button.ghost{background:none;border:1px solid rgba(255,255,255,0.18);
+  color:rgba(232,232,226,0.55);font-weight:400}
 </style>
 </head>
 <body>
@@ -3300,7 +3313,7 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 //         ・思い出の本に画面用の記法がそのまま刷られていたのを修正（bookPlain を追加）。
 //           **太字** / ### 見出し / [choice:] / 表の区切り行に加えて、v3.8.0 で足した
 //           ```zukai の JSON まで本文に載っていた。図は「（図）」に置き換える。
-const APP_VERSION   = 'v3.11.5';
+const APP_VERSION   = 'v3.12.0';
 const SUMMARY_EVERY = 10;
 const LEARN_PER_LEVEL = 3;    // 何個の学習で1レベル上がるか（小さいほど上がりやすい。旧:5 → v2.6.1で3に緩和。レベルは単調増加なので変更しても下がらない）
 // 重要記憶キー（削除されない永続情報）
@@ -11788,6 +11801,63 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
 else boot();
 
 return { run, fly, suck, _wrap: wrap };
+})();
+</script>
+
+<script>
+/* ============================================================================
+   新しい版のお知らせ
+   ホーム画面から使っていると、アプリは裏に残っている限り読み込み直さない。
+   そのため直したものが何日も届かないことがある。
+   起動時と、裏から戻ってきたときに、自分のファイルの版だけを見に行く。
+   ========================================================================== */
+const UPD = (() => {
+'use strict';
+const GAP = 300000;                 // 5分に1回までしか見に行かない
+const HEAD_BYTES = 400000;          // 版の行はファイルの前のほうにあるので頭だけ貰う
+let lastAt = 0, bar = null, busy = false;
+const base = () => location.href.split('#')[0].split('?')[0];
+
+async function check(force) {
+  if (bar || busy) return;
+  if (!force && Date.now() - lastAt < GAP) return;
+  if (document.hidden) return;
+  busy = true; lastAt = Date.now();
+  try {
+    const res = await fetch(base() + '?_chk=' + Date.now(), {
+      cache: 'no-store',
+      headers: { 'Range': 'bytes=0-' + HEAD_BYTES },   // 全部は落とさない
+    });
+    if (!res.ok && res.status !== 206) return;
+    const m = (await res.text()).match(/APP_VERSION\s*=\s*'(v[\d.]+)'/);
+    if (m && m[1] !== APP_VERSION) show(m[1]);
+  } catch (e) {
+    // 圏外・オフラインなら黙って諦める。次の機会に見る。
+  } finally { busy = false; }
+}
+
+function show(v) {
+  if (bar || !document.getElementById('app')) return;
+  bar = document.createElement('div');
+  bar.id = 'updBar';
+  bar.innerHTML = '<span>新しくなってるよ <b></b></span>'
+    + '<button id="updGo">読み込み直す</button>'
+    + '<button id="updNo" class="ghost">あとで</button>';
+  bar.querySelector('b').textContent = v;
+  document.body.appendChild(bar);
+  bar.querySelector('#updGo').addEventListener('click', () => {
+    // 素の再読み込みだと古いものが出てくることがあるので、版を付けて取り直させる
+    location.replace(base() + '?v=' + encodeURIComponent(v));
+  });
+  bar.querySelector('#updNo').addEventListener('click', () => {
+    bar.remove(); bar = null; lastAt = Date.now();
+  });
+}
+
+document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+window.addEventListener('focus', () => check());
+setTimeout(() => check(true), 5000);      // 起動して少し落ち着いてから1回
+return { check };
 })();
 </script>
 </body>
