@@ -2013,6 +2013,13 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
   backface-visibility: hidden;
 }
 @media (prefers-reduced-motion: reduce) { #animLayer { display: none; } }
+/* つかうAIの選択（起動画面） */
+.btn-engine{flex:1;background:none;border:1px solid rgba(255,255,255,0.16);border-radius:9px;
+  padding:9px 6px;font-family:inherit;font-size:12.5px;color:rgba(232,232,226,0.6);
+  cursor:pointer;transition:.15s}
+.btn-engine:hover{border-color:rgba(200,240,160,0.4)}
+.btn-engine.on{border-color:var(--accent);color:var(--accent);background:rgba(200,240,160,0.1);
+  font-weight:600}
 </style>
 </head>
 <body>
@@ -2025,6 +2032,22 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
     <label for="apiKey">OpenAI API Key</label>
     <input type="password" id="apiKey" placeholder="sk-..." autocomplete="off" spellcheck="false" inputmode="text">
     <p id="savedKeyNote" style="display:none;margin-top:8px;font-size:11px;color:var(--accent);opacity:0.7;letter-spacing:0.04em;">✓ 保存済みのAPIキーを読み込みました</p>
+
+    <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.08);">
+      <p style="margin:0 0 8px;font-size:10.5px;letter-spacing:0.1em;color:rgba(232,232,226,0.45);">
+        つかうAI</p>
+      <div id="engineSel" style="display:flex;gap:6px;margin-bottom:10px;">
+        <button type="button" class="btn-engine" data-e="openai" onclick="pickEngine('openai')">OpenAI</button>
+        <button type="button" class="btn-engine" data-e="kimi"   onclick="pickEngine('kimi')">Kimi K3</button>
+      </div>
+      <input type="password" id="kimiKey" placeholder="Kimiのキー（sk-...）" autocomplete="off"
+             spellcheck="false" inputmode="text" style="display:none;">
+      <p id="kimiNote" style="display:none;margin-top:7px;font-size:10.5px;line-height:1.7;
+         color:rgba(232,232,226,0.5);">
+        Kimi K3 は考える量を選べないので、短い返事でも少し時間がかかります。<br>
+        写真もそのまま送れます。キーは <span style="color:rgba(200,240,160,0.6);">platform.kimi.ai</span> で作れます。</p>
+    </div>
+
     <button class="btn-start" onclick="startChat()">ももと話す →</button>
     <p style="margin-top:14px;font-size:10.5px;color:rgba(232,232,226,0.7);line-height:1.7;letter-spacing:0.02em;text-align:center;">
       ⚠ iOS Safari をお使いの場合、7日間アクセスしないと<br>
@@ -2880,6 +2903,39 @@ const EMBED_STORE   = 'embeddings'; // ③思い出の意味検索（会話の�
 let MODEL       = 'gpt-5.4';   // メイン会話（恋愛・相談・画像認識・各ツール）
 let LIGHT_MODEL = 'gpt-5.4';   // 挨拶・雑談・一行返信など軽い会話
 let CHEAP_MODEL = 'gpt-5.4';   // 検索判定・要約・タイトル生成など裏方（高頻度・低負荷）
+
+// ── どのAPI先に投げるかを model 名から決める ─────────────────────────
+// Kimi (Moonshot) は OpenAI 互換なので、URLと鍵を差し替えるだけで通る。
+// ただし2点だけ違う:
+//   ・reasoning_effort の刻みが low / high / max の3段。K3は思考を切れないので
+//     'none' は存在しない。既定は max（＝いちばん重い）なので必ず明示して送る。
+//   ・画像は公開URLを受け付けない。base64 の data URL で渡す必要がある
+//     （このアプリは元から data URL で送っているので、そのままで通る）。
+const OPENAI_BASE = 'https://api.openai.com/v1';
+const KIMI_BASE   = 'https://api.moonshot.ai/v1';
+const KEY_KIMI    = 'momo_kimi_key';
+const KEY_ENGINE  = 'momo_engine';
+const KIMI_PLAN   = { chat: 'kimi-k3', light: 'kimi-k3', cheap: 'kimi-k3' };
+// none/medium は Kimi に無いので、いちばん近い刻みへ寄せる
+const KIMI_EFFORT = { none:'low', low:'low', medium:'high', high:'high', max:'max' };
+let kimiKey = '';
+const isKimi = (m) => /^kimi-/i.test(String(m || ''));
+function apiFor(model) {
+  return isKimi(model)
+    ? { url: KIMI_BASE   + '/chat/completions', key: kimiKey, kimi: true  }
+    : { url: OPENAI_BASE + '/chat/completions', key: apiKey,  kimi: false };
+}
+// いま Kimi を使う設定か（鍵が無ければ使えないので false に倒す）
+function engineIsKimi() {
+  try { return localStorage.getItem(KEY_ENGINE) === 'kimi' && !!kimiKey; } catch { return false; }
+}
+function applyEngine() {
+  if (!engineIsKimi()) return false;
+  MODEL = KIMI_PLAN.chat; LIGHT_MODEL = KIMI_PLAN.light; CHEAP_MODEL = KIMI_PLAN.cheap;
+  modelsResolved = true;                       // OpenAI のモデル一覧で上書きさせない
+  try { updateModelSubtitle(); } catch {}
+  return true;
+}
 // 各用途の希望モデル（優先順）。/v1/models に存在する最初のIDを採用。無ければ既定にフォールバック。
 //
 // 料金（2026年7月・per 1M tokens）:
@@ -2903,6 +2959,7 @@ const IMAGE_MODEL   = 'gpt-image-2';      // 画像生成・合成（GPT Image 2
 // これが「ハードコード前の実キー疎通確認」を兼ねる：使えないIDは採用しないので壊れない。
 let modelsResolved = false;
 async function resolveModels() {
+  if (applyEngine()) return;          // Kimi を使う設定なら、こちらの割り当てを守る
   if (modelsResolved || !apiKey) return;
   let available = null;
   try {
@@ -2960,13 +3017,15 @@ async function callChat(opt) {
   };
   // 'none' は「推論パラメータ自体を送らない」の意味（既存の sendMessage と同じ約束）
   const effort = o.effort === undefined ? 'low' : o.effort;
-  if (effort && effort !== 'none') body.reasoning_effort = effort;
+  const api = apiFor(body.model);
+  if (api.kimi) body.reasoning_effort = KIMI_EFFORT[effort] || 'low';  // Kimiは省略すると max（最重）
+  else if (effort && effort !== 'none') body.reasoning_effort = effort;
   if (o.responseFormat) body.response_format = o.responseFormat;
 
   const label = o.label || 'API';
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+  const res = await fetch(api.url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${api.key}` },
     ...(o.signal ? { signal: o.signal } : {}),
     body: JSON.stringify(body)
   });
@@ -3175,6 +3234,11 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 //   ★ アニメーションは待たない。送信ボタンを押した時点でAPIはもう走っている。
 //     アニメが終わってから考え始める作りにすると、その1秒がまるごと遅延になる。
 //   既存の処理には手を入れず、sendMessage を包むだけ
+// v3.11.0: Kimi K3（Moonshot）でも動くようにした
+//   OpenAI互換なので、URLと鍵を model 名から差し替えるだけで通る（apiFor）。
+//   ただし2点だけ違う。reasoning_effort は low/high/max の3段で 'none' が無く、
+//   省略すると max（最重）になるので必ず明示する。store/metadata は OpenAI 固有なので送らない。
+//   画像は公開URLを受け付けないが、元から base64 の data URL で送っているのでそのまま通る。
 //         ・トピック自動保存が画像を落としていたのを修正。currentTopicMsgs は
 //           メモリ節約のため ts/role/content しか持っておらず、それをそのままアーカイブに
 //           していたため、トピックのカードから「ここから続ける」を押すと
@@ -3190,7 +3254,7 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 //         ・思い出の本に画面用の記法がそのまま刷られていたのを修正（bookPlain を追加）。
 //           **太字** / ### 見出し / [choice:] / 表の区切り行に加えて、v3.8.0 で足した
 //           ```zukai の JSON まで本文に載っていた。図は「（図）」に置き換える。
-const APP_VERSION   = 'v3.10.0';
+const APP_VERSION   = 'v3.11.0';
 const SUMMARY_EVERY = 10;
 const LEARN_PER_LEVEL = 3;    // 何個の学習で1レベル上がるか（小さいほど上がりやすい。旧:5 → v2.6.1で3に緩和。レベルは単調増加なので変更しても下がらない）
 // 重要記憶キー（削除されない永続情報）
@@ -5023,6 +5087,14 @@ async function startChat() {
   // APIキー・ユーザー名を記憶する
   try { localStorage.setItem('momo_api_key', key); } catch(e) {}
 
+  // Kimi を使う設定なら、その鍵も拾って保存しておく
+  try {
+    const kf = document.getElementById('kimiKey');
+    const kv = kf ? kf.value.trim() : '';
+    if (kv) { kimiKey = kv; localStorage.setItem(KEY_KIMI, kv); }
+  } catch(e) {}
+  applyEngine();
+
   // 使えるモデルを起動時に確認して用途別に割り当てる（fire-and-forget。確定までは既定のgpt-5.4で安全に動く）
   resolveModels();
 
@@ -5167,16 +5239,19 @@ function maybeShowVersionPopup() {
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:600;color:#e8e8e2;margin-bottom:6px;">アップデート ${APP_VERSION}</div>
           <div style="font-size:11px;color:rgba(232,232,226,0.8);line-height:1.8;overflow-wrap:anywhere;">
-            <span style="font-size:14px;font-weight:700;color:#ffb3cf;">送った文字が、飛ぶようになった。</span><br>
+            <span style="font-size:14px;font-weight:700;color:#ffb3cf;">Kimi K3 でも話せるようになった。</span><br>
             <br>
-            打った文字がそのまま吹き出しへ飛んで、<br>
-            そのあと<b>考え中の丸に吸い込まれていく</b>。<br>
+            最初の画面で <b>つかうAI</b> を選べるよ。<br>
+            Kimiのキーを入れれば、そっちで動く。<br>
+            写真もそのまま送れる。<br>
             <br>
-            見た目だけの話じゃなくて、<br>
-            <b>飛んでいる間、ももはもう考えてる。</b><br>
-            アニメが終わるのを待ってから<br>
-            考え始めるわけじゃないから、<br>
-            返事が遅くなることはないよ。<br>
+            それと、送った文字が飛ぶようになった。<br>
+            吹き出しへ飛んだあと、<br>
+            <b>1文字ずつ考え中の丸に吸い込まれる。</b><br>
+            <br>
+            飛んでいる間、ももはもう考えてる。<br>
+            返事が先に来たら、<br>
+            アニメは途中でも引っこむよ。<br>
           </div>
           <div style="font-size:10px;color:rgba(232,232,226,0.5);margin-top:7px;">画面のどこかをタップで閉じる</div>
         </div>
@@ -5330,7 +5405,23 @@ async function maybeRunDailyBriefing() {
       document.getElementById('savedKeyNote').style.display = 'block';
     }
   } catch(e) {}
+  try {
+    const k = localStorage.getItem(KEY_KIMI) || '';
+    if (k) { kimiKey = k; document.getElementById('kimiKey').value = k; }
+  } catch(e) {}
+  try { pickEngine(localStorage.getItem(KEY_ENGINE) === 'kimi' ? 'kimi' : 'openai'); } catch(e) {}
 })();
+
+// つかうAIを選ぶ。Kimi のときだけ鍵の欄を出す。
+function pickEngine(which) {
+  try { localStorage.setItem(KEY_ENGINE, which); } catch(e) {}
+  document.querySelectorAll('#engineSel .btn-engine').forEach(b =>
+    b.classList.toggle('on', b.dataset.e === which));
+  const show = which === 'kimi';
+  const f = document.getElementById('kimiKey'), n = document.getElementById('kimiNote');
+  if (f) f.style.display = show ? 'block' : 'none';
+  if (n) n.style.display = show ? 'block' : 'none';
+}
 
 document.getElementById('apiKey').addEventListener('keydown', e => { if (e.key === 'Enter') startChat(); });
 
@@ -8394,15 +8485,19 @@ ${srcList}`
   currentStreamAbort = ac;
 
   try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    const chatApi = apiFor(chatModel);
+    const res = await fetch(chatApi.url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${chatApi.key}` },
       signal: ac.signal,
       body: JSON.stringify({
         model: chatModel, messages: msgs, stream: true, max_completion_tokens: 16000,
-        store: true,
-        metadata: { reasoning: reasoningEffort, search: searchResult ? 'true' : 'false', model: chatModel },
-        ...(reasoningEffort !== 'none' ? { reasoning_effort: reasoningEffort } : {})
+        // store / metadata は OpenAI 固有。Kimi に送ると弾かれうるので付けない
+        ...(chatApi.kimi ? {} : { store: true,
+          metadata: { reasoning: reasoningEffort, search: searchResult ? 'true' : 'false', model: chatModel } }),
+        ...(chatApi.kimi
+              ? { reasoning_effort: KIMI_EFFORT[reasoningEffort] || 'low' }
+              : (reasoningEffort !== 'none' ? { reasoning_effort: reasoningEffort } : {}))
       })
     });
 
