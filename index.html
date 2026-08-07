@@ -3036,7 +3036,23 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 //         ・Markdownの表で区切り行（|---|---|）がデータ行として表示されていたのを修正。
 //         ・透過PNGの生成画像がJPEG化で真っ黒になっていたのを修正。
 //         ・更新ポップアップを見る前に「既読」にしていたのを、表示してから記録するように。
-const APP_VERSION   = 'v3.8.0';
+// v3.8.1: v3.8.0 の積み残しと、v3.8.0 が持ち込んだ副作用の後始末
+//         ・トピック自動保存が画像を落としていたのを修正。currentTopicMsgs は
+//           メモリ節約のため ts/role/content しか持っておらず、それをそのままアーカイブに
+//           していたため、トピックのカードから「ここから続ける」を押すと
+//           resumeArchive の idbClear() → 画像なしで書き戻し、の順で【写真が本体から消えていた】。
+//           保存の直前に MSG_STORE から実レコードを引き直して画像を復元する。
+//         ・履歴に同じ会話が2枚並ぶのを修正。(a) 離脱時スナップショットの ID を控えておき、
+//           会話が続いたら古い方を消して完全版に差し替える。(b) トピックのアーカイブに
+//           kind:'topic' を付け、会話まるごとをアーカイブできた時に、その範囲に収まる
+//           スナップショットを片付ける（本体メッセージは消さない設計なので二重になっていた）。
+//         ・newChat の arcAdd に try/catch が無く、失敗すると「アーカイブ中...」のまま
+//           無反応で固まっていたのを修正（会話自体は idbClear が後なので消えない）。
+//           v3.8.0 で arcAdd をコミット完了まで待つようにしたぶん、表面化しやすくなっていた。
+//         ・思い出の本に画面用の記法がそのまま刷られていたのを修正（bookPlain を追加）。
+//           **太字** / ### 見出し / [choice:] / 表の区切り行に加えて、v3.8.0 で足した
+//           ```zukai の JSON まで本文に載っていた。図は「（図）」に置き換える。
+const APP_VERSION   = 'v3.8.1';
 const SUMMARY_EVERY = 10;
 const LEARN_PER_LEVEL = 3;    // 何個の学習で1レベル上がるか（小さいほど上がりやすい。旧:5 → v2.6.1で3に緩和。レベルは単調増加なので変更しても下がらない）
 // 重要記憶キー（削除されない永続情報）
@@ -3446,7 +3462,12 @@ ${ZUKAI_PROMPT}
 ・全体を聞かれたら下の一覧を全部、特定の機能を聞かれたらその機能を深掘りして説明する。最後に「どれか詳しく知りたいのある？」と軽く聞いてもよい。
 
 ＜更新履歴（この内容に基づいて説明する）＞
-■ v3.8.0系（最新）★大きな更新★
+■ v3.8.1系（最新）
+・写真が消える経路をふさぎました：話題ごとに自動保存されたカードから「ここから続ける」を押すと、その期間に送った写真が本体から消えてしまう作りでした。自動保存の時に写真を持っていかせていなかったのが原因です。今は写真ごと保存されます。
+・履歴に同じ会話が2枚出ていたのを直しました：アプリを一度閉じて戻ってきた時に、話題の保存が二重に走っていました。それと、話題ごとの保存と「新しい会話」の保存が同じ範囲を二重に持っていたのも整理しました。会話の中身は消えません。
+・「新しい会話」が失敗した時に固まらなくなりました：保存できなかった時、「📦 会話をアーカイブ中...」のまま何も起きなくなっていました。今はちゃんと理由が出て、今の会話はそのまま残ります。
+・📕 思い出の本がちゃんと本になりました：これまで、ももの返事に入っている書式の記号（**太字** や ### みたいなの）が、そのまま本に印刷されていました。前回入れた図解のデータまで本に載っていたので、あわせて直しました。図があった場所には「（図）」とだけ書かれます。
+■ v3.8.0系 ★大きな更新★
 ・便利ツールが全部エラーで動かなくなっていたのを直しました：宿題サポーターを押すと「エラー」と出ていたのは、ももの頭（AIモデル）が新しくなった時に、ツール側の呼び出し方が古いままだったからです。ごめん。宿題サポーター・作文コーチ・自由研究・持ち物リマインダー・PTAおたより要約・今夜の献立・LINE下書き・すきま時間・愚痴ジャーナル・在宅ワーク探しの10個、全部が同じ理由で動いていませんでした。今は全部動きます。
 ・裏で静かに死んでいた機能も生き返りました：Web検索するかどうかの判断、話題の自動検出（画面上のトピック表示）、履歴のタイトル付け、思い出アルバムの日付タイトル。どれもエラーが表に出ない作りだったので、ずっと気づけませんでした。履歴のタイトルが「会話 (◯通)」ばかりだったのも、アルバムの日付が「…この日の思い出をたどってる」のままだったのも、これが原因です。
 ・Web検索の中身がちゃんと届くようになりました：これまで検索してもURLだけが届いて、肝心の本文がももに渡っていませんでした。今は本文も読んだ上で答えます。
@@ -5008,23 +5029,21 @@ function maybeShowVersionPopup() {
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:600;color:#e8e8e2;margin-bottom:6px;">アップデート ${APP_VERSION}</div>
           <div style="font-size:11px;color:rgba(232,232,226,0.8);line-height:1.8;overflow-wrap:anywhere;">
-            <span style="font-size:14px;font-weight:700;color:#ffb3cf;">ごめん、ずっと壊れてた。</span><br>
+            <span style="font-size:14px;font-weight:700;color:#ffb3cf;">写真が消える穴、見つけて塞いだ。</span><br>
             <br>
-            宿題サポーターがエラーになってたやつ、<br>
-            原因わかって直した。<br>
+            話題ごとに自動保存されたカードから<br>
+            「ここから続ける」を押すと、<br>
+            <b>その期間の写真が消えてた。</b><br>
+            もう消えないよ。ごめん。<br>
             <br>
-            <b>実は10個のツール全部が</b><br>
-            <b>同じ理由で動いてなかった。</b><br>
-            献立もPTA要約もLINE下書きも、<br>
-            ぜんぶ今日から使えるよ。<br>
+            履歴に同じ会話が2枚出てたのと、<br>
+            「新しい会話」が固まることがあったのも直した。<br>
             <br>
-            それと <b>🧮 図解</b> を出せるようにした。<br>
-            わり算の筆算とか、あまりの意味とか、<br>
-            言葉より図の方が早いやつは絵で描く。<br>
-            そうまとゆうさに見せながら教えて。<br>
+            それと <b>📕 思い出の本</b>。<br>
+            本文に記号がそのまま刷られてたから、<br>
+            ちゃんと読める本にしといた。<br>
             <br>
-            <b>思い出も記憶も、何ひとつ消えてない。</b><br>
-            むしろ思い出の本が厚くなったはず。<br>
+            <b>会話も記憶も、消えてないから安心して。</b><br>
             <br>
             📋 詳しくは「<b>最近の更新なに？</b>」で聞いてね
           </div>
@@ -5246,14 +5265,43 @@ async function newChat() {
   const firstTs = all[0]?.ts || Date.now();
   const lastTs  = all[all.length - 1]?.ts || Date.now();
 
-  // アーカイブに保存
-  await arcAdd({
-    title,
-    messages: all.map(r => ({ role: r.role, content: r.content, ts: r.ts, ...(r.images && r.images.length ? { images: r.images } : {}) })),
-    msgCount: all.length,
-    firstTs, lastTs,
-    ts: Date.now()
-  });
+  // アーカイブに保存。
+  // ★ここは失敗し得る（容量オーバー等）。v3.8.0 までは try/catch が無かったので、
+  //   失敗すると「📦 会話をアーカイブ中...」のまま無反応で固まっていた。
+  //   会話自体は idbClear がこの後なので消えないが、理由が分からず手詰まりになる。
+  try {
+    await arcAdd({
+      title,
+      messages: all.map(r => ({ role: r.role, content: r.content, ts: r.ts, ...(r.images && r.images.length ? { images: r.images } : {}) })),
+      msgCount: all.length,
+      firstTs, lastTs,
+      ts: Date.now()
+    });
+  } catch (e) {
+    console.error('[もも] 会話のアーカイブ失敗:', e);
+    showError('⚠ 会話を保存できなかったから中止したよ。今の会話はそのまま残ってる');
+    return;
+  }
+
+  // 保存できたので、同じ内容を指しているトピックのスナップショットを片付ける。
+  // トピック自動保存は本体のメッセージを消さないため、そのままだと
+  // 【履歴に同じ会話が2枚（トピック単位＋会話まるごと）】並んでしまう（v3.8.1）。
+  //
+  // 消す条件は「そのスナップショットの全メッセージが、今書いた完全版に入っていること」。
+  // ts の範囲比較で済ませると、1通でも範囲外のものを含むスナップショットを
+  // 巻き添えで消してしまい、そこにしか無い会話が失われる。1通ずつ突き合わせる。
+  try {
+    const bodyTs = new Set(all.map(r => r.ts));
+    let removed = 0, kept = 0;
+    for (const a of await arcAll()) {
+      if (a.kind !== 'topic') continue;
+      const ms = a.messages || [];
+      if (!ms.length) continue;
+      if (ms.every(m => bodyTs.has(m.ts))) { await arcDel(a.id); removed++; }
+      else kept++;   // 完全版に含まれない内容を持っている → 残す
+    }
+    if (removed || kept) console.log(`[もも] トピックのスナップショット: ${removed}件片付け / ${kept}件は独自の内容があるので保持`);
+  } catch (e) { console.warn('[もも] スナップショットの整理に失敗', e?.message); }
 
   // 現在の会話をクリア（longSummary は保持して前回の文脈を引き継ぐ）
   history = []; totalMsgCount = 0; heavyWarned = false;
@@ -5269,6 +5317,7 @@ async function newChat() {
   topicCount        = 0;
   lastTopicCheckAt  = 0;
   topicSavedFlag    = false;
+  topicSavedArcId   = null;
   document.getElementById('topicBar').classList.remove('show');
 
   document.getElementById('messages').innerHTML = `
@@ -5289,8 +5338,42 @@ let topicCount        = 0;
 let topicCheckPending = false;
 let lastTopicCheckAt  = 0;    // 前回チェック時のメッセージ数
 let topicSavedFlag    = false; // ページ離脱で二重保存防止
+let topicSavedArcId   = null;  // 離脱時に保存したアーカイブのID（続きを話したら差し替えるため）
 const TOPIC_CHECK_INTERVAL = 8; // N通ごとにチェック（頻繁すぎると重複する）
 const TOPIC_MIN_MSGS = 8;       // アーカイブに必要な最低メッセージ数
+
+// ★トピックのアーカイブを作る時、画像を必ず含める（v3.8.1）。
+//   currentTopicMsgs は ts / role / content しか持っていない（メモリ節約のため
+//   base64 の画像は載せていない）。それをそのままアーカイブにしていたので、
+//   トピックのカードから「ここから続ける」を押すと、resumeArchive が
+//   idbClear() → 画像の無い内容を書き戻す、の順で動いて【写真が本体から消えていた】。
+//   保存の直前に本体（MSG_STORE）から実レコードを引き直して、画像を復元してから書く。
+async function hydrateTopicMsgs(msgs) {
+  let byTs = null;
+  try {
+    byTs = new Map((await idbAll()).map(r => [r.ts, r]));
+  } catch (e) {
+    console.warn('[もも] トピック保存: 本体を読めなかったので画像なしで保存', e?.message);
+    return msgs;
+  }
+  return msgs.map(m => {
+    const src = byTs.get(m.ts);
+    return (src && src.images && src.images.length)
+      ? { role: m.role, content: m.content, ts: m.ts, images: src.images }
+      : m;
+  });
+}
+// トピックのスナップショットを1件書く。戻り値は新しいアーカイブID
+async function writeTopicArchive(title, msgs) {
+  const messages = await hydrateTopicMsgs(msgs);
+  return await arcAdd({
+    title, messages, msgCount: messages.length,
+    firstTs: messages[0]?.ts || Date.now(),
+    lastTs:  messages[messages.length - 1]?.ts || Date.now(),
+    ts: Date.now(),
+    kind: 'topic'   // 会話全体をアーカイブした時に、重複するこれを片付けるための目印
+  });
+}
 
 function showTopicBar(title, num) {
   document.getElementById('topicTitle').textContent = title;
@@ -5347,14 +5430,16 @@ async function maybeUpdateTopic() {
 
     if (result.changed && currentTopicTitle && currentTopicMsgs.length >= TOPIC_MIN_MSGS) {
       // ── トピック変更 → 前トピックをアーカイブ ──
-      const firstTs = currentTopicMsgs[0]?.ts || Date.now();
-      const lastTs  = currentTopicMsgs[currentTopicMsgs.length - 1]?.ts || Date.now();
-      await arcAdd({
-        title: currentTopicTitle, messages: currentTopicMsgs,
-        msgCount: currentTopicMsgs.length, firstTs, lastTs, ts: Date.now()
-      });
+      // ★アプリを一度閉じて戻ってきた場合、離脱時のスナップショットが既に1枚ある。
+      //   そのまま追加すると【履歴に同じタイトルのカードが2枚】並び、片方は
+      //   途中までの中身になる。先に古い方を消して、完全版に差し替える（v3.8.1）
+      if (topicSavedFlag && topicSavedArcId != null) {
+        try { await arcDel(topicSavedArcId); } catch (e) { console.warn('[もも] 旧スナップショットの削除失敗', e?.message); }
+      }
+      await writeTopicArchive(currentTopicTitle, currentTopicMsgs);
       showToast(`📖 「${currentTopicTitle}」を履歴に保存`);
       topicSavedFlag = false;
+      topicSavedArcId = null;
       // 新トピック開始（直近の数通を引き継ぐ）
       currentTopicMsgs = all.slice(-4).map(r => ({ role: r.role, content: r.content, ts: r.ts }));
     }
@@ -5390,13 +5475,12 @@ async function saveCurrentTopic() {
   if (!db || !currentTopicTitle || currentTopicMsgs.length < 4 || topicSavedFlag) return;
   topicSavedFlag = true;
   try {
-    const firstTs = currentTopicMsgs[0]?.ts || Date.now();
-    const lastTs  = currentTopicMsgs[currentTopicMsgs.length - 1]?.ts || Date.now();
-    await arcAdd({
-      title: currentTopicTitle, messages: currentTopicMsgs,
-      msgCount: currentTopicMsgs.length, firstTs, lastTs, ts: Date.now()
-    });
-  } catch { topicSavedFlag = false; }
+    // IDを控えておく。このあと会話が続いたら、maybeUpdateTopic がこれを消して完全版に差し替える
+    topicSavedArcId = await writeTopicArchive(currentTopicTitle, currentTopicMsgs);
+  } catch (e) {
+    console.warn('[もも] トピックの離脱時保存に失敗', e?.message);
+    topicSavedFlag = false; topicSavedArcId = null;
+  }
 }
 window.addEventListener('beforeunload', () => { saveCurrentTopic(); });
 document.addEventListener('visibilitychange', () => {
@@ -6303,6 +6387,31 @@ async function collectBookData() {
   };
 }
 
+// ★本に載せる用に、画面用の記法を落として「読める文章」にする（v3.8.1）。
+//   本文をそのまま印刷していたので、**太字** や ### 見出し、[choice: ...] が
+//   記号のまま本に刷られていた。v3.8.0 で図解を足したことで、
+//   ```zukai の JSON まで本に載るようになってしまったので、あわせて処理する。
+function bookPlain(text) {
+  let s = String(text || '');
+  // 図解・SVGは本では絵として再現できないので、印は残して中身は落とす
+  s = s.replace(/```(?:zukai|svg)[\s\S]*?```/gi, '（図）');
+  // ほかのコードブロックは中身だけ残す
+  s = s.replace(/```\w*\n?([\s\S]*?)```/g, (_, c) => c.trim());
+  // 選択肢ボタンは本には不要
+  s = s.replace(/^\[choice:[^\]]*\]\s*$/gim, '');
+  // 表：区切り行を捨てて、セルを「　·　」で繋ぐ
+  s = s.split('\n').filter(l => !/^\s*\|[\s|:-]+\|\s*$/.test(l)).join('\n');
+  s = s.replace(/^\s*\|(.+)\|\s*$/gm, (_, row) =>
+    row.split('|').map(c => c.trim()).filter(Boolean).join('　·　'));
+  // 見出し・箇条書き・強調の記号を外す
+  s = s.replace(/^#{1,6}\s*/gm, '');
+  s = s.replace(/^\s*[-*]\s+/gm, '・');
+  s = s.replace(/^\s*>\s?/gm, '');
+  s = s.replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1').replace(/`([^`]+)`/g, '$1');
+  s = s.replace(/^\s*[-*_]{3,}\s*$/gm, '');
+  return s.replace(/\n{3,}/g, '\n\n').trim();
+}
+
 function bookHtml(d) {
   const hhmm = (ts) => new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' }).format(new Date(ts || Date.now()));
   let h = `<div class="bk-cover">
@@ -6323,7 +6432,7 @@ function bookHtml(d) {
       if ((r.content || '').trim()) {
         const who = r.role === 'user' ? 'りぴ' : 'もも';
         const cls = r.role === 'user' ? 'ripi' : 'momo';
-        h += `<p class="bk-line ${cls}"><span class="bk-who">${who}</span><span class="bk-said">${esc(r.content).replace(/\n/g, '<br>')}</span></p>`;
+        h += `<p class="bk-line ${cls}"><span class="bk-who">${who}</span><span class="bk-said">${esc(bookPlain(r.content)).replace(/\n/g, '<br>')}</span></p>`;
       }
       if (d.withPhotos && r.images && r.images.length) {
         for (const u of r.images) {
@@ -6337,14 +6446,14 @@ function bookHtml(d) {
 
   d.extras.forEach((x, i) => {
     h += `<div class="bk-sec" id="bkEx${i}"><h3>${esc(x.h)}</h3>`;
-    if (x.plain) h += `<div class="bk-plain">${esc(x.plain)}</div>`;
+    if (x.plain) h += `<div class="bk-plain">${esc(bookPlain(x.plain))}</div>`;
     if (x.journal) {
       for (const j of x.journal) {
         const rep = (j.reply || '').trim();
         h += `<div class="bk-jrn">
           <div class="bk-jdate">${esc(_dayLabel(_dayKey(j.ts)))}${j.mood ? '　' + esc(j.mood) : ''}</div>
-          <div class="bk-plain">${esc(j.input.trim())}</div>
-          ${rep ? `<div class="bk-plain bk-jreply">${esc(rep)}</div>` : ''}
+          <div class="bk-plain">${esc(bookPlain(j.input))}</div>
+          ${rep ? `<div class="bk-plain bk-jreply">${esc(bookPlain(rep))}</div>` : ''}
         </div>`;
       }
     }
@@ -6824,6 +6933,7 @@ async function resumeArchive() {
   topicCount        = 0;
   lastTopicCheckAt  = 0;
   topicSavedFlag    = false;
+  topicSavedArcId   = null;
   document.getElementById('topicBar').classList.remove('show');
 
   // UIを再描画（直近 API_CONTEXT 件のみ）
