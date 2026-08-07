@@ -88,6 +88,44 @@ header h1 span{color:var(--faint);font-weight:400}
 #setup .note{font-size:11.5px;color:var(--faint);margin-top:14px;line-height:1.8}
 
 @media(max-width:860px){ #pane{position:fixed;inset:0 0 0 auto;width:min(300px,86vw);z-index:500} }
+
+/* ── phase1: 確定事項ペイン ─────────────── */
+.fact{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:8px;
+  background:var(--surface2);font-size:13px;line-height:1.65;cursor:pointer;transition:.15s}
+.fact:hover{border-color:var(--accent)}
+.fact .k{font-size:10.5px;letter-spacing:.06em;color:var(--faint);
+  display:flex;align-items:center;gap:6px;margin-bottom:3px}
+.fact .k b{font-weight:600;padding:1px 5px;border-radius:4px;font-size:10px}
+.fact.k-decision   .k b{background:rgba(158,203,255,.16);color:var(--accent)}
+.fact.k-constraint .k b{background:rgba(240,163,90,.16);color:var(--warn)}
+.fact.k-number     .k b{background:rgba(127,214,166,.16);color:var(--good)}
+.fact.k-deadline   .k b{background:rgba(255,139,139,.16);color:var(--bad)}
+.fact .v{overflow-wrap:anywhere}
+.fact.sup{opacity:.45}
+.fact.sup .v{text-decoration:line-through}
+.fact .sup-note{font-size:11px;color:var(--warn);margin-top:3px}
+.fact details{margin-top:6px}
+.fact details summary{font-size:11px;color:var(--faint);cursor:pointer;list-style:none}
+.fact details summary::-webkit-details-marker{display:none}
+.fact details summary::before{content:'▸ '}
+.fact details[open] summary::before{content:'▾ '}
+.fact .ev{font-size:11.5px;color:var(--dim);white-space:pre-wrap;overflow-wrap:anywhere;
+  border-left:2px solid var(--line2);padding-left:8px;margin-top:5px;
+  max-height:160px;overflow-y:auto}
+.msg.flash{animation:flash 1.4s ease-out}
+@keyframes flash{0%{background:var(--accent-dim)}100%{background:transparent}}
+
+/* ── phase1: おかえり要約 ───────────────── */
+.welcome{max-width:760px;margin:0 auto 16px;border:1px solid var(--line2);
+  border-radius:var(--r);padding:11px 13px;background:var(--surface);
+  font-size:13px;line-height:1.75}
+.welcome h4{margin:0 0 6px;font-size:11px;letter-spacing:.09em;color:var(--faint);
+  font-weight:600;display:flex;align-items:baseline;gap:7px}
+.welcome .recap{color:var(--dim);white-space:pre-wrap;overflow-wrap:anywhere}
+.welcome .rs{font-size:10.5px;color:var(--faint);font-weight:400}
+.welcome .pend{margin-top:9px;padding-top:9px;border-top:1px solid var(--line)}
+.welcome .pend ul{margin:0;padding-left:17px}
+.welcome .pend li{margin:0 0 4px;overflow-wrap:anywhere}
 </style>
 </head>
 <body>
@@ -800,6 +838,305 @@ const Chat = (() => {
 })();
 </script>
 
+<!-- ===== S7 FEATURES / Phase 1 追加 ===== -->
+<script>
+// 機能① 手打ちと貼付の分離 → 確定事項ペイン
+// 機能③ おかえり要約 × 未解決キュー
+// フェーズ0の区画（S0〜S6, Chat, UI, Privacy）には手を入れず、ここに足すだけにする。
+// どちらも「無くても成立する」機能。LLMが落ちても本体のチャットは通常どおり動くこと。
+
+const nrm = (s) => String(s ?? '').trim().toLowerCase().replace(/[\s　、。,.」「（）()]/g, '');
+
+// ─────────────────────────────────────────────────────────────
+// 機能① 確定事項ペイン
+// 前提: 貼られた資料は文脈、手打ちの一行が意志。typed だけを昇格させる。
+// ─────────────────────────────────────────────────────────────
+const Facts = (() => {
+  const KIND = { decision:'決定', constraint:'制約', number:'数値', deadline:'期限' };
+
+  const SYS = `あなたは打ち込まれた文から「確定事項」だけを抜き出す抽出器です。
+入力は話者が自分の指で打った文だけです。貼り付けた資料は含まれていません。
+
+抜き出すもの:
+・決めたこと / 守るべき制約 / 確定した数値 / 期限
+
+抜き出さないもの:
+・言い切っていないもの（検討中、〜かもしれない、〜どう思う）
+・質問、感想、雑談、あいさつ
+・原文に無い情報。数値と日付は原文のまま写すこと。
+・該当が無ければ facts を空配列にする。空で構わない。
+
+kind は次の4つから選ぶ:
+ decision   = 方針や選択の決定
+ constraint = 守るべき条件・禁止事項
+ number     = 確定した数量・金額・比率
+ deadline   = 日付や締切
+
+subject は「何についてか」を2〜8文字の名詞で書く（例: 予算, 納期, 会場, DB）。
+同じ対象の話には必ず同じ subject を使う。あとで矛盾検出に使うため、表記を揺らさない。
+value は確定した内容を30文字以内で書く。
+
+出力（JSONのみ）:
+{"facts":[{"kind":"decision","subject":"納期","value":"3月末に確定"}]}`;
+
+  Queue.def('extract_facts', async (p, signal) => {
+    const typed = String(p.typedText || '').trim();
+    if (typed.length < 4) return;                       // 手打ちが無い（＝全部貼付）なら何もしない
+    const pasted = String(p.pastedText || '');
+    const user = '手打ち:\n' + typed.slice(0, 3000) +
+      (pasted ? `\n\n（同時に ${pasted.length} 文字の貼付があるが、これは抽出対象ではない）` : '');
+
+    const out = await LLM.callLLM({ system:SYS, messages:[{ role:'user', content:user }],
+                                    expectJson:true, model:CFG.llm.taskModel, signal });
+    if (!out || !Array.isArray(out.facts) || !out.facts.length) return;
+
+    const sid = Session.id();
+    let live = [];
+    try { live = (await Store.query('facts','sessionId',{ only:sid })).filter(f => f.status === 'active'); }
+    catch {}
+
+    for (const f of out.facts.slice(0, 6)) {
+      const value = String(f?.value || '').trim();
+      if (!value) continue;
+      const rec = {
+        sessionId: sid, messageId: p.messageId ?? null,
+        kind: KIND[f.kind] ? f.kind : 'decision',
+        subject: String(f.subject || '').trim().slice(0, 24),
+        value: value.slice(0, 120),
+        evidenceIds: p.messageId != null ? [p.messageId] : [],
+        evidenceText: pasted.slice(0, 4000),
+        status: 'active', supersededBy: null, createdAt: Date.now(),
+      };
+      let id; try { id = await Store.put('facts', rec); } catch { continue; }
+      rec.id = id;
+
+      // 矛盾検出: 同種・同対象で値が違うものは superseded にする。消さない。
+      for (const old of live) {
+        if (old.status !== 'active' || old.id === id) continue;
+        if (old.kind !== rec.kind) continue;
+        if (nrm(old.subject) !== nrm(rec.subject)) continue;
+        if (nrm(old.value) === nrm(rec.value)) continue;
+        old.status = 'superseded'; old.supersededBy = id;
+        try { await Store.put('facts', old); } catch {}
+      }
+      live.push(rec);
+    }
+    await render();
+  });
+
+  // 送信のたびに1件だけ積む。dedupeKey で同じメッセージの重複登録を防ぐ。
+  Bus.on('input:submit', (e) => {
+    if (!e) return;
+    // 元発言へ飛べるように、いま描かれた吹き出しに messageId を貼る
+    if (e.messageId != null) {
+      const ns = document.querySelectorAll('#log .msg.user');
+      const last = ns[ns.length - 1];
+      if (last) last.dataset.mid = String(e.messageId);
+    }
+    Queue.add('extract_facts', {
+      messageId: e.messageId ?? null,
+      typedText: e.snap?.typedText ?? e.text ?? '',
+      pastedText: e.snap?.pastedText ?? '',
+    }, { interruptible:true, dedupeKey:'facts:' + (e.messageId ?? Date.now()) });
+  });
+
+  function jump(mid) {
+    if (mid == null || mid === '') return;
+    const n = document.querySelector(`#log .msg[data-mid="${CSS.escape(String(mid))}"]`);
+    if (!n) { UI.toast('元の発言は流れて見えなくなっています'); return; }
+    n.scrollIntoView({ behavior:'smooth', block:'center' });
+    n.classList.remove('flash'); void n.offsetWidth; n.classList.add('flash');
+  }
+
+  async function render() {
+    const el = document.getElementById('paneBody');
+    if (!el) return;
+    let list = [];
+    try { list = await Store.query('facts','sessionId',{ only: Session.id() }); } catch {}
+    list.sort((a,b) => (a.createdAt||0) - (b.createdAt||0));
+
+    const badge = document.getElementById('btnPane');
+    const alive = list.filter(f => f.status === 'active').length;
+    if (badge) badge.textContent = alive ? `確定事項 ${alive}` : '確定事項';
+
+    if (!list.length) {
+      el.innerHTML = '<div class="empty">手打ちで書いた「決めたこと」がここに積まれます。</div>';
+      return;
+    }
+    el.innerHTML = '';
+    for (const f of list) {
+      const d = document.createElement('div');
+      d.className = 'fact k-' + f.kind + (f.status === 'superseded' ? ' sup' : '');
+      let h = `<div class="k"><b>${UI.esc(KIND[f.kind] || f.kind)}</b>${UI.esc(f.subject || '')}</div>`
+            + `<div class="v">${UI.esc(f.value || '')}</div>`;
+      if (f.status === 'superseded')
+        h += '<div class="sup-note">あとで更新されました（履歴として残しています）</div>';
+      if (f.evidenceText)
+        h += `<details><summary>根拠にした貼付 ${f.evidenceText.length}文字</summary>`
+           + `<div class="ev">${UI.esc(f.evidenceText.slice(0, 1500))}</div></details>`;
+      d.innerHTML = h;
+      d.addEventListener('click', (ev) => {
+        if (ev.target.closest('details')) return;   // 折りたたみの開閉ではジャンプしない
+        jump(f.messageId);
+      });
+      el.appendChild(d);
+    }
+  }
+
+  return { render, jump };
+})();
+
+// ─────────────────────────────────────────────────────────────
+// 機能③ おかえり要約 × 未解決キュー
+// 離席した時点で生成を始め、戻ってきたときには出来上がっている状態にする。
+// 要約＝失われた文脈の補充 / キュー＝失われた意志の補充。役割が違うので重複させない。
+// ─────────────────────────────────────────────────────────────
+const Returns = (() => {
+  const MIN = 60000, HOUR = 3600000, DAY = 86400000;
+  const REASON = { unanswered:'答えられていない', deferred:'後回しにした', blocked:'何かを待っている' };
+  const ENDKIND = { resolved:'片付いた', deferred:'保留にした', derailed:'話が逸れた', exhausted:'力尽きた' };
+
+  const SYS = `あなたは会話の記録係です。ユーザーが席を外している間に、
+戻ってきたときに読ませる短い引き継ぎを作ります。
+
+出力は2つ。役割が違うので、同じ内容を両方に書いてはいけない。
+・recap    = 失われた文脈の補充。「何の話をしていたか」という事実。
+・pendings = 失われた意志の補充。「まだ片付いていないこと」だけ。
+             recap に書いた文をそのまま写さない。行動として書く。
+
+規則:
+・recap は3行以内、各行40文字以内、時系列で。
+・oneLine は会話全体を30文字以内の1行にしたもの。
+・pendings は最大4件。片付いていないものが無ければ空配列にする。無理に作らない。
+・reason は unanswered（ボットが答えられなかった）/ deferred（後回しにした）/ blocked（他を待っている）。
+・会話に無いことを推測で足さない。
+
+出力（JSONのみ）:
+{"oneLine":"...","recap":["...","..."],"pendings":[{"text":"...","reason":"deferred"}]}`;
+
+  Queue.def('build_return_summary', async (p, signal) => {
+    const hist = Chat.history.slice(-CFG.history.apiContext);
+    if (hist.length < 2) return;
+    const convo = hist.map(m => (m.role === 'user' ? 'ユーザー: ' : 'ボット: ') + m.content)
+                      .join('\n').slice(-6000);
+    const out = await LLM.callLLM({ system:SYS, messages:[{ role:'user', content:convo }],
+                                    expectJson:true, model:CFG.llm.taskModel, signal });
+    if (!out) return;
+
+    const recap = (Array.isArray(out.recap) ? out.recap : [])
+      .map(s => String(s || '').trim()).filter(Boolean).slice(0, 3);
+    const oneLine = String(out.oneLine || recap[0] || '').trim();
+    if (!oneLine && !recap.length) return;
+
+    try {
+      await Store.put('kv', { key:'lastReturnSummary', oneLine, recap,
+                              sessionId: Session.id(), turns: hist.length, builtAt: Date.now() });
+    } catch {}
+    await savePendings(Array.isArray(out.pendings) ? out.pendings : [], recap);
+  });
+
+  // 要約に書いた文がそのままキューに落ちてくることがあるので、コード側でも弾く。
+  async function savePendings(list, recap) {
+    const recapKeys = recap.map(nrm);
+    let cur = [];
+    try { cur = await Store.query('pendings','status',{ only:'open' }); } catch {}
+    const seen = new Set(cur.map(p => nrm(p.text)));
+    for (const p of list.slice(0, 4)) {
+      const text = String(p?.text || '').trim();
+      if (!text) continue;
+      const k = nrm(text);
+      if (!k || seen.has(k)) continue;
+      if (recapKeys.some(r => r && (r === k || r.includes(k) || k.includes(r)))) continue;
+      seen.add(k);
+      try {
+        await Store.put('pendings', {
+          sessionId: Session.id(), text: text.slice(0, 120),
+          reason: REASON[p.reason] ? p.reason : 'deferred',
+          status: 'open', createdAt: Date.now(),
+        });
+      } catch {}
+    }
+  }
+
+  // 離席した瞬間に生成を始める。復帰してから作り始めるのでは間に合わない。
+  // 離席は「最上位の idle」なので、ここでだけキューの実行条件を手で立てる。
+  Bus.on('visibility:hidden', () => {
+    Queue.add('build_return_summary', {}, { interruptible:false, dedupeKey:'return_summary' });
+    Queue._forceIdle(true);
+  });
+
+  Bus.on('idle:returned', (e) => { show(e?.awayMs || 0).catch(() => {}); });
+
+  // 戻ってきたので、裏タスクの実行条件は通常（idle:t2 待ち）に戻す。
+  // 走っている生成は中断しない —— あと少しで出来上がるものを捨てない。
+  async function waitSummary(deadlineMs) {
+    const until = Date.now() + deadlineMs;
+    for (;;) {
+      let s = null; try { s = await Store.get('kv','lastReturnSummary'); } catch {}
+      if (s && (s.oneLine || (s.recap && s.recap.length))) return s;
+      if (Date.now() >= until || Queue.runningCount === 0) return s;
+      await new Promise(r => setTimeout(r, 250));
+    }
+  }
+
+  function fmtAway(ms) {
+    if (ms >= DAY)  return Math.floor(ms / DAY) + '日';
+    if (ms >= HOUR) return Math.floor(ms / HOUR) + '時間';
+    return Math.max(1, Math.round(ms / MIN)) + '分';
+  }
+
+  async function lastEndKind() {
+    try {
+      const ss = (await Store.query('sessions'))
+        .filter(s => s.id !== Session.id() && s.endKind)
+        .sort((a,b) => (b.endedAt || 0) - (a.endedAt || 0));
+      return ss[0]?.endKind || null;
+    } catch { return null; }
+  }
+
+  async function show(awayMs) {
+    Queue._forceIdle(false);
+    if (awayMs < 10 * MIN) return;                      // 10分未満は何も出さない
+    const s = await waitSummary(2500);
+    if (!s || (!s.oneLine && !(s.recap || []).length)) return;
+
+    const log = document.getElementById('log');
+    if (!log) return;
+    const box = document.createElement('div');
+    box.className = 'welcome';
+    let h = `<h4>おかえりなさい<span class="rs">${fmtAway(awayMs)}ぶり</span></h4>`;
+
+    if (awayMs < HOUR) {
+      h += `<div class="recap">${UI.esc(s.oneLine || s.recap[0])}</div>`;   // 1行だけ
+    } else {
+      const lines = (s.recap || []).length ? s.recap : [s.oneLine];
+      h += `<div class="recap">${lines.map(l => '・' + UI.esc(l)).join('\n')}</div>`;
+      if (awayMs >= DAY) {
+        const ek = await lastEndKind();
+        if (ek) h += `<div class="recap" style="margin-top:6px">前回は「${UI.esc(ENDKIND[ek] || ek)}」で終わっています</div>`;
+        let ps = [];
+        try { ps = await Store.query('pendings','status',{ only:'open' }); } catch {}
+        ps.sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0));
+        if (ps.length) {
+          h += '<div class="pend"><h4>置き去りの宿題</h4><ul>'
+             + ps.slice(0, 4).map(p =>
+                 `<li>${UI.esc(p.text)}<span class="rs">${UI.esc(REASON[p.reason] || '')}</span></li>`).join('')
+             + '</ul></div>';
+        }
+      }
+    }
+    box.innerHTML = h;
+    log.appendChild(box);
+    UI.scroll();
+  }
+
+  return { show, _wait: waitSummary };
+})();
+
+// フェーズ1の起動処理。BOOT から1回だけ呼ぶ。
+const Phase1 = { async boot() { try { await Facts.render(); } catch (e) { console.warn('[phase1]', e?.message); } } };
+</script>
+
 <!-- ===== S8 UI ===== -->
 <script>
 const UI = (() => {
@@ -921,6 +1258,7 @@ const Privacy = (() => {
     Privacy.render();
     document.getElementById('btnPriv').addEventListener('click', Privacy.toggle);
     await Queue.recover();
+    await Phase1.boot();
     Tele.purgeOld();
     document.getElementById('input').focus();
   }
