@@ -2031,6 +2031,12 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
 #depthBar button:hover{border-color:rgba(200,240,160,0.4);color:rgba(232,232,226,0.75)}
 #depthBar button.on{border-color:var(--accent);color:var(--accent);
   background:rgba(200,240,160,0.1);font-weight:600}
+/* 調べ用の結果（選んでコピーできるようにする） */
+.obs-dbg{margin:8px 0;padding:9px 11px;border:1px solid rgba(200,240,160,0.3);
+  border-radius:9px;background:rgba(200,240,160,0.06);
+  font-family:'DM Mono',monospace;font-size:11.5px;line-height:1.8;
+  color:rgba(232,232,226,0.85);overflow-wrap:anywhere;
+  user-select:text;-webkit-user-select:text}
 </style>
 </head>
 <body>
@@ -3294,7 +3300,7 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 //         ・思い出の本に画面用の記法がそのまま刷られていたのを修正（bookPlain を追加）。
 //           **太字** / ### 見出し / [choice:] / 表の区切り行に加えて、v3.8.0 で足した
 //           ```zukai の JSON まで本文に載っていた。図は「（図）」に置き換える。
-const APP_VERSION   = 'v3.11.4';
+const APP_VERSION   = 'v3.11.5';
 const SUMMARY_EVERY = 10;
 const LEARN_PER_LEVEL = 3;    // 何個の学習で1レベル上がるか（小さいほど上がりやすい。旧:5 → v2.6.1で3に緩和。レベルは単調増加なので変更しても下がらない）
 // 重要記憶キー（削除されない永続情報）
@@ -10500,6 +10506,7 @@ const REC_KEY = 'obs_recording';   // 打鍵・下書きの記録ON/OFF（localS
 const recOn = () => { try { return localStorage.getItem(REC_KEY) !== '0'; } catch { return true; } };
 // 送信アニメの調べ用表示（本体側の ANIM が見る設定と同じキー）
 const animDbg = () => { try { return localStorage.getItem('momo_animdebug') === '1'; } catch { return false; } };
+const animDbgLast = () => { try { return localStorage.getItem('momo_animdebug_last') || ''; } catch { return ''; } };
 const setRec = (v) => { try { localStorage.setItem(REC_KEY, v ? '1' : '0'); } catch {} paint(); };
 const hasDb  = () => { try { return !!db; } catch { return false; } };
 const viewing= () => { try { return !!isViewingHistory; } catch { return false; } };
@@ -11315,9 +11322,25 @@ async function paintRec(el) {
     + `どこで止まっているかを画面に出します。普段は切っておいて構いません。</div>`
     + `<div class="obs-row"><button id="obsAnimDbg" class="${animDbg() ? 'on' : ''}">`
     + `${animDbg() ? '● アニメの調べ ON' : 'アニメの調べ OFF'}</button></div>`
+    + (animDbgLast()
+        ? `<div class="obs-dbg" id="obsDbgOut">${esc(animDbgLast())}</div>`
+        + `<div class="obs-row"><button id="obsDbgCopy">この文をコピー</button></div>`
+        : `<div class="obs-empty" style="text-align:left">ONにして1通送ると、`
+        + `結果がここに残ります。</div>`)
     + `<div class="obs-empty" style="text-align:left">消した下書き ${g.length}件 / 詰まった語 ${h.length}件</div>`
     + `<div id="obsGhosts"></div>`;
   el.querySelector('#obsToggle').addEventListener('click', () => setRec(!recOn()));
+  el.querySelector('#obsDbgCopy')?.addEventListener('click', async () => {
+    const t = animDbgLast();
+    try { await navigator.clipboard.writeText(t); showToast('コピーしました'); }
+    catch {
+      // クリップボードが使えない環境では、選択状態にして手でコピーしてもらう
+      const n = document.getElementById('obsDbgOut');
+      if (n) { const r = document.createRange(); r.selectNodeContents(n);
+               const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+               showToast('選択しました。長押しでコピーしてね'); }
+    }
+  });
   el.querySelector('#obsAnimDbg').addEventListener('click', () => {
     const on = !animDbg();
     try { localStorage.setItem('momo_animdebug', on ? '1' : '0'); } catch {}
@@ -11737,14 +11760,17 @@ function wrap() {
         const L = document.getElementById('animLayer');
         const g = document.querySelector('#animLayer .anim-ghost');
         const r = g && g.getBoundingClientRect();
-        showToast(
+        const line =
           'rm=' + reduced() +
           ' 欄=' + (ta ? '有' : '無') +
           ' 位置=' + (from ? Math.round(from.left) + ',' + Math.round(from.top) : '取れず') +
           ' 吹=' + before + '→' + document.querySelectorAll('#messages .message-row.user').length +
           ' 層=' + (L ? getComputedStyle(L).display : '無') +
           ' 影=' + (r ? Math.round(r.left) + ',' + Math.round(r.top) +
-                        ' 透' + getComputedStyle(g).opacity : '無'), 12000);
+                        ' 透' + getComputedStyle(g).opacity : '無');
+        // トーストは消えてしまいコピーできないので、観測ノートの「記録」に残す
+        try { localStorage.setItem('momo_animdebug_last', line); } catch {}
+        showToast('調べました。✎→記録 の一番下に出ています', 6000);
       } catch (e) { showToast('調べ用の表示に失敗: ' + (e && e.message), 9000); }
     }, 250);
 
