@@ -2012,7 +2012,7 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
   color: var(--accent); text-shadow: 0 0 9px rgba(200,240,160,0.5);
   backface-visibility: hidden;
 }
-@media (prefers-reduced-motion: reduce) { #animLayer { display: none; } }
+@media (prefers-reduced-motion: reduce) { html:not([data-anim="on"]) #animLayer { display: none; } }
 /* つかうAIの選択（起動画面） */
 .btn-engine{flex:1;background:none;border:1px solid rgba(255,255,255,0.16);border-radius:9px;
   padding:9px 6px;font-family:inherit;font-size:12.5px;color:rgba(232,232,226,0.6);
@@ -2031,12 +2031,6 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
 #depthBar button:hover{border-color:rgba(200,240,160,0.4);color:rgba(232,232,226,0.75)}
 #depthBar button.on{border-color:var(--accent);color:var(--accent);
   background:rgba(200,240,160,0.1);font-weight:600}
-/* 調べ用の結果（選んでコピーできるようにする） */
-.obs-dbg{margin:8px 0;padding:9px 11px;border:1px solid rgba(200,240,160,0.3);
-  border-radius:9px;background:rgba(200,240,160,0.06);
-  font-family:'DM Mono',monospace;font-size:11.5px;line-height:1.8;
-  color:rgba(232,232,226,0.85);overflow-wrap:anywhere;
-  user-select:text;-webkit-user-select:text}
 /* 新しい版のお知らせ */
 #updBar{position:fixed;left:12px;right:12px;top:calc(env(safe-area-inset-top,0px) + 10px);
   margin:0 auto;max-width:420px;z-index:1100;box-sizing:border-box;
@@ -3313,7 +3307,7 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 //         ・思い出の本に画面用の記法がそのまま刷られていたのを修正（bookPlain を追加）。
 //           **太字** / ### 見出し / [choice:] / 表の区切り行に加えて、v3.8.0 で足した
 //           ```zukai の JSON まで本文に載っていた。図は「（図）」に置き換える。
-const APP_VERSION   = 'v3.12.0';
+const APP_VERSION   = 'v3.12.1';
 const SUMMARY_EVERY = 10;
 const LEARN_PER_LEVEL = 3;    // 何個の学習で1レベル上がるか（小さいほど上がりやすい。旧:5 → v2.6.1で3に緩和。レベルは単調増加なので変更しても下がらない）
 // 重要記憶キー（削除されない永続情報）
@@ -10517,9 +10511,9 @@ const K = { facts:'obs_facts', hesit:'obs_hesit', ghosts:'obs_ghosts', pend:'obs
 const REC_KEY = 'obs_recording';   // 打鍵・下書きの記録ON/OFF（localStorage）
 
 const recOn = () => { try { return localStorage.getItem(REC_KEY) !== '0'; } catch { return true; } };
+// 送信アニメを端末の設定より優先して出すか（本体側の ANIM が見るキーと同じ）
+const animOn = () => { try { return localStorage.getItem('momo_force_anim') === '1'; } catch { return false; } };
 // 送信アニメの調べ用表示（本体側の ANIM が見る設定と同じキー）
-const animDbg = () => { try { return localStorage.getItem('momo_animdebug') === '1'; } catch { return false; } };
-const animDbgLast = () => { try { return localStorage.getItem('momo_animdebug_last') || ''; } catch { return ''; } };
 const setRec = (v) => { try { localStorage.setItem(REC_KEY, v ? '1' : '0'); } catch {} paint(); };
 const hasDb  = () => { try { return !!db; } catch { return false; } };
 const viewing= () => { try { return !!isViewingHistory; } catch { return false; } };
@@ -11330,34 +11324,18 @@ async function paintRec(el) {
     + `<button id="obsWipeG">消した下書きを消す</button>`
     + `<button id="obsWipeH">詰まった語を消す</button>`
     + `<button id="obsWipeA" class="danger">観測ノートを全部消す</button></div>`
-    + `<h3>調べ用</h3>`
-    + `<div class="obs-empty" style="text-align:left">送信のアニメが出ないときに、`
-    + `どこで止まっているかを画面に出します。普段は切っておいて構いません。</div>`
-    + `<div class="obs-row"><button id="obsAnimDbg" class="${animDbg() ? 'on' : ''}">`
-    + `${animDbg() ? '● アニメの調べ ON' : 'アニメの調べ OFF'}</button></div>`
-    + (animDbgLast()
-        ? `<div class="obs-dbg" id="obsDbgOut">${esc(animDbgLast())}</div>`
-        + `<div class="obs-row"><button id="obsDbgCopy">この文をコピー</button></div>`
-        : `<div class="obs-empty" style="text-align:left">ONにして1通送ると、`
-        + `結果がここに残ります。</div>`)
+    + `<h3>見た目</h3>`
+    + `<div class="obs-empty" style="text-align:left">端末の「視差効果を減らす」がオンのときは、`
+    + `送信のアニメを出しません。もも だけは動かしたいときは、これをONにしてください。</div>`
+    + `<div class="obs-row"><button id="obsAnim" class="${animOn() ? 'on' : ''}">`
+    + `${animOn() ? '● 送信アニメを出す' : '送信アニメは端末の設定にしたがう'}</button></div>`
     + `<div class="obs-empty" style="text-align:left">消した下書き ${g.length}件 / 詰まった語 ${h.length}件</div>`
     + `<div id="obsGhosts"></div>`;
   el.querySelector('#obsToggle').addEventListener('click', () => setRec(!recOn()));
-  el.querySelector('#obsDbgCopy')?.addEventListener('click', async () => {
-    const t = animDbgLast();
-    try { await navigator.clipboard.writeText(t); showToast('コピーしました'); }
-    catch {
-      // クリップボードが使えない環境では、選択状態にして手でコピーしてもらう
-      const n = document.getElementById('obsDbgOut');
-      if (n) { const r = document.createRange(); r.selectNodeContents(n);
-               const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
-               showToast('選択しました。長押しでコピーしてね'); }
-    }
-  });
-  el.querySelector('#obsAnimDbg').addEventListener('click', () => {
-    const on = !animDbg();
-    try { localStorage.setItem('momo_animdebug', on ? '1' : '0'); } catch {}
-    showToast(on ? '調べ用の表示をONにしました。1通送ると下に出ます' : '調べ用の表示をOFFにしました');
+  el.querySelector('#obsAnim')?.addEventListener('click', () => {
+    const on = !animOn();
+    try { ANIM.setForce(on); } catch {}
+    showToast(on ? '送信のアニメを出すようにしました' : '端末の設定にしたがうようにしました');
     paint();
   });
   el.querySelector('#obsWipeG').addEventListener('click', async () => {
@@ -11471,14 +11449,19 @@ const PRE     = 0.05;   // 飛ぶ直前に「選ばれた」と分かるよう�
 const MAX_P   = 44;     // 吸い込む文字の最大数（長文でも粒は増やさない）
 const ARC     = 30;     // 吸い込みの弧の高さ（1文字ごとに散らす）
 
-const reduced = () => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; }
-                        catch { return false; } };
-// 調べ用の表示を出すか。URL の #animdebug か、観測ノートの「記録」のスイッチ。
-const ANIM_DBG_KEY = 'momo_animdebug';
-function ANIM_DEBUG() {
-  try { return location.hash === '#animdebug' || localStorage.getItem(ANIM_DBG_KEY) === '1'; }
-  catch { return false; }
+// 端末の「視差効果を減らす」を尊重するのが既定。ただし、この設定は端末全体に効くので、
+// 「他のアプリは静かなままで、もも だけは動かしたい」を選べるようにしてある。
+const FORCE_KEY = 'momo_force_anim';
+const forceAnim = () => { try { return localStorage.getItem(FORCE_KEY) === '1'; } catch { return false; } };
+function applyAnimPref() {
+  // CSS 側（#animLayer を消す指定）も同じ判断を見るように、印を html に付ける
+  try { document.documentElement.dataset.anim = forceAnim() ? 'on' : 'off'; } catch {}
 }
+function setForceAnim(v) { try { localStorage.setItem(FORCE_KEY, v ? '1' : '0'); } catch {} applyAnimPref(); }
+applyAnimPref();
+const reduced = () => { if (forceAnim()) return false;
+                        try { return matchMedia('(prefers-reduced-motion: reduce)').matches; }
+                        catch { return false; } };
 
 // CSS と同じ曲線を JS で使う（cubic-bezier のニュートン法による近似解）
 function bezier(x1, y1, x2, y2) {
@@ -11764,28 +11747,6 @@ function wrap() {
         run(from).catch(e => console.warn('[もも] 送信アニメ', e?.message));
     } catch (e) { console.warn('[もも] 送信アニメ', e?.message); }
 
-    // ── 調べ用（観測ノートの「記録」でONにしたときだけ出る） ──
-    // スマホは開発者コンソールが開けないので、どこで止まったかを画面に出す。
-    // ホーム画面から起動しているとURLを触れないので、設定でも出せるようにしてある。
-    // 普段は一切動かない。1回送るだけで全分岐が同時に分かる。
-    if (ANIM_DEBUG()) setTimeout(() => {
-      try {
-        const L = document.getElementById('animLayer');
-        const g = document.querySelector('#animLayer .anim-ghost');
-        const r = g && g.getBoundingClientRect();
-        const line =
-          'rm=' + reduced() +
-          ' 欄=' + (ta ? '有' : '無') +
-          ' 位置=' + (from ? Math.round(from.left) + ',' + Math.round(from.top) : '取れず') +
-          ' 吹=' + before + '→' + document.querySelectorAll('#messages .message-row.user').length +
-          ' 層=' + (L ? getComputedStyle(L).display : '無') +
-          ' 影=' + (r ? Math.round(r.left) + ',' + Math.round(r.top) +
-                        ' 透' + getComputedStyle(g).opacity : '無');
-        // トーストは消えてしまいコピーできないので、観測ノートの「記録」に残す
-        try { localStorage.setItem('momo_animdebug_last', line); } catch {}
-        showToast('調べました。✎→記録 の一番下に出ています', 6000);
-      } catch (e) { showToast('調べ用の表示に失敗: ' + (e && e.message), 9000); }
-    }, 250);
 
     return p;
   };
@@ -11800,7 +11761,7 @@ function boot() { if (bound) return; bound = true; wrap(); }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
 else boot();
 
-return { run, fly, suck, _wrap: wrap };
+return { run, fly, suck, _wrap: wrap, force: forceAnim, setForce: setForceAnim };
 })();
 </script>
 
