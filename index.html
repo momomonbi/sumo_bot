@@ -1994,6 +1994,25 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
 #obsBadge{position:absolute;top:-4px;right:-4px;min-width:15px;height:15px;padding:0 4px;
   border-radius:8px;background:#9ecbff;color:#0d0d0f;font-size:9.5px;font-weight:700;
   line-height:15px;text-align:center}
+/* ── 送信アニメーション（文字が吹き出し→思考中アイコンへ吸い込まれる） ── */
+#animLayer {
+  position: fixed; inset: 0; z-index: 592;
+  pointer-events: none; overflow: hidden; contain: strict;
+}
+.anim-ghost {
+  position: absolute; left: 0; top: 0;
+  transform-origin: 0 0; will-change: transform, opacity;
+  flex: none !important; padding-top: 0 !important;
+  backface-visibility: hidden;
+}
+.anim-char {
+  position: absolute; left: 0; top: 0;
+  transform-origin: 50% 50%; will-change: transform, opacity;
+  font-size: 15px; line-height: 1; white-space: pre;
+  color: var(--accent); text-shadow: 0 0 9px rgba(200,240,160,0.5);
+  backface-visibility: hidden;
+}
+@media (prefers-reduced-motion: reduce) { #animLayer { display: none; } }
 </style>
 </head>
 <body>
@@ -3152,6 +3171,10 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 //   ⑥ 書けずに全部消すのが続いたら、ももが質問する側に回る（やりとりは枝として残る）
 //   ⑦ 会話の終わり方で記憶の薄れ方が変わる。薄くなったら「忘れていい？」と聞く
 //   既存の処理には手を入れず、末尾の1ブロックを足すだけにしてある
+// v3.10.0: 送信アニメーション（打った文字が吹き出しへ、そして考え中のアイコンへ吸い込まれる）
+//   ★ アニメーションは待たない。送信ボタンを押した時点でAPIはもう走っている。
+//     アニメが終わってから考え始める作りにすると、その1秒がまるごと遅延になる。
+//   既存の処理には手を入れず、sendMessage を包むだけ
 //         ・トピック自動保存が画像を落としていたのを修正。currentTopicMsgs は
 //           メモリ節約のため ts/role/content しか持っておらず、それをそのままアーカイブに
 //           していたため、トピックのカードから「ここから続ける」を押すと
@@ -3167,7 +3190,7 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 //         ・思い出の本に画面用の記法がそのまま刷られていたのを修正（bookPlain を追加）。
 //           **太字** / ### 見出し / [choice:] / 表の区切り行に加えて、v3.8.0 で足した
 //           ```zukai の JSON まで本文に載っていた。図は「（図）」に置き換える。
-const APP_VERSION   = 'v3.9.0';
+const APP_VERSION   = 'v3.10.0';
 const SUMMARY_EVERY = 10;
 const LEARN_PER_LEVEL = 3;    // 何個の学習で1レベル上がるか（小さいほど上がりやすい。旧:5 → v2.6.1で3に緩和。レベルは単調増加なので変更しても下がらない）
 // 重要記憶キー（削除されない永続情報）
@@ -5144,22 +5167,16 @@ function maybeShowVersionPopup() {
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:600;color:#e8e8e2;margin-bottom:6px;">アップデート ${APP_VERSION}</div>
           <div style="font-size:11px;color:rgba(232,232,226,0.8);line-height:1.8;overflow-wrap:anywhere;">
-            <span style="font-size:14px;font-weight:700;color:#ffb3cf;">観測ノート、はじめました。</span><br>
+            <span style="font-size:14px;font-weight:700;color:#ffb3cf;">送った文字が、飛ぶようになった。</span><br>
             <br>
-            右上の <b>✎</b> を押すと開くよ。<br>
+            打った文字がそのまま吹き出しへ飛んで、<br>
+            そのあと<b>考え中の丸に吸い込まれていく</b>。<br>
             <br>
-            ・ 自分で打った<b>「決めたこと」</b>だけ積む<br>
-            　（貼り付けた資料は根拠として下に付く）<br>
-            ・ 席をはずして戻ると<b>経緯と宿題</b>が出る<br>
-            ・ 終わり方で<b>記憶の薄れ方</b>が変わる<br>
-            　（保留は薄れない。放置は自然に消える）<br>
-            <br>
-            それと、書いては消すのが続いたら<br>
-            <b>ももが質問する側に回る</b>。<br>
-            言葉にならないときは、聞くほうが早いから。<br>
-            <br>
-            記録はこの端末の中だけ。<br>
-            ノートの「記録」タブで、いつでも消せるよ。<br>
+            見た目だけの話じゃなくて、<br>
+            <b>飛んでいる間、ももはもう考えてる。</b><br>
+            アニメが終わるのを待ってから<br>
+            考え始めるわけじゃないから、<br>
+            返事が遅くなることはないよ。<br>
           </div>
           <div style="font-size:10px;color:rgba(232,232,226,0.5);margin-top:7px;">画面のどこかをタップで閉じる</div>
         </div>
@@ -11245,6 +11262,258 @@ else boot().catch(e => console.warn('[観測]', e));
 
 return { open, close, paint, setTab(t) { tab = t; paint(); },
          _t: { Tele, Idle, Q, Bus, Tok, Ask, Mem, Watch, Ghost, Session, load, K, CFG, boot, recOn, setRec } };
+})();
+</script>
+
+<script>
+/* ============================================================================
+   送信アニメーション（文字が吹き出しへ、そして思考中のアイコンへ吸い込まれる）
+   既存の処理には手を入れず、sendMessage を包むだけ。
+
+   ★ 大前提: アニメーションは待たない。
+     sendMessage を呼んだ時点で API 呼び出しは走り始めており、
+     ここでやっているのは「別レイヤーの見た目」だけ。
+     アニメが終わってから考え始める、という作りには絶対にしない。
+   ========================================================================== */
+const ANIM = (() => {
+'use strict';
+
+const D_FLY   = 480;    // 入力欄 → 吹き出し
+const D_SUCK  = 620;    // 吹き出し → 思考中アイコン
+const MAX_P   = 44;     // 吸い込む文字の最大数（長文でも粒は増やさない）
+const ARC     = 30;     // 吸い込みの弧の高さ
+
+const reduced = () => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; }
+                        catch { return false; } };
+
+// CSS と同じ曲線を JS で使う（cubic-bezier のニュートン法による近似解）
+function bezier(x1, y1, x2, y2) {
+  const A = (a, b) => 1 - 3 * b + 3 * a;
+  const B = (a, b) => 3 * b - 6 * a;
+  const C = (a)    => 3 * a;
+  const at = (t, a, b) => ((A(a, b) * t + B(a, b)) * t + C(a)) * t;
+  const dt = (t, a, b) => 3 * A(a, b) * t * t + 2 * B(a, b) * t + C(a);
+  return (x) => {
+    if (x <= 0) return 0;
+    if (x >= 1) return 1;
+    let t = x;
+    for (let i = 0; i < 6; i++) {
+      const s = dt(t, x1, x2);
+      if (Math.abs(s) < 1e-6) break;
+      t -= (at(t, x1, x2) - x) / s;
+    }
+    return at(t, y1, y2);
+  };
+}
+const EASE_FLY  = bezier(.22, 1, .36, 1);      // 既存の msgSlideIn と同じ曲線
+const EASE_SUCK = bezier(.55, .06, .25, 1);
+
+function layer() {
+  let l = document.getElementById('animLayer');
+  if (!l) { l = document.createElement('div'); l.id = 'animLayer'; document.body.appendChild(l); }
+  return l;
+}
+const raf = () => new Promise(r => requestAnimationFrame(r));
+
+// 入力欄の「文字が見えている位置」。textarea のスクロール量も引く。
+function fromRect(ta) {
+  const r  = ta.getBoundingClientRect();
+  const cs = getComputedStyle(ta);
+  const pl = parseFloat(cs.paddingLeft)   || 0;
+  const pt = parseFloat(cs.paddingTop)    || 0;
+  const bl = parseFloat(cs.borderLeftWidth) || 0;
+  const bt = parseFloat(cs.borderTopWidth)  || 0;
+  return {
+    left: r.left + bl + pl,
+    top:  r.top  + bt + pt - (ta.scrollTop || 0),
+    fontSize: parseFloat(cs.fontSize) || 16,
+  };
+}
+
+/* ── 第1段: 入力欄の文字が、そのまま吹き出しの位置へ飛ぶ ───────────────
+   毎フレーム着地点を測り直している。途中で思考中の行が生えて画面が
+   ずれても、着地がぴったり合うようにするため。 */
+function fly(from) {
+  const msgs = document.getElementById('messages');
+  if (!msgs) return Promise.resolve(null);
+  const row = [...msgs.querySelectorAll('.message-row.user')].pop();
+  const bubble = row && row.querySelector('.bubble');
+  if (!bubble || !bubble.textContent.trim()) return Promise.resolve(null);
+
+  // 既存の生え際アニメ（msgSlideIn）は止める。自前で動かすので二重になる。
+  row.classList.add('instant');
+
+  // なめらかスクロールが走っていると着地点が動き続けるので、この間だけ即時に。
+  const prevSB = msgs.style.scrollBehavior;
+  msgs.style.scrollBehavior = 'auto';
+  msgs.scrollTop = msgs.scrollHeight;
+
+  const to0 = bubble.getBoundingClientRect();
+  if (!to0.width || !to0.height) { msgs.style.scrollBehavior = prevSB; return Promise.resolve(null); }
+
+  const cs = getComputedStyle(bubble);
+  const ghost = bubble.cloneNode(true);
+  ghost.removeAttribute('id');
+  ghost.querySelectorAll('.bubble-copy-btn, button').forEach(b => b.remove());
+  // .bubble を残しておくと、吹き出し内の装飾（strong / code / 表など）が
+  // そのまま効くので、飛んでいる間も見た目が変わらない。
+  ghost.className = 'bubble anim-ghost';
+  ghost.style.width = to0.width + 'px';
+  ghost.style.color = cs.color;      // 色だけは祖先セレクタ依存なので明示する
+  layer().appendChild(ghost);
+
+  bubble.style.opacity = '0';
+  const scale0 = from.fontSize / (parseFloat(cs.fontSize) || 15);
+
+  let done = false;
+  const restore = () => {
+    if (done) return; done = true;
+    bubble.style.opacity = '';
+    ghost.remove();
+    msgs.style.scrollBehavior = prevSB;
+  };
+  // 何があっても吹き出しが消えたままにはしない
+  const guard = setTimeout(restore, D_FLY + 1500);
+
+  return new Promise(res => {
+    // 起点は「最初のフレームの時刻」にする。performance.now() で先に取ると、
+    // 次のフレームが来るまでの1コマぶんだけ進んだ状態から始まって頭が飛ぶ。
+    let t0 = null;
+    requestAnimationFrame(function step(now) {
+      if (t0 === null) t0 = now;
+      const p = Math.min(1, (now - t0) / D_FLY);
+      const e = EASE_FLY(p);
+      const to = bubble.getBoundingClientRect();     // 着地点を毎フレーム追う
+      const s  = scale0 + (1 - scale0) * e;
+      const x  = from.left + (to.left - from.left) * e;
+      const y  = from.top  + (to.top  - from.top)  * e;
+      ghost.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${s})`;
+      ghost.style.opacity   = String(0.45 + 0.55 * e);
+      if (p < 1) requestAnimationFrame(step);
+      else { clearTimeout(guard); restore(); res(bubble); }
+    });
+  });
+}
+
+/* ── 第2段: 吹き出しの文字が、思考中のアイコンへ吸い込まれる ───────────
+   本物の吹き出しは残したままなので、飛ばすのは複製した粒。
+   「AIがいま読んでいる」ように見せるための演出。 */
+function sample(el, max) {
+  const runs = [];
+  let total = 0;
+  const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  for (let n; (n = w.nextNode());) {
+    const len = n.nodeValue.length;
+    if (len) { runs.push(n); total += len; }
+  }
+  if (!total) return [];
+  const step = Math.max(1, Math.ceil(total / max));
+  const r = document.createRange();
+  const out = [];
+  let i = 0;
+  for (const n of runs) {
+    const v = n.nodeValue;
+    for (let k = 0; k < v.length; k++, i++) {
+      if (i % step) continue;
+      const ch = v[k];
+      if (!ch.trim()) continue;
+      r.setStart(n, k); r.setEnd(n, k + 1);
+      const b = r.getBoundingClientRect();
+      if (!b.width && !b.height) continue;
+      out.push({ ch, x: b.left, y: b.top, w: b.width, h: b.height });
+      if (out.length >= max) return out;
+    }
+  }
+  return out;
+}
+
+function suck(bubble) {
+  const wave = document.querySelector('#typingRow .typing-wave');
+  if (!wave) return Promise.resolve();
+  const pts = sample(bubble, MAX_P);
+  if (!pts.length) return Promise.resolve();
+
+  const L = layer();
+  const parts = pts.map((c, i) => {
+    const s = document.createElement('span');
+    s.className = 'anim-char';
+    s.textContent = c.ch;
+    s.style.transform = `translate3d(${c.x}px, ${c.y}px, 0)`;
+    L.appendChild(s);
+    // 上の文字から順に吸われる。粒ごとに少しずらして「流れ」にする。
+    return { el: s, x: c.x, y: c.y, d: (i / pts.length) * 0.45 };
+  });
+
+  let done = false;
+  const clean = () => { if (done) return; done = true; parts.forEach(p => p.el.remove()); };
+  const guard = setTimeout(clean, D_SUCK + 1500);
+
+  return new Promise(res => {
+    let t0 = null;
+    requestAnimationFrame(function step(now) {
+      if (t0 === null) t0 = now;
+      const p = Math.min(1, (now - t0) / D_SUCK);
+      const r = wave.getBoundingClientRect();        // 吸い込み先も毎フレーム追う
+      const tx = r.left + r.width / 2, ty = r.top + r.height / 2;
+      for (const q of parts) {
+        const local = Math.max(0, Math.min(1, (p - q.d) / (1 - q.d)));
+        const e = EASE_SUCK(local);
+        const x = q.x + (tx - q.x) * e;
+        const y = q.y + (ty - q.y) * e - Math.sin(e * Math.PI) * ARC;
+        q.el.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${1 - 0.9 * e})`;
+        q.el.style.opacity = String(local < 0.12 ? local / 0.12 : Math.max(0, 1 - e * 1.05));
+      }
+      if (p < 1) requestAnimationFrame(step);
+      else { clearTimeout(guard); clean(); res(); }
+    });
+  });
+}
+
+async function run(from) {
+  const bubble = await fly(from);
+  if (!bubble) return;
+  // 思考中の行が出るのを少しだけ待つ。出なければ第2段は黙って省く。
+  for (let i = 0; i < 25 && !document.querySelector('#typingRow .typing-wave'); i++) await raf();
+  if (!document.querySelector('#typingRow .typing-wave')) return;
+  await suck(bubble);
+}
+
+/* ── 既存の送信に接続する（包むだけ・中身は無改造） ─────────────────── */
+function wrap() {
+  if (typeof window.sendMessage !== 'function' || window.sendMessage.__anim) return;
+  const orig = window.sendMessage;
+  const wrapped = function () {
+    let from = null;
+    try {
+      const ta = document.getElementById('input');
+      if (ta && ta.value.trim() && !reduced()) from = fromRect(ta);
+    } catch {}
+    const before = document.querySelectorAll('#messages .message-row.user').length;
+
+    // ★ここで既に走り出す。アニメーションは一切待たない。
+    const p = orig.apply(this, arguments);
+
+    try {
+      // 同期部分で吹き出しが生えていたときだけ動かす
+      // （isLoading や履歴閲覧中で弾かれた場合は増えないので、何もしない）
+      if (from && document.querySelectorAll('#messages .message-row.user').length > before)
+        run(from).catch(e => console.warn('[もも] 送信アニメ', e?.message));
+    } catch (e) { console.warn('[もも] 送信アニメ', e?.message); }
+
+    return p;
+  };
+  wrapped.__anim = true;
+  window.sendMessage = wrapped;
+}
+
+// 掛けるのは1回だけ。観測ノートが後から外側を包んでも、
+// こちらを掛け直すとアニメが二重に走るので、再試行はしない。
+let bound = false;
+function boot() { if (bound) return; bound = true; wrap(); }
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+else boot();
+
+return { run, fly, suck, _wrap: wrap };
 })();
 </script>
 </body>
