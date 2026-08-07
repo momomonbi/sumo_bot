@@ -3294,7 +3294,7 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 //         ・思い出の本に画面用の記法がそのまま刷られていたのを修正（bookPlain を追加）。
 //           **太字** / ### 見出し / [choice:] / 表の区切り行に加えて、v3.8.0 で足した
 //           ```zukai の JSON まで本文に載っていた。図は「（図）」に置き換える。
-const APP_VERSION   = 'v3.11.2';
+const APP_VERSION   = 'v3.11.3';
 const SUMMARY_EVERY = 10;
 const LEARN_PER_LEVEL = 3;    // 何個の学習で1レベル上がるか（小さいほど上がりやすい。旧:5 → v2.6.1で3に緩和。レベルは単調増加なので変更しても下がらない）
 // 重要記憶キー（削除されない永続情報）
@@ -11692,9 +11692,9 @@ function wrap() {
   if (typeof window.sendMessage !== 'function' || window.sendMessage.__anim) return;
   const orig = window.sendMessage;
   const wrapped = function () {
-    let from = null;
+    let from = null, ta = null;
     try {
-      const ta = document.getElementById('input');
+      ta = document.getElementById('input');
       if (ta && ta.value.trim() && !reduced()) from = fromRect(ta);
     } catch {}
     const before = document.querySelectorAll('#messages .message-row.user').length;
@@ -11708,6 +11708,25 @@ function wrap() {
       if (from && document.querySelectorAll('#messages .message-row.user').length > before)
         run(from).catch(e => console.warn('[もも] 送信アニメ', e?.message));
     } catch (e) { console.warn('[もも] 送信アニメ', e?.message); }
+
+    // ── 調べ用（URL の末尾に #animdebug を付けたときだけ出る） ──
+    // スマホは開発者コンソールが開けないので、どこで止まったかを画面に出す。
+    // 普段は一切動かない。1回送るだけで全分岐が同時に分かる。
+    if (location.hash === '#animdebug') setTimeout(() => {
+      try {
+        const L = document.getElementById('animLayer');
+        const g = document.querySelector('#animLayer .anim-ghost');
+        const r = g && g.getBoundingClientRect();
+        showToast(
+          'rm=' + reduced() +
+          ' 欄=' + (ta ? '有' : '無') +
+          ' 位置=' + (from ? Math.round(from.left) + ',' + Math.round(from.top) : '取れず') +
+          ' 吹=' + before + '→' + document.querySelectorAll('#messages .message-row.user').length +
+          ' 層=' + (L ? getComputedStyle(L).display : '無') +
+          ' 影=' + (r ? Math.round(r.left) + ',' + Math.round(r.top) +
+                        ' 透' + getComputedStyle(g).opacity : '無'), 12000);
+      } catch (e) { showToast('調べ用の表示に失敗: ' + (e && e.message), 9000); }
+    }, 250);
 
     return p;
   };
