@@ -126,6 +126,65 @@ header h1 span{color:var(--faint);font-weight:400}
 .welcome .pend{margin-top:9px;padding-top:9px;border-top:1px solid var(--line)}
 .welcome .pend ul{margin:0;padding-left:17px}
 .welcome .pend li{margin:0 0 4px;overflow-wrap:anywhere}
+
+/* ── phase2: 記憶（終わり方と忘却） ─────── */
+#mem{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:800;
+  display:none;align-items:flex-start;justify-content:center;padding:52px 16px 22px}
+#mem.on{display:flex}
+#mem .sheet{width:100%;max-width:520px;max-height:100%;background:var(--surface);
+  border:1px solid var(--line2);border-radius:14px;display:flex;flex-direction:column;overflow:hidden}
+#mem .sh{padding:12px 15px;border-bottom:1px solid var(--line);display:flex;
+  align-items:center;gap:10px;font-size:13px;font-weight:600}
+#mem .sb{overflow-y:auto;padding:11px 13px}
+.ses{border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-bottom:8px;
+  background:var(--surface2);font-size:13px;line-height:1.6;cursor:pointer;transition:.15s}
+.ses:hover{border-color:var(--accent)}
+.ses .t{overflow-wrap:anywhere}
+.ses .m{font-size:10.5px;color:var(--faint);margin-top:4px;display:flex;
+  align-items:center;gap:7px;flex-wrap:wrap}
+.ses .m b{font-weight:600;padding:1px 5px;border-radius:4px;font-size:10px}
+.ses.e-resolved  .m b{background:rgba(127,214,166,.16);color:var(--good)}
+.ses.e-deferred  .m b{background:rgba(158,203,255,.16);color:var(--accent)}
+.ses.e-derailed  .m b{background:rgba(240,163,90,.16);color:var(--warn)}
+.ses.e-exhausted .m b{background:rgba(255,139,139,.16);color:var(--bad)}
+.ses .bar{height:2px;border-radius:2px;background:var(--line2);margin-top:7px;overflow:hidden}
+.ses .bar i{display:block;height:100%;background:var(--accent)}
+.ses.fading{border-style:dashed}
+.ses .ask{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);
+  font-size:12px;color:var(--dim);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ses .ask button{background:none;border:1px solid var(--line2);border-radius:7px;
+  padding:3px 9px;font-size:11.5px;color:var(--dim)}
+.ses .ask button.yes:hover{border-color:var(--bad);color:var(--bad)}
+.ses .ask button.no:hover{border-color:var(--accent);color:var(--accent)}
+.ses.tomb{opacity:.3;cursor:default;font-style:italic}
+.ses.tomb:hover{border-color:var(--line)}
+
+/* ── phase2: 主導権交代（ASK_MODE） ─────── */
+.ask-card{max-width:760px;margin:0 auto 16px;border:1px solid var(--accent);
+  border-radius:var(--r);padding:12px 14px;background:var(--accent-dim);font-size:13.5px}
+.ask-card .lead{font-size:11px;letter-spacing:.09em;color:var(--accent);
+  font-weight:600;margin-bottom:7px}
+.ask-card .q{line-height:1.7;overflow-wrap:anywhere;margin-bottom:10px}
+.ask-card .ch{display:flex;flex-direction:column;gap:6px}
+.ask-card .ch button{text-align:left;background:var(--surface);border:1px solid var(--line2);
+  border-radius:9px;padding:8px 11px;font-size:13px;line-height:1.6;transition:.15s}
+.ask-card .ch button:hover{border-color:var(--accent);background:var(--surface2)}
+.ask-card .foot{margin-top:9px;display:flex;align-items:center;gap:10px;
+  font-size:11.5px;color:var(--faint)}
+.ask-card .foot button{background:none;border:none;color:var(--faint);
+  text-decoration:underline;padding:0;font-size:11.5px}
+.ask-card .foot button:hover{color:var(--accent)}
+.merged{max-width:760px;margin:0 auto 16px;border-left:2px solid var(--accent);
+  padding-left:11px;font-size:13px;line-height:1.75}
+.merged h5{margin:0 0 5px;font-size:11px;letter-spacing:.09em;color:var(--faint);font-weight:600}
+.merged .sum{white-space:pre-wrap;overflow-wrap:anywhere}
+.merged details{margin-top:7px}
+.merged summary{font-size:11px;color:var(--faint);cursor:pointer;list-style:none}
+.merged summary::-webkit-details-marker{display:none}
+.merged summary::before{content:'▸ '}
+.merged details[open] summary::before{content:'▾ '}
+.merged .qa{font-size:12px;color:var(--dim);border-left:2px solid var(--line2);
+  padding-left:9px;margin-top:6px;white-space:pre-wrap;overflow-wrap:anywhere}
 </style>
 </head>
 <body>
@@ -145,6 +204,7 @@ header h1 span{color:var(--faint);font-weight:400}
     <h1>ghostchat <span id="hsub"></span></h1>
     <div class="spacer"></div>
     <button class="hbtn" id="btnPane">確定事項</button>
+    <button class="hbtn" id="btnMem">記憶</button>
     <button class="hbtn" id="btnPriv">記録 OFF</button>
   </header>
   <div id="main">
@@ -161,6 +221,13 @@ header h1 span{color:var(--faint);font-weight:400}
       <div class="pane-h">確定事項</div>
       <div class="pane-b" id="paneBody"><div class="empty">手打ちで書いた「決めたこと」がここに積まれます。</div></div>
     </aside>
+  </div>
+</div>
+
+<div id="mem">
+  <div class="sheet">
+    <div class="sh">記憶<span class="spacer"></span><button class="hbtn" id="memClose">閉じる</button></div>
+    <div class="sb" id="memBody"></div>
   </div>
 </div>
 
@@ -1137,6 +1204,347 @@ const Returns = (() => {
 const Phase1 = { async boot() { try { await Facts.render(); } catch (e) { console.warn('[phase1]', e?.message); } } };
 </script>
 
+<!-- ===== S7 FEATURES / Phase 2 追加 ===== -->
+<script>
+// 機能⑦ 終わり方の分類 × 忘却
+// 機能⑥ 主導権交代 × 会話分岐（ASK_MODE）
+// ここもフェーズ0・1の区画には触れず、足すだけ。
+
+// ─────────────────────────────────────────────────────────────
+// 機能⑦ 終わり方の分類 × 忘却
+// 終わり方が記憶の寿命を決める。放置したものは自然に薄れ、宙吊りのものだけ残る。
+// ─────────────────────────────────────────────────────────────
+const Memory = (() => {
+  const DAY = 86400000;
+  const LABEL = { resolved:'片付いた', deferred:'保留', derailed:'脱線', exhausted:'力尽き' };
+
+  const SYS = `あなたは会話の終わり方を見分ける分類器です。
+
+次の4つから1つ選ぶ:
+ resolved  = 用が済んで終わった。結論が出た、答えが得られた。
+ deferred  = 結論を出さずに意図的に後回しにした。「また今度」「一旦保留」。
+ derailed  = 本題から逸れたまま終わった。雑談に流れた、別の話に移った。
+ exhausted = 力尽きた。噛み合わないまま、疲れて、投げ出して終わった。
+
+title は会話全体を20文字以内の1行で表す（体言止め、記号を使わない）。
+
+迷ったら deferred を選ぶ。deferred は忘れられずに残るので、
+判断を誤って何かを消してしまうより、残しておくほうが害が少ない。
+
+出力（JSONのみ）:
+{"endKind":"deferred","title":"予算の増額と会場の検討"}`;
+
+  Queue.def('classify_ending', async (p, signal) => {
+    const cur = Session.current;
+    if (!cur) return;
+    const hist = Chat.history.slice(-CFG.history.apiContext);
+    if (hist.length < 2) return;
+    const convo = hist.map(m => (m.role === 'user' ? 'ユーザー: ' : 'ボット: ') + m.content)
+                      .join('\n').slice(-6000);
+    const out = await LLM.callLLM({ system:SYS, messages:[{ role:'user', content:convo }],
+                                    expectJson:true, model:CFG.llm.taskModel, signal });
+    // 分類できなくても「終わった」ことは記録する。既定は deferred（消えないほう）。
+    cur.endKind = LABEL[out?.endKind] ? out.endKind : 'deferred';
+    cur.title   = String(out?.title || '').trim().slice(0, 40) || null;
+    cur.endedAt = Date.now();
+    try { await Store.put('sessions', cur); } catch {}
+  });
+
+  // idle:t4（15分）とタブ離脱で「終わった」とみなす
+  Bus.on('idle:t4', () => queueClassify());
+  Bus.on('visibility:hidden', () => queueClassify());
+  function queueClassify() {
+    Queue.add('classify_ending', {}, { interruptible:false, dedupeKey:'classify_ending' });
+  }
+
+  // 終わったと判定した後で会話が続いたら、終了の印を取り消す。
+  Bus.on('input:submit', () => {
+    const cur = Session.current;
+    if (!cur || !cur.endedAt) return;
+    cur.endedAt = null; cur.endKind = null;
+    Store.put('sessions', cur).catch(() => {});
+  });
+
+  // weight = exp(-Δt / tau)。参照されると lastTouchedAt が動いて回復する（想起による強化）。
+  function weightOf(s, nowMs) {
+    const tau = CFG.decay.tau[s.endKind];
+    if (tau === undefined) return 1;
+    if (!isFinite(tau)) return 1;                       // deferred は薄れない
+    const days = Math.max(0, ((nowMs ?? Date.now()) - (s.lastTouchedAt || s.endedAt || 0)) / DAY);
+    return Math.exp(-days / tau);
+  }
+
+  async function recall(id) {
+    try {
+      const s = await Store.get('sessions', id);
+      if (!s || s.forgottenAt) return null;
+      s.lastTouchedAt = Date.now();
+      await Store.put('sessions', s);
+      return s;
+    } catch { return null; }
+  }
+
+  // 物理削除ではなく tombstone に落とす。何があったかの跡だけ残す。
+  async function forget(id) {
+    let s = null;
+    try { s = await Store.get('sessions', id); } catch {}
+    if (!s) return false;
+    for (const [store, idx] of [['messages','sessionId'], ['facts','sessionId'],
+                                ['pendings','sessionId'], ['inputEvents','sessionId'],
+                                ['branches','sessionId'], ['ghosts','sessionId']]) {
+      try { for (const r of await Store.query(store, idx, { only:id })) await Store.del(store, r.id); }
+      catch {}
+    }
+    try { await Store.put('sessions', { id, endKind: s.endKind || null, forgottenAt: Date.now() }); }
+    catch { return false; }
+    return true;
+  }
+
+  async function render() {
+    const el = document.getElementById('memBody');
+    if (!el) return;
+    let list = [];
+    try { list = await Store.query('sessions'); } catch {}
+    const now = Date.now();
+    list = list.filter(s => s.id !== Session.id())
+               .sort((a,b) => (b.lastTouchedAt || b.forgottenAt || 0) - (a.lastTouchedAt || a.forgottenAt || 0));
+    if (!list.length) {
+      el.innerHTML = '<div class="empty">まだ過去の会話がありません。<br>'
+                   + '終わり方によって、薄れる速さが変わります。</div>';
+      return;
+    }
+    el.innerHTML = '';
+    for (const s of list) {
+      const d = document.createElement('div');
+      if (s.forgottenAt) {
+        d.className = 'ses tomb';
+        d.innerHTML = `<div class="t">忘れました</div><div class="m">`
+                    + `<b>${UI.esc(LABEL[s.endKind] || '—')}</b>`
+                    + `${new Date(s.forgottenAt).toLocaleDateString('ja-JP')} に忘却</div>`;
+        el.appendChild(d); continue;
+      }
+      const w = weightOf(s, now);
+      const dim = s.endKind ? Math.max(.2, Math.min(1, .25 + .75 * w)) : 1;
+      d.className = 'ses e-' + (s.endKind || 'none') + (w < CFG.decay.forgetThreshold ? ' fading' : '');
+      d.style.opacity = dim.toFixed(2);
+      let h = `<div class="t">${UI.esc(s.title || '（題のない会話）')}</div>`
+            + `<div class="m"><b>${UI.esc(LABEL[s.endKind] || 'まだ終わっていない')}</b>`
+            + `${new Date(s.lastTouchedAt || s.startedAt || 0).toLocaleString('ja-JP',
+                 {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'})}`
+            + `<span>濃さ ${Math.round(w * 100)}%</span></div>`
+            + `<div class="bar"><i style="width:${Math.round(w * 100)}%"></i></div>`;
+      if (s.endKind && w < CFG.decay.forgetThreshold)
+        h += `<div class="ask">これ、忘れていいですか`
+           + `<button class="yes" data-forget="${s.id}">忘れる</button>`
+           + `<button class="no"  data-keep="${s.id}">残す</button></div>`;
+      d.innerHTML = h;
+      d.addEventListener('click', async (ev) => {
+        const fid = ev.target.getAttribute?.('data-forget');
+        const kid = ev.target.getAttribute?.('data-keep');
+        if (fid) { ev.stopPropagation(); if (await forget(Number(fid))) UI.toast('忘れました'); await render(); return; }
+        if (kid) { ev.stopPropagation(); await recall(Number(kid)); UI.toast('残しました。思い出したぶん濃くなります'); await render(); return; }
+        await recall(s.id); await render();     // 参照＝想起。開くたびに少し濃くなる。
+      });
+      el.appendChild(d);
+    }
+  }
+
+  function open()  { document.getElementById('mem')?.classList.add('on'); render(); }
+  function close() { document.getElementById('mem')?.classList.remove('on'); }
+
+  return { render, open, close, weightOf, forget, recall, LABEL };
+})();
+
+// ─────────────────────────────────────────────────────────────
+// 機能⑥ 主導権交代 × 会話分岐（ASK_MODE）
+// 全消しが続くのは「言語化に失敗している」サイン。そこでボットが質問側に回る。
+// 本流のログを質問攻めで汚さないため、やりとりは枝に逃がして最後に1つに畳む。
+// ─────────────────────────────────────────────────────────────
+const Ask = (() => {
+  let clears = [];            // 全消しの時刻
+  let active = false, branchId = null, parentId = null, qCount = 0;
+  let qa = [];                // [{q, a}]
+  let card = null, lastMainId = null;
+
+  const SYS_Q = `相手は書こうとして全部消す、を何度も繰り返しています。
+言いたいことがまだ言葉になっていない状態です。あなたが質問する側に回ってください。
+
+規則:
+・1回に1問だけ。短く。
+・必ず選択肢を出す（自由記述だけを求めると、相手はさらに詰まります）。
+・選択肢は2〜4個。それぞれ20文字以内。相手の状況を言い当てにいく。
+・最後の選択肢は必ず「どれでもない」系の逃げ道にする。
+・詰問しない。責めない。「なぜ」で始めない。
+・これまでの会話に沿った質問にする。一般論を聞かない。
+
+出力（JSONのみ）:
+{"question":"いま詰まっているのは、どのあたりですか","choices":["何を聞けばいいか分からない","言葉が見つからない","前提から説明が要る","どれでもない"]}`;
+
+  const SYS_MERGE = `ヒアリングのやりとりを、本人が書いたつもりの1つの文にまとめてください。
+
+規則:
+・120文字以内。1〜3文。
+・本人の言葉として書く（「〜とのことです」のような伝聞にしない）。
+・選ばれなかった選択肢のことは書かない。
+・答えから分かること以外を足さない。
+
+出力はまとめた文のみ。前置きも記号も付けない。`;
+
+  // ── 発動条件: windowMs 以内に CLEAR が clearStreak 回、かつその間に送信が無い ──
+  Bus.on('input:delete', (e) => {
+    if (!e || e.deleteKind !== 'CLEAR') return;
+    const now = Date.now();
+    clears = clears.filter(t => now - t < CFG.askMode.windowMs);
+    clears.push(now);
+    if (!active && clears.length >= CFG.askMode.clearStreak) { clears = []; enter().catch(() => {}); }
+  });
+  Bus.on('input:submit', (e) => {
+    clears = [];                                  // 送信できたなら詰まっていない
+    if (e?.messageId != null) lastMainId = e.messageId;
+    if (active) exit('self').catch(() => {});
+  });
+
+  async function enter() {
+    if (active) return;
+    active = true; qCount = 0; qa = []; parentId = lastMainId;
+    try {
+      branchId = await Store.put('branches', {
+        sessionId: Session.id(), kind:'interview', parentId,
+        startedAt: Date.now(), endedAt: null, mergedMessageId: null, reason: null,
+      });
+    } catch { branchId = null; }
+    await nextQuestion();
+  }
+
+  async function nextQuestion() {
+    if (!active) return;
+    if (qCount >= CFG.askMode.maxQuestions) { await exit('maxQuestions'); return; }
+    const ctx = Chat.history.slice(-8)
+      .map(m => (m.role === 'user' ? 'ユーザー: ' : 'ボット: ') + m.content).join('\n');
+    const asked = qa.map((x, i) => `Q${i+1}: ${x.q}\nA${i+1}: ${x.a}`).join('\n');
+    const out = await LLM.callLLM({
+      system: SYS_Q, expectJson: true, model: CFG.llm.taskModel,
+      messages: [{ role:'user', content:
+        (ctx ? 'これまでの会話:\n' + ctx + '\n\n' : '') +
+        (asked ? 'すでに聞いたこと:\n' + asked + '\n\n' : '') + '次の1問を出してください。' }],
+    });
+    const q = String(out?.question || '').trim();
+    const choices = (Array.isArray(out?.choices) ? out.choices : [])
+      .map(c => String(c || '').trim()).filter(Boolean).slice(0, 4);
+    if (!q || !choices.length) { await exit('unavailable'); return; }   // 作れないなら黙って引く
+    qCount++;
+    await persist('assistant', q);
+    show(q, choices);
+  }
+
+  function show(q, choices) {
+    hide();
+    const log = document.getElementById('log');
+    if (!log) return;
+    card = document.createElement('div');
+    card.className = 'ask-card';
+    card.innerHTML = `<div class="lead">聞かせてください</div>`
+      + `<div class="q">${UI.esc(q)}</div><div class="ch"></div>`
+      + `<div class="foot"><span>${qCount} / ${CFG.askMode.maxQuestions}</span>`
+      + `<button data-quit="1">自分で書く</button></div>`;
+    const ch = card.querySelector('.ch');
+    for (const c of choices) {
+      const b = document.createElement('button');
+      b.textContent = c;
+      b.addEventListener('click', () => answer(q, c));
+      ch.appendChild(b);
+    }
+    card.querySelector('[data-quit]').addEventListener('click', () => { exit('manual').catch(() => {}); });
+    log.appendChild(card);
+    UI.scroll();
+  }
+  function hide() { if (card) { card.remove(); card = null; } }
+
+  async function answer(q, a) {
+    qa.push({ q, a });
+    await persist('user', a);
+    hide();
+    await nextQuestion();
+  }
+
+  async function persist(role, text) {
+    try {
+      return await Store.put('messages', {
+        sessionId: Session.id(), branchId, parentId,
+        role, text, sentAt: Date.now(), typedRanges: null, pastedRanges: null, deleteCounts: null,
+      });
+    } catch { return null; }
+  }
+
+  async function exit(reason) {
+    if (!active) return;
+    active = false;
+    hide();
+    const pairs = qa.slice();
+    qa = [];
+    // 畳んでいる途中に次のASK_MODEが始まっても取り違えないよう、枝IDをここで手放す
+    const bid = branchId;
+    branchId = null;
+    if (bid != null) {
+      try {
+        const b = await Store.get('branches', bid);
+        if (b) { b.endedAt = Date.now(); b.reason = reason; await Store.put('branches', b); }
+      } catch {}
+    }
+    if (!pairs.length) return;                         // 何も聞けていないなら本流に何も足さない
+
+    const detail = pairs.map((x, i) => `Q${i+1} ${x.q}\nA${i+1} ${x.a}`).join('\n\n');
+    let summary = await LLM.callLLM({
+      system: SYS_MERGE, model: CFG.llm.taskModel,
+      messages: [{ role:'user', content: detail }],
+    });
+    summary = String(summary || '').trim();
+    if (!summary) summary = pairs.map(x => x.a).join('。');   // LLMが落ちても畳む
+
+    // 本流には1メッセージだけ足す。詳細は折りたたみに逃がす。
+    let mid = null;
+    try {
+      mid = await Store.put('messages', {
+        sessionId: Session.id(), branchId: null, parentId,
+        role:'user', text: summary, sentAt: Date.now(), fromBranchId: bid,
+        typedRanges: null, pastedRanges: null, deleteCounts: null,
+      });
+    } catch {}
+    if (bid != null) {
+      try {
+        const b = await Store.get('branches', bid);
+        if (b) { b.mergedMessageId = mid; await Store.put('branches', b); }
+      } catch {}
+    }
+    try { Chat.history.push({ role:'user', content: summary }); } catch {}
+
+    const log = document.getElementById('log');
+    if (log) {
+      const box = document.createElement('div');
+      box.className = 'merged';
+      box.dataset.branch = String(bid ?? '');
+      box.innerHTML = `<h5>聞き取りの結果</h5><div class="sum">${UI.esc(summary)}</div>`
+        + `<details><summary>やりとり ${pairs.length}問</summary>`
+        + `<div class="qa">${UI.esc(detail)}</div></details>`;
+      log.appendChild(box);
+      UI.scroll();
+    }
+  }
+
+  return { enter, exit, get active(){ return active; }, get asked(){ return qCount; },
+           _clears(){ return clears.length; } };
+})();
+
+// フェーズ2の起動処理。
+const Phase2 = { boot() {
+  document.getElementById('btnMem')?.addEventListener('click', () => Memory.open());
+  document.getElementById('memClose')?.addEventListener('click', () => Memory.close());
+  document.getElementById('mem')?.addEventListener('click', (e) => {
+    if (e.target.id === 'mem') Memory.close();     // 外側をタップして閉じる
+  });
+} };
+</script>
+
 <!-- ===== S8 UI ===== -->
 <script>
 const UI = (() => {
@@ -1259,6 +1667,7 @@ const Privacy = (() => {
     document.getElementById('btnPriv').addEventListener('click', Privacy.toggle);
     await Queue.recover();
     await Phase1.boot();
+    Phase2.boot();
     Tele.purgeOld();
     document.getElementById('input').focus();
   }
