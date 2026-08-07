@@ -11279,9 +11279,11 @@ const ANIM = (() => {
 'use strict';
 
 const D_FLY   = 480;    // 入力欄 → 吹き出し
-const D_SUCK  = 620;    // 吹き出し → 思考中アイコン
+const D_SUCK  = 820;    // 吹き出し → 思考中アイコン（全体の長さ）
+const SHOT    = 0.26;   // 1文字が飛んでいる時間（全体に対する割合）。短い＝速い
+const PRE     = 0.05;   // 飛ぶ直前に「選ばれた」と分かるよう光る時間
 const MAX_P   = 44;     // 吸い込む文字の最大数（長文でも粒は増やさない）
-const ARC     = 30;     // 吸い込みの弧の高さ
+const ARC     = 30;     // 吸い込みの弧の高さ（1文字ごとに散らす）
 
 const reduced = () => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; }
                         catch { return false; } };
@@ -11315,6 +11317,23 @@ function layer() {
 }
 const raf = () => new Promise(r => requestAnimationFrame(r));
 
+// 返事が出始めたかどうか。もも が速く答えたときは、アニメの途中でも畳む。
+// 「考え中」の行も .message-row.ai だが本文が空なので、中身があるものだけ数える。
+function answerWatcher() {
+  const count = () => [...document.querySelectorAll('#messages .message-row.ai .bubble')]
+    .filter(b => b.textContent.trim()).length;
+  const base = count();
+  return () => count() > base;
+}
+// 途中終了。動かすのをやめて、その場からすっと消す。
+function fadeOut(els, done) {
+  for (const el of els) {
+    el.style.transition = 'opacity 170ms linear';
+    el.style.opacity = '0';
+  }
+  setTimeout(done, 190);
+}
+
 // 入力欄の「文字が見えている位置」。textarea のスクロール量も引く。
 function fromRect(ta) {
   const r  = ta.getBoundingClientRect();
@@ -11333,7 +11352,7 @@ function fromRect(ta) {
 /* ── 第1段: 入力欄の文字が、そのまま吹き出しの位置へ飛ぶ ───────────────
    毎フレーム着地点を測り直している。途中で思考中の行が生えて画面が
    ずれても、着地がぴったり合うようにするため。 */
-function fly(from) {
+function fly(from, answered) {
   const msgs = document.getElementById('messages');
   if (!msgs) return Promise.resolve(null);
   const row = [...msgs.querySelectorAll('.message-row.user')].pop();
@@ -11381,6 +11400,16 @@ function fly(from) {
     let t0 = null;
     requestAnimationFrame(function step(now) {
       if (t0 === null) t0 = now;
+      // もも のほうが速かった。飛んでいる途中でも畳んで、返事に場所を譲る。
+      if (answered && answered()) {
+        clearTimeout(guard);
+        bubble.style.opacity = '';            // 本物は即座に出す。消えたままにしない
+        msgs.style.scrollBehavior = prevSB;
+        done = true;
+        fadeOut([ghost], () => ghost.remove());
+        res(null);                            // 第2段には進まない
+        return;
+      }
       const p = Math.min(1, (now - t0) / D_FLY);
       const e = EASE_FLY(p);
       const to = bubble.getBoundingClientRect();     // 着地点を毎フレーム追う
@@ -11427,11 +11456,21 @@ function sample(el, max) {
   return out;
 }
 
-function suck(bubble) {
+function suck(bubble, answered) {
   const wave = document.querySelector('#typingRow .typing-wave');
   if (!wave) return Promise.resolve();
   const pts = sample(bubble, MAX_P);
   if (!pts.length) return Promise.resolve();
+
+  // 順番をシャッフルする。頭から順に吸うと1本の波に見えてしまい、
+  // 「1文字ずつ選ばれている」ようには見えない。バラバラの位置から
+  // 1粒ずつ飛ぶことで、はじめて拾われている感じになる。
+  const order = pts.map((_, i) => i);
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const t = order[i]; order[i] = order[j]; order[j] = t;
+  }
+  const spread = 1 - SHOT;              // 最後の1粒が飛び終わるまでに収める
 
   const L = layer();
   const parts = pts.map((c, i) => {
@@ -11439,9 +11478,14 @@ function suck(bubble) {
     s.className = 'anim-char';
     s.textContent = c.ch;
     s.style.transform = `translate3d(${c.x}px, ${c.y}px, 0)`;
+    s.style.opacity = '0';
     L.appendChild(s);
-    // 上の文字から順に吸われる。粒ごとに少しずらして「流れ」にする。
-    return { el: s, x: c.x, y: c.y, d: (i / pts.length) * 0.45 };
+    return {
+      el: s, x: c.x, y: c.y,
+      d: (order[i] / pts.length) * spread,       // 飛び立つ順（ランダム）
+      arc: ARC * (0.55 + Math.random() * 0.9),   // 弧の高さも1粒ずつ散らす
+      sway: (Math.random() - 0.5) * 26,          // 横の振れ
+    };
   });
 
   let done = false;
@@ -11452,16 +11496,30 @@ function suck(bubble) {
     let t0 = null;
     requestAnimationFrame(function step(now) {
       if (t0 === null) t0 = now;
+      // 返事が出始めた、または吸い込み先が消えた → その場から消して終わる
+      if ((answered && answered()) || !wave.isConnected) {
+        clearTimeout(guard); done = true;
+        fadeOut(parts.map(q => q.el), () => parts.forEach(q => q.el.remove()));
+        res();
+        return;
+      }
       const p = Math.min(1, (now - t0) / D_SUCK);
       const r = wave.getBoundingClientRect();        // 吸い込み先も毎フレーム追う
       const tx = r.left + r.width / 2, ty = r.top + r.height / 2;
       for (const q of parts) {
-        const local = Math.max(0, Math.min(1, (p - q.d) / (1 - q.d)));
+        if (p < q.d) {
+          // まだ飛んでいない。直前だけ、その場で光らせて「選ばれた」と分かるようにする。
+          const g = Math.max(0, Math.min(1, (p - (q.d - PRE)) / PRE));
+          q.el.style.transform = `translate3d(${q.x}px, ${q.y}px, 0) scale(${1 + 0.28 * g})`;
+          q.el.style.opacity = String(g);
+          continue;
+        }
+        const local = Math.min(1, (p - q.d) / SHOT);   // 1粒あたりは短時間＝速い
         const e = EASE_SUCK(local);
-        const x = q.x + (tx - q.x) * e;
-        const y = q.y + (ty - q.y) * e - Math.sin(e * Math.PI) * ARC;
-        q.el.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${1 - 0.9 * e})`;
-        q.el.style.opacity = String(local < 0.12 ? local / 0.12 : Math.max(0, 1 - e * 1.05));
+        const x = q.x + (tx - q.x) * e + Math.sin(e * Math.PI) * q.sway;
+        const y = q.y + (ty - q.y) * e - Math.sin(e * Math.PI) * q.arc;
+        q.el.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${1.28 - 1.18 * e})`;
+        q.el.style.opacity = String(Math.max(0, 1 - Math.pow(e, 1.7)));
       }
       if (p < 1) requestAnimationFrame(step);
       else { clearTimeout(guard); clean(); res(); }
@@ -11470,12 +11528,16 @@ function suck(bubble) {
 }
 
 async function run(from) {
-  const bubble = await fly(from);
-  if (!bubble) return;
+  const answered = answerWatcher();
+  const bubble = await fly(from, answered);
+  if (!bubble || answered()) return;
   // 思考中の行が出るのを少しだけ待つ。出なければ第2段は黙って省く。
-  for (let i = 0; i < 25 && !document.querySelector('#typingRow .typing-wave'); i++) await raf();
-  if (!document.querySelector('#typingRow .typing-wave')) return;
-  await suck(bubble);
+  for (let i = 0; i < 25 && !document.querySelector('#typingRow .typing-wave'); i++) {
+    if (answered()) return;
+    await raf();
+  }
+  if (!document.querySelector('#typingRow .typing-wave') || answered()) return;
+  await suck(bubble, answered);
 }
 
 /* ── 既存の送信に接続する（包むだけ・中身は無改造） ─────────────────── */
