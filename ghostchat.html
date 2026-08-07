@@ -185,6 +185,48 @@ header h1 span{color:var(--faint);font-weight:400}
 .merged details[open] summary::before{content:'▾ '}
 .merged .qa{font-size:12px;color:var(--dim);border-left:2px solid var(--line2);
   padding-left:9px;margin-top:6px;white-space:pre-wrap;overflow-wrap:anywhere}
+
+/* ── phase3: 記録の中身 ─────────────────── */
+#priv{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:800;
+  display:none;align-items:flex-start;justify-content:center;padding:52px 16px 22px}
+#priv.on{display:flex}
+#priv .sheet{width:100%;max-width:520px;max-height:100%;background:var(--surface);
+  border:1px solid var(--line2);border-radius:14px;display:flex;flex-direction:column;overflow:hidden}
+#priv .sh{padding:12px 15px;border-bottom:1px solid var(--line);display:flex;
+  align-items:center;gap:10px;font-size:13px;font-weight:600}
+#priv .sb{overflow-y:auto;padding:11px 13px}
+#priv h3{font-size:11px;letter-spacing:.09em;color:var(--faint);font-weight:600;
+  margin:14px 0 7px}
+#priv h3:first-child{margin-top:0}
+#priv .row{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:4px}
+#priv .row button{background:none;border:1px solid var(--line2);border-radius:8px;
+  padding:6px 11px;font-size:12px;color:var(--dim);transition:.15s}
+#priv .row button:hover{border-color:var(--accent);color:var(--accent)}
+#priv .row button.danger:hover{border-color:var(--bad);color:var(--bad)}
+#priv .note{font-size:11.5px;color:var(--faint);line-height:1.8;margin:6px 0 0}
+#priv .cnt{font-size:12px;color:var(--dim);margin-bottom:8px}
+.ghost{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:7px;
+  background:var(--surface2);font-size:12.5px;line-height:1.65}
+.ghost .g{white-space:pre-wrap;overflow-wrap:anywhere;color:var(--dim);
+  max-height:96px;overflow-y:auto}
+.ghost .m{font-size:10.5px;color:var(--faint);margin-top:5px;display:flex;
+  align-items:center;gap:8px;flex-wrap:wrap}
+.ghost .m b{font-weight:600;padding:1px 5px;border-radius:4px;font-size:10px;
+  background:var(--line2);color:var(--dim)}
+.ghost .m .spacer{flex:1}
+.ghost .m button{background:none;border:1px solid var(--line2);border-radius:6px;
+  padding:2px 8px;font-size:11px;color:var(--faint)}
+.ghost .m button:hover{border-color:var(--bad);color:var(--bad)}
+
+/* ── phase3: 黙る監視者 / 下書き回収 ────── */
+.quiet{max-width:760px;margin:0 auto 16px;font-size:12.5px;color:var(--faint);
+  border-left:2px solid var(--warn);padding-left:11px;line-height:1.8}
+.quiet b{color:var(--dim);font-weight:600}
+.quiet .more{background:none;border:1px solid var(--line2);border-radius:7px;
+  padding:2px 9px;font-size:11px;color:var(--faint);margin-left:8px}
+.quiet .more:hover{border-color:var(--accent);color:var(--accent)}
+.quiet .full{margin-top:7px;white-space:pre-wrap;overflow-wrap:anywhere;
+  color:var(--dim);font-size:12px;border-left:2px solid var(--line2);padding-left:9px}
 </style>
 </head>
 <body>
@@ -205,6 +247,7 @@ header h1 span{color:var(--faint);font-weight:400}
     <div class="spacer"></div>
     <button class="hbtn" id="btnPane">確定事項</button>
     <button class="hbtn" id="btnMem">記憶</button>
+    <button class="hbtn" id="btnData">記録の中身</button>
     <button class="hbtn" id="btnPriv">記録 OFF</button>
   </header>
   <div id="main">
@@ -231,6 +274,13 @@ header h1 span{color:var(--faint);font-weight:400}
   </div>
 </div>
 
+<div id="priv">
+  <div class="sheet">
+    <div class="sh">記録の中身<span class="spacer"></span><button class="hbtn" id="privClose">閉じる</button></div>
+    <div class="sb" id="privBody"></div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <!-- ===== S0 CONFIG ===== -->
@@ -243,6 +293,11 @@ const CFG = {
   clear:     { minLenForClear: 12, bulkDeleteRatio: 0.6 },
   askMode:   { clearStreak: 3, windowMs: 180000, maxQuestions: 4 },
   budget:    { observerPerSession: 1, ghostRecallPerSession: 1 },
+  // 監視者が口を開く条件（フェーズ3で追加）。頻度を上げるとそのぶん指摘が軽くなる。
+  observer:  { repeatThreshold: 3,   // 同じ語で何回詰まったら喋るか
+               minSessions: 2,       // 何セッション跨いでいれば喋ってよいか
+               clusterMin: 2,        // 同じクラスタに何件落ちたら「同じ轍」とみなすか
+               jaccard: 0.34 },      // ghost を同じクラスタとみなす語の重なり
   queue:     { concurrency: 1, maxAttempts: 2 },
   decay:     { tau: { resolved: 3, deferred: Infinity, derailed: 2, exhausted: 1 },
                forgetThreshold: 0.15 },
@@ -1545,6 +1600,378 @@ const Phase2 = { boot() {
 } };
 </script>
 
+<!-- ===== S7 FEATURES / Phase 3 追加 ===== -->
+<script>
+// プライバシーUI（フェーズ3の前提条件）
+// 機能② 打鍵停滞 × 黙る監視者
+// 機能⑤ 未送信下書き回収 × 同じ轍
+//
+// 方針: ここで扱うのは全機能で最も機微なデータ。記録は Privacy.isOn() の間だけ行い、
+// OFF の間は保存もバッファもしない。LLM に渡すのは抽象化した結果だけで、
+// 打鍵ログ・未送信テキストの生データは一切外に出さない。
+// このため「同じ轍」のクラスタリングは埋め込みAPIを使わず、端末内の語の重なりで行う。
+
+// ── 語の切り出し ───────────────────────────────────────────────
+// 助詞・記号・数字を落として normToken に正規化する。
+const Tok = (() => {
+  const seg = (typeof Intl !== 'undefined' && Intl.Segmenter)
+    ? new Intl.Segmenter('ja', { granularity:'word' }) : null;
+  const STOP = new Set(['これ','それ','あれ','この','その','あの','ここ','そこ','どこ',
+    'こと','もの','ため','よう','です','ます','した','する','ある','いる','なる','思う',
+    'ちょっと','やっぱり','たぶん','けど','でも','ので','から','という','あと','まあ']);
+
+  function words(text) {
+    const s = String(text || '');
+    if (!s) return [];
+    let raw;
+    if (seg) raw = [...seg.segment(s)].filter(x => x.isWordLike).map(x => x.segment);
+    else raw = s.split(/[\s、。,.!?！？「」（）()\[\]]+/);
+    const out = [];
+    for (const w of raw) {
+      const t = w.normalize('NFKC').toLowerCase().trim();
+      if (!t) continue;
+      if (/^\d+$/.test(t)) continue;                       // 数字
+      if (/^[^\p{L}\p{N}]+$/u.test(t)) continue;           // 記号のみ
+      if (/^[ぁ-ん]{1,2}$/.test(t)) continue;              // 助詞・短いひらがな
+      if (t.length < 2 && !/[一-鿿]/.test(t)) continue;
+      if (STOP.has(t)) continue;
+      out.push(t);
+    }
+    return out;
+  }
+  const first = (text) => words(text)[0] || null;
+  function jaccard(a, b) {
+    if (!a.size || !b.size) return 0;
+    let inter = 0;
+    for (const x of a) if (b.has(x)) inter++;
+    return inter / (a.size + b.size - inter);
+  }
+  return { words, first, jaccard };
+})();
+
+// ─────────────────────────────────────────────────────────────
+// 機能② 打鍵停滞 × 黙る監視者
+// 平均と標準偏差は使わない。1回の長考で基準が壊れるため、median と MAD で見る。
+// ─────────────────────────────────────────────────────────────
+const Observer = (() => {
+  let gaps = [];               // セッション内の打鍵間隔（ローリング）
+  let budget = CFG.budget.observerPerSession;
+  let pending = null;          // 停滞を検知した位置。直後の語を拾うために持つ。
+  let timer = null;
+
+  const median = (a) => {
+    if (!a.length) return 0;
+    const s = [...a].sort((x,y) => x - y), m = s.length >> 1;
+    return s.length % 2 ? s[m] : (s[m-1] + s[m]) / 2;
+  };
+  function robustZ(v) {
+    const med = median(gaps);
+    const mad = median(gaps.map(x => Math.abs(x - med)));
+    if (!mad) return 0;                                   // ばらつきが無いなら判定しない
+    return 0.6745 * (v - med) / mad;
+  }
+
+  Bus.on('input:keystroke', (rec) => {
+    if (!rec || typeof rec.gap !== 'number') return;
+    const gap = rec.gap;
+    // 60秒超は「停滞」ではなく電話・離席・中断。標本にも入れない。
+    if (gap >= CFG.hesitation.ignoreOverMs) return;
+    if (gaps.length >= CFG.hesitation.minSamples && robustZ(gap) > CFG.hesitation.zThreshold) {
+      schedule(rec.caret ?? 0, gap);
+    }
+    gaps.push(gap);
+    if (gaps.length > 400) gaps.splice(0, gaps.length - 400);
+  });
+  Bus.on('input:submit', () => { pending = null; clearTimeout(timer); });
+
+  // 詰まった直後に打たれた語が出そろうのを待ってから拾う
+  function schedule(caret, gap) {
+    pending = { caret, gap };
+    clearTimeout(timer);
+    timer = setTimeout(() => { capture().catch(() => {}); }, 1500);
+  }
+
+  async function capture() {
+    const p = pending; pending = null;
+    if (!p || !Privacy.isOn()) return;                    // OFF の間は記録しない
+    const el = document.getElementById('input');
+    if (!el) return;
+    const from = Math.max(0, p.caret - 1);
+    const token = Tok.first(el.value.slice(from, from + 14));
+    if (!token) return;
+    try {
+      await Store.put('hesitations', { sessionId: Session.id(), normToken: token,
+                                       gap: p.gap, ts: Date.now() });
+    } catch { return; }
+    await maybeSpeak(token);
+  }
+
+  // 黙っているほうが既定。喋る条件を全部満たしたときだけ1度だけ口を開く。
+  async function maybeSpeak(token) {
+    if (budget <= 0) return;
+    let rows = [];
+    try { rows = await Store.query('hesitations', 'normToken', { only: token }); } catch { return; }
+    if (rows.length < CFG.observer.repeatThreshold) return;
+    const sessions = new Set(rows.map(r => r.sessionId));
+    if (sessions.size < CFG.observer.minSessions) return; // 1セッション内の連発では喋らない
+    budget--;
+    const log = document.getElementById('log');
+    if (!log) return;
+    const d = document.createElement('div');
+    d.className = 'quiet';
+    d.innerHTML = `「<b>${UI.esc(token)}</b>」、毎回ここで止まりますね。`;
+    log.appendChild(d);
+    UI.scroll();
+    Bus.emit('observer:spoke', { token, count: rows.length });
+  }
+
+  return { maybeSpeak, _reset(){ gaps = []; budget = CFG.budget.observerPerSession; },
+           get samples(){ return gaps.length; }, get budget(){ return budget; },
+           _feed(v){ gaps.push(v); }, _z: robustZ };
+})();
+
+// ─────────────────────────────────────────────────────────────
+// 機能⑤ 未送信下書き回収 × 同じ轍
+// 書いたのに送らずに消えたテキストを ghost として拾い、
+// 2件以上が同じクラスタに落ちたときだけ「触れられない論点」として一度だけ触れる。
+// ─────────────────────────────────────────────────────────────
+const Ghosts = (() => {
+  let budget = CFG.budget.ghostRecallPerSession;
+  let lastGhostId = null;
+
+  async function save(text, killKind) {
+    if (!Privacy.isOn()) return null;                     // OFF ならバッファにも持たない
+    const t = String(text || '').trim();
+    if (t.length < CFG.telemetry.ghostMinLen) return null;
+    const clusterId = await assignCluster(t);
+    try {
+      lastGhostId = await Store.put('ghosts', {
+        sessionId: Session.id(), text: t, killedAt: Date.now(),
+        killKind, followedBy: null, shown: false, clusterId,
+      });
+      return lastGhostId;
+    } catch { return null; }
+  }
+
+  // 端末内クラスタリング。語の重なりが閾値を超えた既存 ghost に相乗りする。
+  async function assignCluster(text) {
+    const mine = new Set(Tok.words(text));
+    if (!mine.size) return 'c' + Date.now();
+    let all = [];
+    try { all = await Store.query('ghosts'); } catch {}
+    let best = null, bestScore = 0;
+    for (const g of all) {
+      const s = Tok.jaccard(mine, new Set(Tok.words(g.text)));
+      if (s > bestScore) { bestScore = s; best = g; }
+    }
+    if (best && bestScore >= CFG.observer.jaccard && best.clusterId) return best.clusterId;
+    return 'c' + Date.now() + '-' + Math.floor(performance.now() * 1000 % 100000);
+  }
+
+  // 全消し → cleared
+  Bus.on('input:delete', (rec) => {
+    if (!rec || rec.deleteKind !== 'CLEAR') return;
+    const el = document.getElementById('input');
+    if (el) save(el.value, 'cleared');
+  });
+
+  // 選択したまま別の内容を入れた → overwritten
+  function watchOverwrite(el) {
+    el.addEventListener('beforeinput', (e) => {
+      if (!e.inputType || e.inputType.startsWith('delete')) return;
+      const s = el.selectionStart, t = el.selectionEnd;
+      if (t - s < CFG.telemetry.ghostMinLen) return;
+      save(el.value.slice(s, t), 'overwritten');
+    });
+  }
+
+  // 書いたまま放置してセッションが終わった → abandoned
+  function abandon() {
+    const el = document.getElementById('input');
+    if (el && el.value.trim().length >= CFG.telemetry.ghostMinLen) save(el.value, 'abandoned');
+  }
+  Bus.on('visibility:hidden', abandon);
+  Bus.on('idle:t4', abandon);
+
+  // 消したあとで実際に送った文を紐づける
+  Bus.on('input:submit', async (e) => {
+    if (lastGhostId == null || !e?.text) return;
+    const id = lastGhostId; lastGhostId = null;
+    try {
+      const g = await Store.get('ghosts', id);
+      if (g && !g.followedBy) { g.followedBy = String(e.text).slice(0, 200); await Store.put('ghosts', g); }
+    } catch {}
+  });
+
+  // 提示は idle:t3 かつ話が一段落したとき。書いた直後には絶対に出さない。
+  Bus.on('idle:t3', () => { recall().catch(() => {}); });
+
+  async function recall() {
+    if (budget <= 0 || !Privacy.isOn()) return;
+    if (Chat.busy || Ask.active) return;                  // 話の途中には割り込まない
+    const el = document.getElementById('input');
+    if (el && el.value.trim()) return;                    // 書きかけの最中にも出さない
+    let all = [];
+    try { all = await Store.query('ghosts'); } catch { return; }
+    const byCluster = new Map();
+    for (const g of all) {
+      if (!g.clusterId) continue;
+      (byCluster.get(g.clusterId) ?? byCluster.set(g.clusterId, []).get(g.clusterId)).push(g);
+    }
+    // 単発の ghost には触れない。2件以上そろって初めて「同じ轍」になる。
+    let target = null;
+    for (const [, gs] of byCluster) {
+      if (gs.length < CFG.observer.clusterMin) continue;
+      if (gs.every(g => g.shown)) continue;
+      if (!target || gs.length > target.length) target = gs;
+    }
+    if (!target) return;
+    budget--;
+    for (const g of target) { g.shown = true; try { await Store.put('ghosts', g); } catch {} }
+    show(target);
+  }
+
+  function show(gs) {
+    const log = document.getElementById('log');
+    if (!log) return;
+    const latest = [...gs].sort((a,b) => b.killedAt - a.killedAt)[0];
+    const d = document.createElement('div');
+    d.className = 'quiet';
+    d.innerHTML = `同じことを、${gs.length}回書いて消しています。`
+                + `<button class="more">読み返す</button>`;
+    d.querySelector('.more').addEventListener('click', function () {
+      this.remove();
+      const f = document.createElement('div');
+      f.className = 'full';
+      f.textContent = gs.map(g => g.text).join('\n\n— — —\n\n');
+      d.appendChild(f);
+      UI.scroll();
+    });
+    log.appendChild(d);
+    UI.scroll();
+    Bus.emit('ghost:recalled', { clusterId: latest?.clusterId, n: gs.length });
+  }
+
+  return { save, recall, watchOverwrite, assignCluster,
+           _reset(){ budget = CFG.budget.ghostRecallPerSession; },
+           get budget(){ return budget; } };
+})();
+
+// ─────────────────────────────────────────────────────────────
+// 記録の中身（プライバシーUI）
+// 何を持っているかを全部見せて、種類ごとに消せるようにする。
+// ─────────────────────────────────────────────────────────────
+const DataPanel = (() => {
+  const KILL = { cleared:'全消し', overwritten:'上書き', abandoned:'書いたまま放置' };
+
+  async function counts() {
+    const c = {};
+    for (const n of ['inputEvents','ghosts','hesitations','messages','facts','pendings','sessions'])
+      { try { c[n] = (await Store.query(n)).length; } catch { c[n] = 0; } }
+    return c;
+  }
+
+  async function render() {
+    const el = document.getElementById('privBody');
+    if (!el) return;
+    const c = await counts();
+    const on = Privacy.isOn();
+    el.innerHTML =
+      `<div class="cnt">いまの状態: <b>${on ? '● 記録 ON' : '記録 OFF'}</b></div>` +
+      `<p class="note">記録しているのはこの端末のブラウザの中だけです。`
+      + `AIに渡すのは要約した結果だけで、打鍵ログと未送信テキストそのものは送っていません。</p>` +
+      `<h3>いま持っているもの</h3>` +
+      `<div class="cnt">打鍵ログ ${c.inputEvents}件 / 消した下書き ${c.ghosts}件 / `
+      + `詰まった語 ${c.hesitations}件 / 発言 ${c.messages}件</div>` +
+      `<h3>消す</h3>` +
+      `<div class="row">` +
+      `<button data-wipe="keys">打鍵ログだけ消す</button>` +
+      `<button data-wipe="ghosts">消した下書きだけ消す</button>` +
+      `<button class="danger" data-wipe="all">全部消す</button></div>` +
+      `<h3>持ち出す</h3>` +
+      `<div class="row"><button data-export="1">JSONで書き出す</button></div>` +
+      `<h3>消した下書き ${c.ghosts}件</h3>` +
+      `<div id="ghostList"></div>`;
+
+    el.querySelectorAll('[data-wipe]').forEach(b =>
+      b.addEventListener('click', () => wipe(b.getAttribute('data-wipe'))));
+    el.querySelector('[data-export]')?.addEventListener('click', exportJson);
+    await renderGhosts();
+  }
+
+  async function renderGhosts() {
+    const box = document.getElementById('ghostList');
+    if (!box) return;
+    let gs = [];
+    try { gs = await Store.query('ghosts'); } catch {}
+    gs.sort((a,b) => (b.killedAt || 0) - (a.killedAt || 0));
+    if (!gs.length) { box.innerHTML = '<div class="empty">まだ何もありません。</div>'; return; }
+    box.innerHTML = '';
+    for (const g of gs) {
+      const d = document.createElement('div');
+      d.className = 'ghost';
+      d.innerHTML = `<div class="g">${UI.esc(g.text)}</div><div class="m">`
+        + `<b>${UI.esc(KILL[g.killKind] || g.killKind || '—')}</b>`
+        + `${new Date(g.killedAt || 0).toLocaleString('ja-JP', {month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'})}`
+        + `<span class="spacer"></span><button data-del="${g.id}">消す</button></div>`;
+      d.querySelector('[data-del]').addEventListener('click', async () => {
+        try { await Store.del('ghosts', g.id); } catch {}
+        await render();
+      });
+      box.appendChild(d);
+    }
+  }
+
+  async function wipe(kind) {
+    const label = { keys:'打鍵ログ', ghosts:'消した下書き', all:'記録した全部' }[kind] || '';
+    if (!confirm(`${label}を消します。元に戻せません。\n\nよろしいですか？`)) return;
+    const targets = kind === 'keys'   ? ['inputEvents']
+                  : kind === 'ghosts' ? ['ghosts']
+                  : ['inputEvents','ghosts','hesitations','messages','facts',
+                     'pendings','branches','sessions','tasks','kv'];
+    for (const t of targets) { try { await Store.clearStore(t); } catch {} }
+    if (kind === 'all') { try { Chat.history.length = 0; } catch {}
+                          document.getElementById('log')?.replaceChildren();
+                          await Session.start(); await Facts.render(); }
+    UI.toast(`${label}を消しました`);
+    Bus.emit('privacy:wiped', { kind });
+    await render();
+  }
+
+  async function exportJson() {
+    try {
+      const data = await Store.exportAll();
+      const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)],
+                                               { type:'application/json' }));
+      const a = document.createElement('a');
+      a.href = url; a.download = 'ghostchat-' + new Date().toISOString().slice(0,10) + '.json';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      UI.toast('書き出しました');
+    } catch (e) { UI.toastErr('書き出せませんでした: ' + (e?.message || '')); }
+  }
+
+  function open()  { document.getElementById('priv')?.classList.add('on'); render(); }
+  function close() { document.getElementById('priv')?.classList.remove('on'); }
+
+  return { render, open, close, wipe, counts };
+})();
+
+// フェーズ3の起動処理。
+const Phase3 = { boot() {
+  const el = document.getElementById('input');
+  if (el) Ghosts.watchOverwrite(el);
+  document.getElementById('btnData')?.addEventListener('click', () => DataPanel.open());
+  document.getElementById('privClose')?.addEventListener('click', () => DataPanel.close());
+  document.getElementById('priv')?.addEventListener('click', (e) => {
+    if (e.target.id === 'priv') DataPanel.close();
+  });
+  Bus.on('privacy:changed', () => {
+    if (document.getElementById('priv')?.classList.contains('on')) DataPanel.render();
+  });
+} };
+</script>
+
 <!-- ===== S8 UI ===== -->
 <script>
 const UI = (() => {
@@ -1668,6 +2095,7 @@ const Privacy = (() => {
     await Queue.recover();
     await Phase1.boot();
     Phase2.boot();
+    Phase3.boot();
     Tele.purgeOld();
     document.getElementById('input').focus();
   }
