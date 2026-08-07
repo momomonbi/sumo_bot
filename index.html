@@ -2020,6 +2020,17 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
 .btn-engine:hover{border-color:rgba(200,240,160,0.4)}
 .btn-engine.on{border-color:var(--accent);color:var(--accent);background:rgba(200,240,160,0.1);
   font-weight:600}
+/* 考える深さ（Kimiのときだけ出る） */
+#depthBar{max-width:820px;margin:0 auto 8px;display:flex;align-items:center;gap:6px;
+  flex-wrap:wrap}
+#depthBar .depth-lbl{font-size:10.5px;letter-spacing:0.06em;
+  color:rgba(232,232,226,0.35);margin-right:2px}
+#depthBar button{background:none;border:1px solid rgba(255,255,255,0.14);border-radius:20px;
+  padding:4px 12px;font-family:inherit;font-size:11.5px;color:rgba(232,232,226,0.5);
+  cursor:pointer;transition:.15s}
+#depthBar button:hover{border-color:rgba(200,240,160,0.4);color:rgba(232,232,226,0.75)}
+#depthBar button.on{border-color:var(--accent);color:var(--accent);
+  background:rgba(200,240,160,0.1);font-weight:600}
 </style>
 </head>
 <body>
@@ -2190,6 +2201,12 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
   </div>
 
   <footer>
+    <div id="depthBar" style="display:none">
+      <span class="depth-lbl">どれくらい考える？</span>
+      <button type="button" data-d="low"  onclick="setKimiDepth('low')">さっと</button>
+      <button type="button" data-d="high" onclick="setKimiDepth('high')">じっくり</button>
+      <button type="button" data-d="max"  onclick="setKimiDepth('max')">とことん</button>
+    </div>
     <div id="imgPreviewWrap"></div>
     <div class="input-wrap">
       <button class="btn-tool" id="btnToolPanel" onclick="toggleToolPanel()" title="便利ツール">
@@ -2918,6 +2935,28 @@ const KEY_ENGINE  = 'momo_engine';
 const KIMI_PLAN   = { chat: 'kimi-k3', light: 'kimi-k3', cheap: 'kimi-k3' };
 // none/medium は Kimi に無いので、いちばん近い刻みへ寄せる
 const KIMI_EFFORT = { none:'low', low:'low', medium:'high', high:'high', max:'max' };
+// Kimi は思考を切れないので、代わりに「どれくらい考えるか」を本人に選ばせる。
+// 裏方（判定・要約・タイトル）は常に low のまま。ここで効くのは本文の返事だけ。
+const KEY_DEPTH  = 'momo_kimi_depth';
+const KIMI_DEPTHS = [['low','さっと'], ['high','じっくり'], ['max','とことん']];
+function kimiDepth() {
+  try { const v = localStorage.getItem(KEY_DEPTH); return KIMI_EFFORT[v] ? v : 'low'; }
+  catch { return 'low'; }
+}
+function setKimiDepth(v) {
+  try { localStorage.setItem(KEY_DEPTH, v); } catch {}
+  renderDepthBar();
+}
+// Kimi を使っている間だけ出す
+function renderDepthBar() {
+  const bar = document.getElementById('depthBar');
+  if (!bar) return;
+  const on = engineIsKimi();
+  bar.style.display = on ? 'flex' : 'none';
+  if (!on) return;
+  const cur = kimiDepth();
+  bar.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.d === cur));
+}
 let kimiKey = '';
 const isKimi = (m) => /^kimi-/i.test(String(m || ''));
 function apiFor(model) {
@@ -2934,6 +2973,7 @@ function applyEngine() {
   MODEL = KIMI_PLAN.chat; LIGHT_MODEL = KIMI_PLAN.light; CHEAP_MODEL = KIMI_PLAN.cheap;
   modelsResolved = true;                       // OpenAI のモデル一覧で上書きさせない
   try { updateModelSubtitle(); } catch {}
+  try { renderDepthBar(); } catch {}
   return true;
 }
 // 各用途の希望モデル（優先順）。/v1/models に存在する最初のIDを採用。無ければ既定にフォールバック。
@@ -3254,7 +3294,7 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 //         ・思い出の本に画面用の記法がそのまま刷られていたのを修正（bookPlain を追加）。
 //           **太字** / ### 見出し / [choice:] / 表の区切り行に加えて、v3.8.0 で足した
 //           ```zukai の JSON まで本文に載っていた。図は「（図）」に置き換える。
-const APP_VERSION   = 'v3.11.0';
+const APP_VERSION   = 'v3.11.1';
 const SUMMARY_EVERY = 10;
 const LEARN_PER_LEVEL = 3;    // 何個の学習で1レベル上がるか（小さいほど上がりやすい。旧:5 → v2.6.1で3に緩和。レベルは単調増加なので変更しても下がらない）
 // 重要記憶キー（削除されない永続情報）
@@ -5094,6 +5134,7 @@ async function startChat() {
     if (kv) { kimiKey = kv; localStorage.setItem(KEY_KIMI, kv); }
   } catch(e) {}
   applyEngine();
+  try { renderDepthBar(); } catch {}
 
   // 使えるモデルを起動時に確認して用途別に割り当てる（fire-and-forget。確定までは既定のgpt-5.4で安全に動く）
   resolveModels();
@@ -5239,19 +5280,19 @@ function maybeShowVersionPopup() {
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:600;color:#e8e8e2;margin-bottom:6px;">アップデート ${APP_VERSION}</div>
           <div style="font-size:11px;color:rgba(232,232,226,0.8);line-height:1.8;overflow-wrap:anywhere;">
-            <span style="font-size:14px;font-weight:700;color:#ffb3cf;">Kimi K3 でも話せるようになった。</span><br>
+            <span style="font-size:14px;font-weight:700;color:#ffb3cf;">送った文字が、飛ぶようになった。</span><br>
             <br>
-            最初の画面で <b>つかうAI</b> を選べるよ。<br>
-            Kimiのキーを入れれば、そっちで動く。<br>
-            写真もそのまま送れる。<br>
+            打った文字がそのまま吹き出しへ飛んで、<br>
+            そのあと<b>1文字ずつ考え中の丸に吸い込まれる。</b><br>
             <br>
-            それと、送った文字が飛ぶようになった。<br>
-            吹き出しへ飛んだあと、<br>
-            <b>1文字ずつ考え中の丸に吸い込まれる。</b><br>
+            見た目だけの話じゃなくて、<br>
+            <b>飛んでいる間、ももはもう考えてる。</b><br>
+            アニメが終わるのを待ってから<br>
+            考え始めるわけじゃないから、<br>
+            返事が遅くなることはないよ。<br>
             <br>
-            飛んでいる間、ももはもう考えてる。<br>
-            返事が先に来たら、<br>
-            アニメは途中でも引っこむよ。<br>
+            もし先に返事ができたら、<br>
+            アニメは途中でも引っこむね。<br>
           </div>
           <div style="font-size:10px;color:rgba(232,232,226,0.5);margin-top:7px;">画面のどこかをタップで閉じる</div>
         </div>
@@ -8495,8 +8536,9 @@ ${srcList}`
         // store / metadata は OpenAI 固有。Kimi に送ると弾かれうるので付けない
         ...(chatApi.kimi ? {} : { store: true,
           metadata: { reasoning: reasoningEffort, search: searchResult ? 'true' : 'false', model: chatModel } }),
+        // Kimi は本人が選んだ深さを優先する（自動判定より本人の意思を上に置く）
         ...(chatApi.kimi
-              ? { reasoning_effort: KIMI_EFFORT[reasoningEffort] || 'low' }
+              ? { reasoning_effort: kimiDepth() }
               : (reasoningEffort !== 'none' ? { reasoning_effort: reasoningEffort } : {}))
       })
     });
