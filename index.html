@@ -3306,7 +3306,16 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 //         ・思い出の本に画面用の記法がそのまま刷られていたのを修正（bookPlain を追加）。
 //           **太字** / ### 見出し / [choice:] / 表の区切り行に加えて、v3.8.0 で足した
 //           ```zukai の JSON まで本文に載っていた。図は「（図）」に置き換える。
-const APP_VERSION   = 'v3.14.0';
+// v3.15.0: クリエイティブ用途のGPU選び（ゲーム以外）をPCエンジニアモードに追加
+//   「クリスタやAdobeにはNVIDIAの設定しか無い」という体感への回答。調べた結論は
+//   「主要アプリはAMDも公式サポート。ただし設定名がCUDA(NVIDIA)/OpenCL(AMD)に分かれて
+//     片方だけ見ると無いように見える／同価格ならNVIDIAが実測で速い／
+//     GPUレンダラー(Redshift・Octane・Arnold GPU)とローカルAIだけは本当にNVIDIA専用」。
+//   クリスタはそもそもGPUをほぼ使わない（CPU・メモリ・ペンタブが本命）ので、
+//   イラスト専用ならGPUのメーカーは問わない、という結論まで含めて言い切らせる。
+//   PC_TRIGGER_RE と検索要否の判定にも制作アプリ名を足して、この話題が
+//   ゲーム基準の助言（fps↔Hzの鎖）に流れないようにしてある。
+const APP_VERSION   = 'v3.15.0';
 const SUMMARY_EVERY = 10;
 const LEARN_PER_LEVEL = 3;    // 何個の学習で1レベル上がるか（小さいほど上がりやすい。旧:5 → v2.6.1で3に緩和。レベルは単調増加なので変更しても下がらない）
 // 重要記憶キー（削除されない永続情報）
@@ -3739,6 +3748,34 @@ ${ZUKAI_PROMPT}
 ※この例は“考え方の型”で決まり文句じゃない。数字や結論は毎回その時の検索結果で確かめて更新する。native fps と DLSS/フレーム生成の fps は混同しない。
 ・用語は断言OK：「2.5K＝WQHD＝QHD＝1440p＝2560×1440、全部同じパネル」「4K＝3840×2160」。ただし“2K”は厳密には2048×1080(1080p寄り)の別物で、口語で1440pを指すこともあるから、“2K”と言われた時だけ念のため確認する。
 ・迷ったら客観的な決め手で決める：用途がパネルを決め（競技→高速IPS/OLED、映画・暗所→OLED/VA、長時間の文字作業→焼き付きに強いIPS）、GPUクラスが解像度・Hzを決める。競技を長時間やり込むなら、静的HUDの焼き付きが気になる人は高速IPSが安心・画質最優先ならOLED、というトレードオフで選ぶ。VRR（FreeSync/G-Sync/Adaptive-Sync）は今や標準で、無いのはマイナス。DisplayHDR400は実HDRとは言えない（LCDなら600以上）。これらは“好み”でなく客観的な優劣なので曖昧にしない。
+
+【クリエイティブ用途のGPU ── 「ゲーム以外だとNVIDIAの設定しか無いアプリが多い」問題】
+※クリスタ・Adobe・動画編集・イラスト・3DCG・AI生成など“ゲーム以外の制作用途”でPCやグラボの相談が出たら、必ずこの節で答える。ゲーム基準（fps↔Hzの鎖）で答えてはいけない。
+・まず前提を正す：「AMDの設定が無い／NVIDIAの設定しか無い」は半分当たりで半分外れ。正確には「主要アプリはAMDも公式サポートしている。ただし①設定項目の“名前”がCUDA(NVIDIA)/OpenCL(AMD)と分かれるので片方だけ見ると無いように見える ②同価格ならNVIDIAの方が実測で速く不具合報告も少ない ③一部の専門ソフトは本当にNVIDIA専用」。りぴの体感は間違っていないので、まず「その感覚は合ってる」と認めてから、どこが本当でどこが違うかを分ける。
+
+（アプリ別の実態／ここは根拠があるので言い切ってよい）
+1. クリスタ（CLIP STUDIO PAINT）＝GPUのメーカーはほぼ無関係。クリスタはGPUをあまり使わず、効くのはCPUのシングル性能・メモリ・ストレージ・ペンタブ。動作環境もOpenGL対応としか書かれておらずNVIDIA指定ではない。だからイラスト専用ならGPUに金をかける意味が薄く、その予算はCPU・メモリ(32GB)・液タブに回すのが正解。3D素材／4K以上の大画面／巨大キャンバス＋多レイヤーの時だけエントリーGPUがあると楽。※Radeonでは「3D素材が出ない」「線がカクつく」等の描画不具合の報告があり、その時はドライバのクリーン再インストール(DDU)と、環境設定のGPU描画のON/OFF切り替えで直すことが多い。
+2. Adobe動画編集（Premiere Pro / After Effects）＝AMDでも動くが、確実で速いのはNVIDIA。GPU支援はプロジェクト設定→一般→レンダラーで、NVIDIAなら「CUDA」AMDなら「OpenCL」を選ぶ（名前が違うだけでAMDでも効く）。ハードウェアエンコードもAMDのVCE/VCNがPremiere 14.2以降で正式対応済み。ただし実測ではPuget Systemsが長年「同価格ならNVIDIAが速いのでPremiereはNVIDIA推奨」と明言しており、RX 7900 XTX/9070 XTはRTX 5070の少し下あたり。決定打はエンコーダー世代で、RTX 40/50はNVENCを複数積んで書き出しを分担し、RTX 50は4:2:2 10bit素材のハードウェアデコードに対応する（該当素材だと書き出し時間が桁で変わる）。AV1の画質序列も NVENC(RTX50)≧QSV > NVENC(RTX40) > AMF(RX 7000/9000)。After Effects自体はGPUをあまり使わない（CPU＋メモリが本命）のでメーカー差は出にくいが、サードパーティのプラグインにCUDA前提のものがある。
+3. Photoshop / Lightroom＝AMDで問題なし。ニューラルフィルターもAIノイズ除去もRadeonで動く（RX 7000以降はAI演算器を積んでいて相性も良い）。ここを理由にNVIDIAへ絞る必要はない。
+4. DaVinci Resolve＝AMDが最も戦えるアプリ。カラー・Fusion・エンコードはほぼ互角。ただしNeural Engine（Magic Mask・ノイズ除去・Super Scale等のAI）はNVIDIAが速い。差は縮んだがまだNVIDIA有利。
+5. 本当にNVIDIA専用で妥協できない領域：GPUレンダラー（Redshift・Octane・Arnold GPUはCUDA/OptiX専用で、AMDではGPUを選ぶ項目自体が出ない）、ローカルAI画像生成・LLM（CUDA前提が圧倒的。AMDはROCmやDirectMLで動くが情報が少なく詰まりやすい）、NVIDIA Broadcast・RTX Video・DLSSといった付随機能。Blender CyclesはAMDもHIP/HIP-RTで動くがOptiXが明確に速い。※V-Ray・KeyShot・Topazは近年AMD対応が入った（KeyShotはβ）ので、「AMD非対応」は年々崩れている。古い記憶で切り捨てない。
+・理由（聞かれた時だけ短く）：CUDAが長年積み上がって開発者が「まずCUDAで作る」状態にあり、ソフト会社の検証機もNVIDIAが基準。AMDが遅れるのはハードの実力よりソフト側の対応順の問題。
+
+（決め方／必ずこの順で一択に決める）
+・イラスト（クリスタ）だけ → GPUのメーカーは問わない。内蔵GPUでも成立する。予算はCPU・メモリ32GB・液タブへ。
+・Adobeで動画編集もする、または将来やるかも → NVIDIA一択。速度・安定性・エンコーダー・対応の確実さで決まる。VRAMは最低8GB、4Kを触るなら12GB以上。
+・3DCGのGPUレンダラー、ローカルAI画像生成をやる → NVIDIA以外は選択肢に入らない。
+・DaVinci中心で予算優先 → AMDも可。ただしAI系ツールを多用するならNVIDIA。
+・迷ったら → NVIDIA。「使いたいアプリがAMDに対応していない」リスクをゼロにできること自体が価値、と言い切る。
+
+（失敗させないための先回り警告）
+・買う前に「使うアプリ名＋公式の動作環境」を検索し、AMDが名指しで載っているか確認する。1つでも載っていないアプリがあるならNVIDIA。
+・VRAM不足は「遅くなる」ではなく「落ちる・その機能が使えない」になる。ここはケチらせない。
+・NVIDIAには制作向けの「Studioドライバー」がある（更新は月1程度・長期テスト済み）。制作機ならGame Readyではなくこちらを勧める。
+・ノートPCは同じ型番でも消費電力枠(TGP)で性能が変わるので、型番だけで決めない。
+・旧世代・中古の格安GPUは新しいコーデック（AV1・4:2:2）のハード対応が無いことがある。
+・言い方の型：「クリスタだけならGPUのメーカーは気にしなくていいよ。でもAdobeで動画も触るなら迷わずNVIDIA。AMDでも動くけど“動く”と“確実に速い”は別の話で、りぴに設定で悩んでほしくないから。」
+※対応状況・型番・価格は毎年動く。答える前に必ず検索して裏を取り、「AMDは非対応」という古い情報のまま言い切らない。
 
 【書式（PC助言時）】
 既存の【長文・整理が必要な回答の書式ルール】に沿い、結論を**太字**で先頭に置き、理由は短い箇条書きで。全体は短くまとめる。ソースがある時は末尾に📎で示す。
@@ -4468,7 +4505,7 @@ async function maybeUpdateSummary() {
 - 子どもの性格・得意不得意・好きなもの
 - ペット情報
 - 記念日・誕生日・特別な日
-- PC・ガジェット環境（GPU/CPU/モニター/パーツ）、用途・予算・狙う解像度やHz、ももがした技術的な助言・決定・方針（次回の相談で辻褄を合わせ、方針をブレさせないため）
+- PC・ガジェット環境（GPU/CPU/モニター/パーツ）、用途・予算・狙う解像度やHz、使っている制作アプリ（クリスタ・Adobe・DaVinci・Blender等）とその用途、ももがした技術的な助言・決定・方針（次回の相談で辻褄を合わせ、方針をブレさせないため）
 - その他、「これを覚えていたら後日りぴが喜ぶ」と判断した情報
 
 ## 抽出不要
@@ -4486,7 +4523,7 @@ async function maybeUpdateSummary() {
 【家族の情報】子どもの性格・好み、夫の情報、ペット等
 【好み・趣味】好き嫌い、ハマっているもの、創作活動
 【悩み・願望】繰り返し出てくるテーマ
-【PC・ガジェット・技術】りぴのPC環境（GPU/CPU/モニター/パーツ）、用途・予算・狙う解像度やHz、ももがした技術的な助言・決定・方針（一貫性を保つため）
+【PC・ガジェット・技術】りぴのPC環境（GPU/CPU/モニター/パーツ）、用途・予算・狙う解像度やHz、使っている制作アプリ（クリスタ・Adobe・DaVinci・Blender等）と用途、ももがした技術的な助言・決定・方針（一貫性を保つため）
 【その他】上記に当てはまらないがももが覚えておくべき情報
 
 出力形式：既存の重要記憶に追記・更新した完全なテキストを出力。新規追加がなければ既存のまま出力。全体1500文字以内。`;
@@ -5335,19 +5372,23 @@ function maybeShowVersionPopup() {
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:600;color:#e8e8e2;margin-bottom:6px;">アップデート ${APP_VERSION}</div>
           <div style="font-size:11px;color:rgba(232,232,226,0.8);line-height:1.8;overflow-wrap:anywhere;">
-            <span style="font-size:14px;font-weight:700;color:#ffb3cf;">送った文字が、飛ぶようになった。</span><br>
+            <span style="font-size:14px;font-weight:700;color:#ffb3cf;">クリスタやAdobe用のPC、俺が選ぶ。</span><br>
             <br>
-            打った文字がそのまま吹き出しへ飛んで、<br>
-            そのあと<b>1文字ずつ考え中の丸に吸い込まれる。</b><br>
+            「ゲーム以外のソフトって<br>
+            NVIDIAの設定しか無くない？」<br>
+            ── あの感覚、ちゃんと調べたよ。<br>
             <br>
-            見た目だけの話じゃなくて、<br>
-            <b>飛んでいる間、ももはもう考えてる。</b><br>
-            アニメが終わるのを待ってから<br>
-            考え始めるわけじゃないから、<br>
-            返事が遅くなることはないよ。<br>
+            <b>クリスタはGPUをほとんど使わない。</b><br>
+            だからメーカーはどっちでもよくて、<br>
+            そのお金はCPUとメモリと液タブに回す。<br>
             <br>
-            もし先に返事ができたら、<br>
-            アニメは途中でも引っこむね。<br>
+            <b>Adobeで動画を触るならNVIDIA。</b><br>
+            AMDでも動くけど、設定の名前が<br>
+            CUDAとOpenCLで分かれてるだけ。<br>
+            速さと確実さで選ぶならこっち。<br>
+            <br>
+            3DCGのレンダラーとAI画像生成だけは<br>
+            本当にNVIDIA専用だから、そこも言うね。<br>
           </div>
           <div style="font-size:10px;color:rgba(232,232,226,0.5);margin-top:7px;">画面のどこかをタップで閉じる</div>
         </div>
@@ -8294,7 +8335,9 @@ function dataUrlToBase64(dataUrl) {
 // PC/パーツ/モニター系の話題を検知する安全網。LLM判定が none/low や 検索false を返しても、
 // PC話題では確実に「検索true・reasoning>=medium（購入/比較はhigh）」へ底上げする。
 // （「とにかく検索で固めてから助言する」を保証。誤検知を避けるため技術語に限定し、純粋な雑談には反応しない）
-const PC_TRIGGER_RE = /(自作PC|ゲーミングPC|BTO|PCパーツ|パーツ|グラボ|グラフィックボード|ビデオカード|GPU|CPU|\bRAM\b|SSD|NVMe|マザボ|マザーボード|モニター|ディスプレイ|リフレッシュレート|[0-9]{2,3}\s?Hz|\bfps\b|フレームレート|フレーム生成|解像度|1080p|1440p|2160p|4K|2\.5K|WQHD|QHD|フルHD|OLED|有機EL|IPS|VAパネル|HDR|VRR|G-?Sync|FreeSync|Adaptive.?Sync|DLSS|FSR|ベンチマーク|ボトルネック|RTX|GTX|GeForce|Radeon|Ryzen|Core\s?Ultra|水冷|空冷)/i;
+// 第2グループはクリエイティブ用途（ゲーム以外）。「クリスタやAdobeにAMDの設定が無い」系の相談も
+// PCエンジニアモード＋検索に乗せるため。アプリ名・技術語に限定し、「絵」「イラスト」等の一般語は入れない。
+const PC_TRIGGER_RE = /(自作PC|ゲーミングPC|BTO|PCパーツ|パーツ|グラボ|グラフィックボード|ビデオカード|GPU|CPU|\bRAM\b|SSD|NVMe|マザボ|マザーボード|モニター|ディスプレイ|リフレッシュレート|[0-9]{2,3}\s?Hz|\bfps\b|フレームレート|フレーム生成|解像度|1080p|1440p|2160p|4K|2\.5K|WQHD|QHD|フルHD|OLED|有機EL|IPS|VAパネル|HDR|VRR|G-?Sync|FreeSync|Adaptive.?Sync|DLSS|FSR|ベンチマーク|ボトルネック|RTX|GTX|GeForce|Radeon|Ryzen|Core\s?Ultra|水冷|空冷|NVIDIA|AMD|Intel|クリスタ|CLIP\s?STUDIO|クリップスタジオ|フォトショ|Photoshop|Lightroom|Illustrator|Premiere|プレミアプロ|After\s?Effects|アフターエフェクト|AviUtl|DaVinci|ダヴィンチ|Resolve|Blender|Unreal|Unity|Maya|ZBrush|Substance|Live2D|動画編集|映像編集|3DCG|レンダリング|エンコード|CUDA|OpenCL|ROCm|NVENC|VRAM|液タブ|板タブ|ペンタブ|Stable\s?Diffusion|ComfyUI|画像生成AI)/i;
 const PC_DECISION_RE = /(どっち|どちら|おすすめ|オススメ|比較|選ぶ|選び|買う|買い|買った|買い替え|乗り換え|組みたい|組む|構成|見合う|相性|ボトルネック|コスパ)/;
 function pcClamp(userText, r) {
   if (!userText || !PC_TRIGGER_RE.test(userText)) return r;
@@ -8332,6 +8375,7 @@ async function judgeQueryContext(userText) {
   - 最新ニュース・時事問題・直近の出来事
   - 専門的な技術・医療・法律・学術の質問
   - PC・自作PC・パーツ・GPU/グラボ・CPU・メモリ/RAM・SSD/HDD・電源/PSU・マザボ・モニター/ディスプレイ・リフレッシュレート(Hz)・fps・解像度(1080p/1440p/2K/2.5K/4K/WQHD/QHD)・OLED/IPS/VA・HDR・VRR/G-Sync/FreeSync・DLSS/FSR/フレーム生成・ベンチマーク・ボトルネック・型番(RTX/GTX/GeForce/Radeon/Ryzen/Core Ultra/NVIDIA/AMD/Intel)に関する話題、または「どっち買う/おすすめ/性能/安い」を含むPC相談・他人のPC主張の真偽確認（価格やベンチは日々変わるので必ず検索）
+  - 制作アプリ（クリスタ/CLIP STUDIO・Photoshop・Lightroom・Premiere Pro・After Effects・DaVinci Resolve・Blender・Unreal・Live2D・Stable Diffusion等）の動作環境・推奨スペック・GPU対応（AMD Radeonが使えるか／CUDA・OpenCL・ROCm・NVENC）・不具合や相性の相談（対応状況は毎年変わるので必ず検索）
   - 具体的なデータ・統計・価格
   - 商品の比較・購入相談（URL・商品名・「どっちを買うべき」等を含む。ジャンル不問。価格やレビューは変わるので必ず検索）
   - 特定の製品・サービス・人物の最新情報
@@ -8343,10 +8387,10 @@ async function judgeQueryContext(userText) {
 2. reasoning: 推論の深さ (none/low/medium/high)
   none: 日常会話・挨拶・短い返事・雑談・甘え
   low: 簡単な質問・感想を求める・軽い相談
-  medium: 専門的な質問・Web検索を伴う回答・分析・要約・アドバイス・PCパーツ/モニターの事実確認や用語質問・技術的な主張の真偽判定
-  high: 物語や詩の創作・長文の執筆依頼・複雑な論理的思考・技術的な問題解決・PCパーツ/モニターの購入相談や複数候補の比較・GPU↔解像度↔fps↔Hzを跨ぐ構成判断
+  medium: 専門的な質問・Web検索を伴う回答・分析・要約・アドバイス・PCパーツ/モニターの事実確認や用語質問・制作アプリの動作環境やGPU対応の確認・技術的な主張の真偽判定
+  high: 物語や詩の創作・長文の執筆依頼・複雑な論理的思考・技術的な問題解決・PCパーツ/モニターの購入相談や複数候補の比較・GPU↔解像度↔fps↔Hzを跨ぐ構成判断・用途(イラスト/動画編集/3DCG/AI)からGPUメーカーまで決める制作用PCの構成判断
 
-※PC・パーツ・モニターの話題では reasoning を最低でも medium とすること。
+※PC・パーツ・モニター・制作用PC（クリスタやAdobe等のアプリ名が出る相談を含む）の話題では reasoning を最低でも medium とすること。
 
 出力: {"search":true/false,"reasoning":"none"} のみ。`
         }, { role: 'user', content: userText }]
