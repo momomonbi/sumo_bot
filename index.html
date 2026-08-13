@@ -2395,11 +2395,11 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
     <div class="pta-img-area" id="ptaImgArea" onclick="document.getElementById('ptaFileInput').click()">
       <div class="pta-img-placeholder" id="ptaImgPlaceholder">
         <span style="font-size:24px;opacity:0.5;">📷</span>
-        <span>タップして写真を追加</span>
+        <span>タップして写真かPDFを追加</span>
       </div>
       <div class="pta-img-thumbs" id="ptaImgThumbs"></div>
     </div>
-    <input type="file" id="ptaFileInput" accept="image/*" multiple onchange="handlePtaFileSelect(event)" style="display:none">
+    <input type="file" id="ptaFileInput" accept="image/*,application/pdf,.pdf" multiple onchange="handlePtaFileSelect(event)" style="display:none">
 
     <div style="display:flex;align-items:center;gap:8px;margin:12px 0 8px;">
       <div style="flex:1;height:1px;background:var(--border)"></div>
@@ -2602,11 +2602,11 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
     <div class="pta-img-area" id="hwImgArea" onclick="document.getElementById('hwFileInput').click()">
       <div class="pta-img-placeholder" id="hwImgPlaceholder">
         <span style="font-size:24px;opacity:0.5;">📷</span>
-        <span>タップして写真を追加</span>
+        <span>タップして写真かPDFを追加</span>
       </div>
       <div class="pta-img-thumbs" id="hwImgThumbs"></div>
     </div>
-    <input type="file" id="hwFileInput" accept="image/*" multiple onchange="handleToolFileSelect(event,'hw')" style="display:none">
+    <input type="file" id="hwFileInput" accept="image/*,application/pdf,.pdf" multiple onchange="handleToolFileSelect(event,'hw')" style="display:none">
     <div style="display:flex;align-items:center;gap:8px;margin:10px 0 6px;">
       <div style="flex:1;height:1px;background:var(--border)"></div>
       <span style="font-size:10px;color:var(--text-muted);letter-spacing:0.1em;">または テキストで入力</span>
@@ -2635,11 +2635,11 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
     <div class="pta-img-area" id="skImgArea" onclick="document.getElementById('skFileInput').click()">
       <div class="pta-img-placeholder" id="skImgPlaceholder">
         <span style="font-size:24px;opacity:0.5;">📷</span>
-        <span>タップして写真を追加</span>
+        <span>タップして写真かPDFを追加</span>
       </div>
       <div class="pta-img-thumbs" id="skImgThumbs"></div>
     </div>
-    <input type="file" id="skFileInput" accept="image/*" multiple onchange="handleToolFileSelect(event,'sk')" style="display:none">
+    <input type="file" id="skFileInput" accept="image/*,application/pdf,.pdf" multiple onchange="handleToolFileSelect(event,'sk')" style="display:none">
     <div style="display:flex;align-items:center;gap:8px;margin:10px 0 6px;">
       <div style="flex:1;height:1px;background:var(--border)"></div>
       <span style="font-size:10px;color:var(--text-muted);letter-spacing:0.1em;">または テキストで入力</span>
@@ -2694,11 +2694,11 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
     <div class="pta-img-area" id="rmImgArea" onclick="document.getElementById('rmFileInput').click()">
       <div class="pta-img-placeholder" id="rmImgPlaceholder">
         <span style="font-size:24px;opacity:0.5;">📷</span>
-        <span>タップして写真を追加</span>
+        <span>タップして写真かPDFを追加</span>
       </div>
       <div class="pta-img-thumbs" id="rmImgThumbs"></div>
     </div>
-    <input type="file" id="rmFileInput" accept="image/*" multiple onchange="handleToolFileSelect(event,'rm')" style="display:none">
+    <input type="file" id="rmFileInput" accept="image/*,application/pdf,.pdf" multiple onchange="handleToolFileSelect(event,'rm')" style="display:none">
     <div style="display:flex;align-items:center;gap:8px;margin:10px 0 6px;">
       <div style="flex:1;height:1px;background:var(--border)"></div>
       <span style="font-size:10px;color:var(--text-muted);letter-spacing:0.1em;">または テキストで入力</span>
@@ -3597,7 +3597,21 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 //   ★Kimi では使わない。出力の形を保証する json_schema が OpenAI 側の機能なので、
 //     Kimi で操作を求めても普通の文章が返り、読み取りが毎回失敗して
 //     「重要記憶とフィードバックだけ黙って更新されない」状態になる。従来方式に倒す。
-const APP_VERSION   = 'v3.20.0';
+// v3.21.0: おたよりを PDF のまま読めるようにした
+//   紙で配られるとは限らないのに、これまでは写真しか受け取れなかった。
+//   PDFは {type:'input_file'} で渡すと、モデルに「取り出した文字」と「各ページの画像」の
+//   両方が入る。撮影のブレ・影・見切れが無いぶん、写真より確実に読める。
+//   変換ライブラリは要らない。ファイルをそのまま base64 にして送るだけ。
+//   ★file_data は data:application/pdf;base64,… の形まで含めること。base64だけだと弾かれる。
+//     filename も要る。detail は input_file に 'original' が無いので 'high'。
+//   ★この形は Responses の書き方そのものなので、送る直前の変換を素通りする
+//     （toResponsesInput が input_ で始まる部品をそのまま通すため）。
+//   対象は書類を扱う4つ（おたより要約・持ち物リマインダー・宿題・作文）。
+//   冷蔵庫の写真と画像生成は写真のまま。
+//   ★Kimi では受け取らない。PDFを渡せるのは Responses 側の仕組みなので、
+//     送っても読めない。添付の時点で理由を出して断る（送ってから失敗させない）。
+//   15MBを超えるものも断る（base64で1.33倍になり、携帯回線では送りきれないため）。
+const APP_VERSION   = 'v3.21.0';
 const SUMMARY_EVERY = 10;
 const LEARN_PER_LEVEL = 3;    // 何個の学習で1レベル上がるか（小さいほど上がりやすい。旧:5 → v2.6.1で3に緩和。レベルは単調増加なので変更しても下がらない）
 // 重要記憶キー（削除されない永続情報）
@@ -5955,7 +5969,19 @@ function maybeShowVersionPopup() {
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:600;color:#e8e8e2;margin-bottom:6px;">アップデート ${APP_VERSION}</div>
           <div style="font-size:11px;color:rgba(232,232,226,0.8);line-height:1.8;overflow-wrap:anywhere;">
-            <span style="font-size:14px;font-weight:700;color:#ffb3cf;">古くなった記憶を、直せるようになった。</span><br>
+            <span style="font-size:14px;font-weight:700;color:#ffb3cf;">おたより、PDFのまま渡していいよ。</span><br>
+            <br>
+            学校から <b>PDFで来たおたより</b>、<br>
+            わざわざ画面に出して撮らなくていい。<br>
+            そのまま添付して。<br>
+            <br>
+            写真より確実に読める。<br>
+            <b>影も、ブレも、見切れも無い</b>から。<br>
+            <br>
+            使えるのは、おたより要約・持ち物リマインダー・<br>
+            宿題サポーター・作文コーチの4つ。<br>
+            <br>
+            ── 前の版から：<br>            <span style="font-size:14px;font-weight:700;color:#ffb3cf;">古くなった記憶を、直せるようになった。</span><br>
             <br>
             今までの俺は、<b>覚えたことを消せなかった。</b><br>
             りぴが引っ越しても、習い事を変えても、<br>
@@ -9914,6 +9940,7 @@ async function handlePtaFileSelect(e) {
   if (!files.length) return;
   e.target.value = '';
   for (const file of files) {
+    if (isPdfFile(file)) { await takePdf(file, ptaImages); continue; }   // おたよりはPDFで来ることもある
     if (!file.type.startsWith('image/')) continue;
     try {
       showToast('🖼 画像を圧縮中...');
@@ -9941,7 +9968,14 @@ function updatePtaImagePreview() {
   ptaImages.forEach((img, i) => {
     const w = document.createElement('div');
     w.className = 'pta-thumb-wrap';
-    w.innerHTML = `<img class="pta-thumb" src="${img.dataUrl}" alt="">
+    // PDFは絵として出せないので、ファイル名の見えるタイルにする
+    const face = img.pdf
+      ? `<div class="pta-thumb" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;background:var(--surface);border:1px solid var(--border);box-sizing:border-box;padding:4px;">
+           <div style="font-size:20px;line-height:1;">📄</div>
+           <div style="font-size:9px;line-height:1.2;opacity:.7;text-align:center;word-break:break-all;max-height:2.4em;overflow:hidden;">${esc(img.name || 'PDF')}</div>
+         </div>`
+      : `<img class="pta-thumb" src="${img.dataUrl}" alt="">`;
+    w.innerHTML = `${face}
       <div class="pta-thumb-del" onclick="event.stopPropagation();removePtaImage(${i})">✕</div>`;
     thumbs.appendChild(w);
   });
@@ -9994,6 +10028,11 @@ PTAのおたよりやLINEグループの長い会話を受け取り、以下の�
       userContent = [];
       if (text) userContent.push({ type: 'text', text: text });
       for (const img of ptaImages) {
+        if (img.pdf) {
+          // PDFはそのまま渡す（v3.21.0）。文字とページ画像の両方がモデルに入る
+          userContent.push({ type: 'input_file', filename: img.name || 'document.pdf', file_data: img.dataUrl, detail: 'high' });
+          continue;
+        }
         userContent.push({
           type: 'image_url',
           image_url: {
@@ -10002,7 +10041,7 @@ PTAのおたよりやLINEグループの長い会話を受け取り、以下の�
           }
         });
       }
-      if (!text) userContent.push({ type: 'text', text: 'この画像のおたよりを要約してください。' });
+      if (!text) userContent.push({ type: 'text', text: 'このおたよりを要約してください。' });
     } else {
       userContent = text;
     }
@@ -10956,17 +10995,64 @@ async function execWorkTool() {
   }
 }
 
+// ── PDFの取り込み（v3.21.0） ──────────────────────────
+// おたよりは紙で来るとは限らない。PDFで配られたものを、
+// わざわざ画面に出して撮り直す必要が無いようにする。
+//
+// PDFはモデルに「取り出した文字」と「各ページの画像」の両方が渡るので、
+// 写真より確実に読める（撮影のブレ・影・見切れが無い）。
+// 変換ライブラリは要らない。ファイルをそのまま base64 にして送るだけ。
+//
+// ★file_data は data:application/pdf;base64,… の形まで含める必要がある。
+//   base64 だけを渡すと弾かれる。filename も要る。
+const PDF_MAX_BYTES = 15 * 1024 * 1024;   // これ以上は送らずに断る（base64で1.33倍になるため）
+
+function isPdfFile(f) {
+  return f && (f.type === 'application/pdf' || /\.pdf$/i.test(f.name || ''));
+}
+function readAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(new Error('読み込み失敗'));
+    r.readAsDataURL(file);
+  });
+}
+// PDFを1件取り込む。無理な時は理由を出して false を返す。
+async function takePdf(file, bucket) {
+  if (file.size > PDF_MAX_BYTES) {
+    showError(`PDFが大きすぎます（${Math.round(file.size / 1024 / 1024)}MB）。\n15MBまでにするか、必要なページだけ写真で送って。`);
+    return false;
+  }
+  // 送り先が Kimi だと PDF を受け取れない（PDFを渡せるのは OpenAI 側の仕組み）
+  if (apiFor(MODEL).kimi) {
+    showError('PDFは今の「つかうAI」では読めません。\n最初の画面で OpenAI に切り替えるか、写真で送って。');
+    return false;
+  }
+  try {
+    showToast('📄 PDFを読み込み中...');
+    const dataUrl = await readAsDataUrl(file);
+    bucket.push({ dataUrl, mediaType: 'application/pdf', name: file.name || 'document.pdf', pdf: true });
+    return true;
+  } catch {
+    showError('PDFの読み込みに失敗しました');
+    return false;
+  }
+}
+
 // ── 汎用ツール画像ハンドラ ──
 // 使っているのは hw（宿題）・sk（作文）・rm（おたよりリマインダー）の3つで、
 // どれも「紙を撮った写真」。文字が読めないと機能そのものが成立しないので、
 // ここは全部まとめて書類モードで取り込む（v3.16.0）。
-const toolImages = {}; // { prefix: [{dataUrl, mediaType}] }
+// v3.21.0 から、写真のかわりに PDF をそのまま置けるようにした。
+const toolImages = {}; // { prefix: [{dataUrl, mediaType, pdf?, name?}] }
 async function handleToolFileSelect(e, prefix) {
   const files = Array.from(e.target.files || []);
   if (!files.length) return;
   e.target.value = '';
   if (!toolImages[prefix]) toolImages[prefix] = [];
   for (const file of files) {
+    if (isPdfFile(file)) { await takePdf(file, toolImages[prefix]); continue; }
     if (!file.type.startsWith('image/')) continue;
     try {
       showToast('🖼 画像を圧縮中...');
@@ -10986,7 +11072,14 @@ function updateToolImagePreview(prefix) {
   placeholder.style.display = 'none'; area.classList.add('has-images');
   imgs.forEach((img, i) => {
     const w = document.createElement('div'); w.className = 'pta-thumb-wrap';
-    w.innerHTML = `<img class="pta-thumb" src="${img.dataUrl}" alt=""><div class="pta-thumb-del" onclick="event.stopPropagation();removeToolImage('${prefix}',${i})">✕</div>`;
+    // PDFは絵として出せないので、ファイル名の見えるタイルにする
+    const face = img.pdf
+      ? `<div class="pta-thumb" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;background:var(--surface);border:1px solid var(--border);box-sizing:border-box;padding:4px;">
+           <div style="font-size:20px;line-height:1;">📄</div>
+           <div style="font-size:9px;line-height:1.2;opacity:.7;text-align:center;word-break:break-all;max-height:2.4em;overflow:hidden;">${esc(img.name || 'PDF')}</div>
+         </div>`
+      : `<img class="pta-thumb" src="${img.dataUrl}" alt="">`;
+    w.innerHTML = `${face}<div class="pta-thumb-del" onclick="event.stopPropagation();removeToolImage('${prefix}',${i})">✕</div>`;
     thumbs.appendChild(w);
   });
   const addBtn = document.createElement('div'); addBtn.className = 'pta-img-add'; addBtn.textContent = '+';
@@ -11001,16 +11094,26 @@ function removeToolImage(prefix, idx) {
 // 'high' は決められた大きさに合わせて縮めてから読むので、細かい文字が落ちることがある。
 // 宿題の問題文・作文のマス目・おたよりの日付は、その細かいところが本体なので原寸で渡す。
 // もし古いモデルに当たって 'original' を知らなくても、その場合は無視されるだけで壊れない。
+// PDFは {type:'input_file'} で渡す（v3.21.0）。この形は Responses の書き方そのものなので、
+// 送る直前の変換（toResponsesInput）をそのまま素通りする。
+// ★file_data は data:application/pdf;base64,… まで含めること。base64だけだと弾かれる。
+//   filename も要る。detail は input_file には 'original' が無いので 'high' を使う。
 function buildVisionContent(prefix, textInput) {
   const text = textInput ? textInput.trim() : '';
   const imgs = toolImages[prefix] || [];
   if (!imgs.length && !text) return null;
   const content = [];
   if (text) content.push({ type: 'text', text });
+  let hasPdf = false;
   for (const img of imgs) {
-    content.push({ type: 'image_url', image_url: { url: `data:${img.mediaType};base64,${dataUrlToBase64(img.dataUrl)}`, detail: 'original' } });
+    if (img.pdf) {
+      hasPdf = true;
+      content.push({ type: 'input_file', filename: img.name || 'document.pdf', file_data: img.dataUrl, detail: 'high' });
+    } else {
+      content.push({ type: 'image_url', image_url: { url: `data:${img.mediaType};base64,${dataUrlToBase64(img.dataUrl)}`, detail: 'original' } });
+    }
   }
-  if (!text && imgs.length) content.push({ type: 'text', text: 'この画像の内容を読み取ってください。' });
+  if (!text && imgs.length) content.push({ type: 'text', text: hasPdf ? 'この書類の内容を読み取ってください。' : 'この画像の内容を読み取ってください。' });
   return content;
 }
 function clearToolImages(prefix) {
