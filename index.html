@@ -3340,7 +3340,20 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 //   ⑤ 検索要否とトピック判定に JSON スキーマを指定。崩れた形が返ってきて
 //      黙って「検索不要」に落ちる経路を塞ぐ（正規表現の読み取りも残してある）。
 //   ⑥ PC・価格の話題のときだけ検索先を信頼できるドメインに絞る。空振りしたら自動で絞り無しに戻す。
-const APP_VERSION   = 'v3.16.0';
+// v3.16.1: 通話が「Load failed」だけ出して終わる問題への対処
+//   ・Kimi を選んでいると applyEngine() が resolveModels() を早期returnさせるため、
+//     VOICE_MODEL が既定値のまま確定していなかった（＝実在確認をすり抜けていた）。
+//     待機画面を開いた時点で /v1/models を引いて、実在する realtime モデルを採る。
+//   ・「Load failed」は fetch がネットワーク層で落ちた時の文言で、それだけでは手が打てない。
+//     失敗したら /v1/models（v2.8.0から実績のあるパス）を叩いて層を切り分け、
+//     「キーが死んでる」「アカウントにrealtimeが無い」「回線が届いてない」
+//     「通話の入口だけブラウザから弾かれている」を日本語で言い分けるようにした。
+//   ・マイクを触る前に事前確認するので、許可を出したあとに落ちることが減る。
+//   ・ネットワーク層で落ちた時に文字起こし無しで再試行しても同じ結果なので、その無駄を廃止。
+//   ・STUN を追加（無しだと端末内の候補しか集まらず、携帯回線で相手に届かないことがある）。
+//     createOffer() を明示呼び出しに変更（引数なし setLocalDescription() は古いSafariで通らない）。
+//     SDPは一度きりのやり取りなので、ICE候補が集まるのを最大2秒だけ待ってから送る。
+const APP_VERSION   = 'v3.16.1';
 const SUMMARY_EVERY = 10;
 const LEARN_PER_LEVEL = 3;    // 何個の学習で1レベル上がるか（小さいほど上がりやすい。旧:5 → v2.6.1で3に緩和。レベルは単調増加なので変更しても下がらない）
 // 重要記憶キー（削除されない永続情報）
@@ -12219,7 +12232,63 @@ const VOICE = (function () {
     if (blocked) setErr(blocked);
     $('vGo').onclick = () => { if (!whyBlocked()) start(); };
     $('vClose').onclick = close;
+
+    // ★マイクを触る前に、そもそもこのキーで声の通話ができるかを黙って確かめる（v3.16.1）。
+    //   ここで分かることは、マイク許可を出したあとに分かるより、ぜんぶ親切なので。
+    if (!blocked) precheck();
   }
+
+  // 待機画面を出したタイミングで走る事前確認。
+  // /v1/models はこのアプリが v2.8.0 から起動のたびにブラウザから叩いていて、
+  // 通ることが分かっているパス。だから「OpenAIにブラウザから届くか」「キーは生きているか」
+  // 「このアカウントに声のモデルがあるか」を、通話を試す前に切り分けられる。
+  let voiceReady = null;   // null=未確認 / true=いける / false=無理（理由は下に出す）
+  async function precheck() {
+    setState('確認してる…');
+    try {
+      const r = await fetch('https://api.openai.com/v1/models', { headers: { 'Authorization': 'Bearer ' + apiKey } });
+      if (r.status === 401 || r.status === 403) {
+        voiceReady = false;
+        setState('');
+        setErr('OpenAIのキーが通りませんでした（' + r.status + '）。\n' +
+               'Kimi を使っていても、声の通話だけは OpenAI 側の機能なので\n' +
+               '有効な OpenAI のキーが要ります。最初の画面で入れ直してみて。');
+        disableGo();
+        return;
+      }
+      if (!r.ok) { voiceReady = null; setState(''); return; }   // 判断できないので黙って通す
+      const ids = ((await r.json()).data || []).map(m => m.id);
+      const found = VOICE_PLAN.find(id => ids.includes(id));
+      if (found) {
+        VOICE_MODEL = found;
+      } else if (!ids.some(id => /realtime/i.test(id))) {
+        // 声のモデルが1つも見えない＝このアカウントは Realtime を使えない
+        voiceReady = false;
+        setState('');
+        setErr('このキーでは、声の通話に使うモデルが見つかりませんでした。\n' +
+               'OpenAI のアカウント側で Realtime（音声）が使えないみたい。\n' +
+               '文字での会話はいつもどおり使えます。');
+        disableGo();
+        return;
+      } else {
+        // realtime系はあるが候補名と違う → 実在するものを使う
+        VOICE_MODEL = ids.find(id => /realtime/i.test(id) && /mini/i.test(id)) ||
+                      ids.find(id => /realtime/i.test(id));
+      }
+      voiceReady = true;
+      setState('');
+      console.log('[もも] 通話モデル:', VOICE_MODEL);
+    } catch (e) {
+      // ここで落ちる＝ブラウザから OpenAI に届いていない（回線・ブロッカー等）
+      voiceReady = false;
+      setState('');
+      setErr('OpenAI に届きませんでした。\n' +
+             '電波・機内モード・コンテンツブロッカー・ロックダウンモードあたりを確かめて。\n' +
+             '（' + (e && e.message ? e.message : e) + '）');
+      disableGo();
+    }
+  }
+  function disableGo() { const g = $('vGo'); if (g) g.disabled = true; }
 
   // 通話を始めてはいけない状況を、理由の文で返す（問題なければ空文字）
   function whyBlocked() {
@@ -12315,13 +12384,18 @@ const VOICE = (function () {
         break;
       } catch (e) {
         teardownPeer();
-        if (!withTranscript) {
+        // ネットワーク層で弾かれた場合、文字起こしを外して再試行しても結果は同じ。
+        // 待たせるだけ無駄なので、その場で切り分けに進む。
+        const netFail = (e && e.name === 'TypeError') ||
+                        /load failed|failed to fetch|networkerror|network error/i.test((e && e.message) || '');
+        if (!withTranscript || netFail) {
+          setState('調べてる…');
+          stopMic();
+          const why = await diagnose(e);
           setState('');
-          setErr('つながりませんでした。\n' + (e && e.message ? e.message : e) +
-                 '\n\n文字での会話はいつもどおり使えます。');
+          setErr(why + '\n\n文字での会話はいつもどおり使えます。');
           $('vBtns').innerHTML = '<button id="vClose">閉じる</button>';
           $('vClose').onclick = close;
-          stopMic();
           phase = 'standby';
           return;
         }
@@ -12336,8 +12410,47 @@ const VOICE = (function () {
     bumpSilence();
   }
 
+  // つながらなかったとき、どの層で切れたのかを言葉にする（v3.16.1）。
+  // 「Load failed」だけ出しても手の打ちようがないので、実際に切り分けて日本語で返す。
+  async function diagnose(err) {
+    const msg = (err && err.message) ? err.message : String(err || '');
+    // HTTPエラー（＝サーバーまで届いている）なら、そのまま見せるのがいちばん早い
+    const isNetwork = /load failed|failed to fetch|networkerror|network error/i.test(msg) ||
+                      (err && err.name === 'TypeError');
+    if (!isNetwork) return 'つながりませんでした。\n' + msg;
+
+    // ここから先は「リクエストがそもそも通らなかった」場合の切り分け
+    try {
+      const r = await fetch('https://api.openai.com/v1/models', { headers: { 'Authorization': 'Bearer ' + apiKey } });
+      if (r.status === 401 || r.status === 403) {
+        return 'OpenAIのキーが通りませんでした（' + r.status + '）。\n' +
+               'Kimi を使っていても、声の通話だけは OpenAI のキーが要ります。';
+      }
+      if (r.ok) {
+        // OpenAI にはブラウザから届いていて、キーも生きている。
+        // それなのに通話の入口だけ弾かれた＝そのURLがブラウザからの直接呼び出しを
+        // 許していない（このアプリが /v1/images/* で踏んだのと同じ壁）。
+        return 'OpenAI には届いていて、キーも生きています。\n' +
+               'でも通話の入口だけがブラウザから弾かれました。\n' +
+               'このURLがブラウザからの直接呼び出しを許していない可能性が高いです\n' +
+               '（画像生成で前に踏んだのと同じ壁）。\n' +
+               'この画面をそのまま送ってもらえたら、別の繋ぎ方に切り替えます。';
+      }
+      return 'OpenAI が ' + r.status + ' を返しました。';
+    } catch (e2) {
+      return 'OpenAI に届いていません。\n' +
+             '電波・機内モード・コンテンツブロッカー・ロックダウンモード\n' +
+             'あたりが原因のことが多いです。\n' +
+             '（' + (e2 && e2.message ? e2.message : e2) + '）';
+    }
+  }
+
   async function connect(withTranscript) {
-    pc = new RTCPeerConnection();
+    // STUN を付けておく。無しだと自分の端末内の候補しか集まらず、
+    // 携帯回線やルーター越しでは相手にたどり着けないことがある。
+    pc = new RTCPeerConnection({
+      iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:global.stun.twilio.com:3478'] }]
+    });
     pc.ontrack = e => {
       audioEl.srcObject = e.streams[0];
       // iOS は音を出すのに一度タップが要る。ここまで来る流れ自体がタップ由来なので
@@ -12363,7 +12476,20 @@ const VOICE = (function () {
       }
     });
 
-    await pc.setLocalDescription();
+    // createOffer() を明示的に呼ぶ（引数なしの setLocalDescription() は
+    // 古めの Safari だと通らないことがあるため）。
+    await pc.setLocalDescription(await pc.createOffer());
+
+    // SDPは一度きりのやり取りなので、候補が集まるのを少しだけ待ってから送る。
+    // 集まりきらなくても2秒で切り上げる（待ち続けて無音になるほうが困る）。
+    if (pc.iceGatheringState !== 'complete') {
+      await new Promise(resolve => {
+        const done = () => { clearTimeout(t); pc.removeEventListener('icegatheringstatechange', onChange); resolve(); };
+        const onChange = () => { if (pc.iceGatheringState === 'complete') done(); };
+        const t = setTimeout(done, 2000);
+        pc.addEventListener('icegatheringstatechange', onChange);
+      });
+    }
 
     const session = {
       type: 'realtime',
