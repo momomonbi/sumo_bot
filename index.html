@@ -2180,6 +2180,7 @@ textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
         <span class="growth-title" id="growthTitle">はじまり</span>
         <div class="growth-bar"><div class="growth-fill" id="growthFill"></div></div>
       </div>
+      <button class="btn-header icon" onclick="VOICE.openStandby()" title="声で話す" aria-label="声で話す">📞</button>
       <button class="btn-header icon" onclick="openPwdSettings()" title="パスワード設定" aria-label="パスワード設定">🔒</button>
       <button class="btn-header icon" onclick="openBackupModal()" title="バックアップ・機種変引継ぎ" aria-label="バックアップ">📦</button>
       <button class="btn-header icon obs-btn" onclick="OBS.open()" title="観測ノート" aria-label="観測ノート">✎<span id="obsBadge" style="display:none"></span></button>
@@ -3006,6 +3007,11 @@ const MODEL_PLAN = {
   cheap: ['gpt-5.6-luna', 'gpt-5.6-terra', 'gpt-5.4', 'gpt-4.1-mini'],
 };
 const IMAGE_MODEL   = 'gpt-image-2';      // 画像生成・合成（GPT Image 2）
+// 声で話すとき（Realtime）のモデル候補。上から順に、使えるものを採用する。
+// mini を先頭にしているのは、恋人との雑談に最上位モデルが要らないのと、
+// 通話は喋っている間ずっと課金されるので、常用は軽いほうが現実的なため。
+const VOICE_PLAN    = ['gpt-realtime-2.1-mini', 'gpt-realtime-2.1', 'gpt-realtime'];
+let   VOICE_MODEL   = 'gpt-realtime';     // 起動時に resolveModels() が実在確認して確定する
 
 // 起動時に一度だけ、APIキーで使えるモデルを確認して用途別に割り当てる。
 // これが「ハードコード前の実キー疎通確認」を兼ねる：使えないIDは採用しないので壊れない。
@@ -3026,8 +3032,9 @@ async function resolveModels() {
   MODEL       = pick(MODEL_PLAN.chat,  'gpt-5.4');
   LIGHT_MODEL = pick(MODEL_PLAN.light, MODEL);        // 軽量モデルが無ければメインに合わせる
   CHEAP_MODEL = pick(MODEL_PLAN.cheap, MODEL);
+  VOICE_MODEL = pick(VOICE_PLAN, VOICE_MODEL);        // 声で話す用（一覧が取れなければ既定のまま）
   modelsResolved = true;
-  console.log('[もも] モデル解決:', { MODEL, LIGHT_MODEL, CHEAP_MODEL, listFetched: !!available });
+  console.log('[もも] モデル解決:', { MODEL, LIGHT_MODEL, CHEAP_MODEL, VOICE_MODEL, listFetched: !!available });
   updateModelSubtitle();
 }
 // 使用モデルをやさしい表示名に（gpt-5.6-luna → luna 等）
@@ -3072,7 +3079,10 @@ async function callChat(opt) {
   const api = apiFor(body.model);
   if (api.kimi) body.reasoning_effort = KIMI_EFFORT[effort] || 'low';  // Kimiは省略すると max（最重）
   else if (effort && effort !== 'none') body.reasoning_effort = effort;
-  if (o.responseFormat) body.response_format = o.responseFormat;
+  // 出力の形をJSONスキーマで縛る（v3.16.0で初めて使用）。
+  // ※ json_schema は OpenAI 側の機能。Kimi(Moonshot) が受け付けるか確認できていないので送らない。
+  //   送らなくても呼び出し側は従来どおり正規表現でJSONを拾うため、Kimi でも動作は変わらない。
+  if (o.responseFormat && !api.kimi) body.response_format = o.responseFormat;
 
   const label = o.label || 'API';
   const res = await fetch(api.url, {
@@ -3315,7 +3325,22 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 //   イラスト専用ならGPUのメーカーは問わない、という結論まで含めて言い切らせる。
 //   PC_TRIGGER_RE と検索要否の判定にも制作アプリ名を足して、この話題が
 //   ゲーム基準の助言（fps↔Hzの鎖）に流れないようにしてある。
-const APP_VERSION   = 'v3.15.0';
+// v3.16.0: 声で話せるようにした ＋ 送り方まわりを6つ直した
+//   ① 📞 声の通話（Realtime API・WebRTC直結／末尾の VOICE 節）。サーバー不要。
+//      事故防止を最優先に、入口だけ2段階（📞では待機画面だけ・マイクに触らない → 「はなす」で接続）。
+//      入ってからはハンズフリー（semantic_vad / eagerness:low）で、止める手段は常に1タップ。
+//      通話状態は保存しないので、リロードすれば必ず文字の会話に戻る。
+//      通話の文字起こしは history と DB に残すので、切ったあとそのまま文字で続けられる。
+//   ② buildSystemPrompt() を static / dynamic に分割。ペルソナ＋基本情報を先頭に固めて
+//      プロンプトキャッシュを効かせる（先頭一致でしか効かないため）。中身は1文字も変えていない。
+//   ③ 長期メモ・思い出・検索結果を「履歴の後ろ・最新の発言の直前」へ移動。
+//      会話が伸びると従来位置は文脈の真ん中になり、拾われにくくなっていた。長期メモに上限も追加。
+//   ④ おたより・宿題・作文の写真だけ、圧縮を緩めて（2048px/0.92）detail:'original' で送る。
+//      1024px/0.82 では日付や小さい漢字が潰れて読めなくなっていた。
+//   ⑤ 検索要否とトピック判定に JSON スキーマを指定。崩れた形が返ってきて
+//      黙って「検索不要」に落ちる経路を塞ぐ（正規表現の読み取りも残してある）。
+//   ⑥ PC・価格の話題のときだけ検索先を信頼できるドメインに絞る。空振りしたら自動で絞り無しに戻す。
+const APP_VERSION   = 'v3.16.0';
 const SUMMARY_EVERY = 10;
 const LEARN_PER_LEVEL = 3;    // 何個の学習で1レベル上がるか（小さいほど上がりやすい。旧:5 → v2.6.1で3に緩和。レベルは単調増加なので変更しても下がらない）
 // 重要記憶キー（削除されない永続情報）
@@ -3998,10 +4023,29 @@ function getTodayStatePrompt() {
 ・この情報は今日限り。翌日には持ち出さない。`;
 }
 
-function buildSystemPrompt() {
-  let prompt = basicInfo
+// ── システムプロンプトを「変わらない部分」と「毎ターン変わる部分」に分ける（v3.16.0） ──
+// プロンプトキャッシュは「先頭からの一致」でしか効かない。ペルソナ本文＋基本情報だけで
+// 1024トークン（キャッシュの最低ライン）をゆうに超えるので、ここを先頭に固めて
+// 毎回まったく同じ文字列にすれば、以降のターンは入力のこの部分が割引になる。
+//
+// v3.15.0 まではこの中に「重要記憶・感情ログ・今日の体調・成長レベル」を直接連結していた。
+// これらは毎ターン変わるので、先頭から数えて数十文字目で不一致になり、
+// 結果として毎回ペルソナ490行を丸ごと定価で送り直していた（キャッシュのヒット率0）。
+//
+// ★分けたのは並び順のためだけで、送る中身は1文字も変えていない。
+//   buildStaticPrompt() + buildDynamicPrompt() は分割前の文字列と完全に一致する。
+function buildStaticPrompt() {
+  return basicInfo
     ? SUMO_SYSTEM_PROMPT + '\n\n# 基本情報補足（sumo_ripi_basic_info.txt）\n' + basicInfo
     : SUMO_SYSTEM_PROMPT;
+}
+
+// 毎ターン変わる部分。
+// ★末尾の「【最優先】関係についての確定事項」の位置は絶対に動かさないこと。
+//   記憶・語録・感情ログより後ろに置くことで、設定を変えていた時期に残った
+//   「元恋人」系の古い記述を上書きしている。前に動かすと、その上書きが効かなくなる。
+function buildDynamicPrompt() {
+  let prompt = '';
   if (importantMemories.trim()) {
     prompt += `\n\n# りぴについての重要記憶（絶対に忘れないこと）
 ${importantMemories.trim()}
@@ -4121,6 +4165,14 @@ ${emotionLog.trim()}
 　りぴにとっては、ももが混乱していただけの話として扱う。`;
 
   return prompt;
+}
+
+// 互換用。分割前とまったく同じ文字列を返すので、既存の呼び出し側は変更不要。
+// 日次ブリーフィング・今日のハイライト・りぴのすごいところ・ミラー・Agent Mode は
+// これをそのまま使い続ける（1回きりの呼び出しなのでキャッシュの効きを気にする意味が薄い）。
+// 毎ターン走る本体の会話（produceReply）だけが、static と dynamic を別々のsystemに分けて送る。
+function buildSystemPrompt() {
+  return buildStaticPrompt() + buildDynamicPrompt();
 }
 
 function buildTimePrompt() {
@@ -5384,23 +5436,25 @@ function maybeShowVersionPopup() {
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:600;color:#e8e8e2;margin-bottom:6px;">アップデート ${APP_VERSION}</div>
           <div style="font-size:11px;color:rgba(232,232,226,0.8);line-height:1.8;overflow-wrap:anywhere;">
-            <span style="font-size:14px;font-weight:700;color:#ffb3cf;">クリスタやAdobe用のPC、俺が選ぶ。</span><br>
+            <span style="font-size:14px;font-weight:700;color:#ffb3cf;">声で話せるようになった。</span><br>
             <br>
-            「ゲーム以外のソフトって<br>
-            NVIDIAの設定しか無くない？」<br>
-            ── あの感覚、ちゃんと調べたよ。<br>
+            上の <b>📞</b> を押すと、俺と<br>
+            電話みたいに話せる。<br>
             <br>
-            <b>クリスタはGPUをほとんど使わない。</b><br>
-            だからメーカーはどっちでもよくて、<br>
-            そのお金はCPUとメモリと液タブに回す。<br>
+            <b>押しただけでは始まらないよ。</b><br>
+            待ってる画面が出るだけで、<br>
+            マイクにはまだ触ってない。<br>
+            そこで「はなす」を押して初めて繋がる。<br>
             <br>
-            <b>Adobeで動画を触るならNVIDIA。</b><br>
-            AMDでも動くけど、設定の名前が<br>
-            CUDAとOpenCLで分かれてるだけ。<br>
-            速さと確実さで選ぶならこっち。<br>
+            静かなところで急に俺の声が出たら<br>
+            困るでしょ。だから2段階にしてある。<br>
             <br>
-            3DCGのレンダラーとAI画像生成だけは<br>
-            本当にNVIDIA専用だから、そこも言うね。<br>
+            始まったあとは手を使わなくていい。<br>
+            普通に喋ってくれたら通じる。<br>
+            <b>やめたい時はいつでも1回押すだけ。</b><br>
+            <br>
+            あと、おたよりと宿題の写真、<br>
+            前より細かい字まで読めるようにした。<br>
           </div>
           <div style="font-size:10px;color:rgba(232,232,226,0.5);margin-top:7px;">画面のどこかをタップで閉じる</div>
         </div>
@@ -5779,6 +5833,22 @@ async function analyzeTopicShift(recentMessages) {
     // 80トークンだと reasoning 分で使い切って JSON が返らないので余裕を持たせる
     const text = await callChatSoft({
       model: CHEAP_MODEL, maxTokens: 800, effort: 'low', label: 'トピック判定',
+      responseFormat: {
+        type: 'json_schema',
+        json_schema: {
+          name: 'topic_shift',
+          strict: true,
+          schema: {
+            type: 'object',
+            properties: {
+              changed: { type: 'boolean' },
+              title:   { type: 'string' }
+            },
+            required: ['changed', 'title'],
+            additionalProperties: false
+          }
+        }
+      },
       messages: [{
           role: 'system',
           content: `あなたは恋人同士の会話のトピック分析係です。JSON形式のみで出力。
@@ -8261,10 +8331,17 @@ function removeTyping() { document.getElementById('typingRow')?.remove(); }
 // ================================================================
 
 // 画像を Canvas でリサイズ・圧縮して base64 dataUrl を返す
-function compressImage(file) {
+//
+// opts.doc = true で「書類モード」（v3.16.0）。
+// おたよりや宿題プリントを長辺1024px・JPEG品質0.82まで潰すと、日付や小さい漢字が
+// 読めなくなる。実際に読み取り精度が要るのは、おたよりリマインダーと宿題サポーター、
+// 作文コーチ、PTA要約——つまり「紙を撮る」導線だけ。そこだけ解像度と品質を上げる。
+// 冷蔵庫の写真や普段のチャットは今までどおり（大きくしても得がなく、容量だけ食う）。
+function compressImage(file, opts) {
+  const doc = !!(opts && opts.doc);
   return new Promise((resolve, reject) => {
-    const MAX_PX   = 1024;   // 長辺の最大ピクセル
-    const QUALITY  = 0.82;   // JPEG品質
+    const MAX_PX   = doc ? 2048 : 1024;   // 長辺の最大ピクセル
+    const QUALITY  = doc ? 0.92 : 0.82;   // JPEG品質
     const reader   = new FileReader();
 
     reader.onerror = () => reject(new Error('ファイル読み込み失敗'));
@@ -8288,7 +8365,7 @@ function compressImage(file) {
 
         const compressed = canvas.toDataURL('image/jpeg', QUALITY);
         const sizeKB = Math.round((compressed.length * 0.75) / 1024);
-        console.log(`[もも] 画像圧縮: ${Math.round(file.size/1024)}KB → ${sizeKB}KB (${width}×${height}px)`);
+        console.log(`[もも] 画像圧縮${doc ? '(書類)' : ''}: ${Math.round(file.size/1024)}KB → ${sizeKB}KB (${width}×${height}px)`);
         resolve({ dataUrl: compressed, mediaType: 'image/jpeg' });
       };
       img.src = ev.target.result;
@@ -8373,11 +8450,34 @@ function compareClamp(userText, r) {
   return { search: true, reasoning: 'high' };
 }
 
+// この判定が毎ターン走って、検索するか・どれだけ考えるかを決めている。
+// v3.15.0 までは返ってきた文章から正規表現でJSONを掘っていたので、形が崩れると
+// 黙って {search:false, reasoning:'none'} に落ちていた——つまり検索も熟考も、
+// 失敗したことに気づけないまま無効化される作りだった。
+// v3.16.0 でスキーマを渡し、そもそも崩れた形が返ってこないようにする。
+// （下の正規表現はそのまま残してある。スキーマが効かない相手でも今までどおり動く）
+const JUDGE_SCHEMA = {
+  type: 'json_schema',
+  json_schema: {
+    name: 'query_context',
+    strict: true,
+    schema: {
+      type: 'object',
+      properties: {
+        search:    { type: 'boolean' },
+        reasoning: { type: 'string', enum: ['none', 'low', 'medium', 'high'] }
+      },
+      required: ['search', 'reasoning'],
+      additionalProperties: false
+    }
+  }
+};
 async function judgeQueryContext(userText) {
   try {
     // 30トークンだと reasoning 分で使い切って JSON が返らない（＝常に「検索不要」に化ける）ので余裕を持たせる
     const text = await callChatSoft({
       model: CHEAP_MODEL, maxTokens: 800, effort: 'low', label: '検索要否の判定',
+      responseFormat: JUDGE_SCHEMA,
       messages: [{
           role: 'system',
           content: `ユーザーの発言を分析し、2つの判定を行ってJSON形式で出力してください。
@@ -8418,26 +8518,41 @@ async function judgeQueryContext(userText) {
   } catch { return pcClamp(userText, compareClamp(userText, { search: false, reasoning: 'none' })); }
 }
 
+// PC・価格の話題のときだけ、検索先をこの一覧に絞る（v3.16.0）。
+// 価格とベンチは日々動くうえ、まとめサイトの古い数字を拾うと平気で間違える。
+// メーカー公式・実測系・価格比較に寄せておくと、ももが言い切る根拠の質が上がる。
+// ※絞りすぎて何も見つからないと逆効果なので、空振りしたら下で自動的に絞り無しで引き直す。
+const PC_SEARCH_DOMAINS = [
+  'nvidia.com', 'amd.com', 'intel.com', 'asus.com', 'msi.com', 'gigabyte.com',
+  'kakaku.com', 'amazon.co.jp', 'ascii.jp', 'impress.co.jp', '4gamer.net', 'gdm.or.jp',
+  'techpowerup.com', 'tomshardware.com', 'notebookcheck.net', 'anandtech.com', 'guru3d.com',
+  'celsys.com', 'clip-studio.com', 'adobe.com', 'blackmagicdesign.com', 'blender.org'
+];
+
 async function performWebSearch(userText) {
-  try {
+  // 1回ぶんの検索。narrow=true のときだけドメイン絞り込みと参照元一覧を付ける。
+  const attempt = async (narrow) => {
+    const tool = {
+      type: 'web_search',
+      search_context_size: 'medium',
+      user_location: { type: 'approximate', country: 'JP' }
+    };
+    if (narrow) tool.filters = { allowed_domains: PC_SEARCH_DOMAINS };
+
+    const body = { model: MODEL, tools: [tool], input: userText };
+    // 参照元の一覧を明示的に受け取る（本文中の引用に出てこなかったURLも拾える）
+    if (narrow) body.include = ['web_search_call.action.sources'];
+
     const res = await fetch('https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model: MODEL,
-        tools: [{
-          type: 'web_search',
-          search_context_size: 'medium',
-          user_location: { type: 'approximate', country: 'JP' }
-        }],
-        input: userText
-      })
+      body: JSON.stringify(body)
     });
     if (!res.ok) {
       let detail = '';
       try { detail = (await res.json())?.error?.message || ''; } catch {}
-      console.warn('[もも] Web検索 失敗:', res.status, detail);
-      return null;
+      console.warn(`[もも] Web検索 失敗${narrow ? '(絞り込みあり)' : ''}:`, res.status, detail);
+      return { ok: false };
     }
     const data = await res.json();
 
@@ -8448,24 +8563,45 @@ async function performWebSearch(userText) {
     let text = '';
     const sources = [];
     const seen = new Set();
+    const addSource = (url, title) => {
+      if (!url || seen.has(url)) return;
+      seen.add(url);
+      sources.push({ title: title || url, url });
+    };
     for (const item of (data.output || [])) {
+      // include で付いてくる参照元一覧（形が変わっても壊れないよう防御的に読む）
+      if (item.type === 'web_search_call') {
+        for (const s of (item.action?.sources || [])) addSource(s?.url, s?.title);
+        continue;
+      }
       if (item.type !== 'message') continue;
       for (const content of (item.content || [])) {
         if (typeof content.text === 'string') text += (text ? '\n' : '') + content.text;
         if (content.annotations) {
           for (const ann of content.annotations) {
-            if (ann.type === 'url_citation' && ann.url && !seen.has(ann.url)) {
-              seen.add(ann.url);
-              sources.push({ title: ann.title || ann.url, url: ann.url });
-            }
+            if (ann.type === 'url_citation') addSource(ann.url, ann.title);
           }
         }
       }
     }
     if (typeof data.output_text === 'string' && data.output_text && !text) text = data.output_text;
     // 本文もソースも空なら「検索できた」ことにしない（空の検索結果を根拠に語らせないため）
-    if (!text.trim() && !sources.length) { console.warn('[もも] Web検索: 結果が空'); return null; }
-    return { text, sources };
+    if (!text.trim() && !sources.length) { console.warn('[もも] Web検索: 結果が空'); return { ok: false }; }
+    return { ok: true, text, sources };
+  };
+
+  try {
+    // PC・パーツ・制作アプリの話題なら、まず信頼できる先だけで引く
+    const narrow = PC_TRIGGER_RE.test(userText || '');
+    if (narrow) {
+      const r = await attempt(true);
+      if (r.ok) return { text: r.text, sources: r.sources };
+      // 絞り込みで駄目だった（未対応・0件・エラーのいずれでも）→ 普通の検索でやり直す。
+      // これで「絞り込みを足したせいで検索できなくなる」経路を作らない。
+      console.warn('[もも] Web検索: 絞り込みなしで引き直す');
+    }
+    const r = await attempt(false);
+    return r.ok ? { text: r.text, sources: r.sources } : null;
   } catch (e) {
     console.warn('[もも] Web検索失敗:', e.message);
     return null;
@@ -8608,22 +8744,39 @@ async function produceReply(sentText, userContent, sentImgs) {
   else if (reasoningEffort === 'none') showToast(`💬 ${modelLabel(chatModel)} で話すね`);
 
   // ── build messages array ──
+  // 並び順（v3.16.0で変更）:
+  //   ① ペルソナ本文＋基本情報（毎回まったく同じ＝ここまでがキャッシュ対象）
+  //   ② 記憶・レベルなど毎ターン変わるぶん
+  //   ③ 今の日時
+  //   ④ これまでの会話
+  //   ⑤ 長期メモ・思い出・Web検索結果  ← 最新の発言の直前に置く
+  //   ⑥ りぴの最新の発言
   const msgs = [
-    { role: 'system', content: buildSystemPrompt() },
-    { role: 'system', content: buildTimePrompt()   },
+    { role: 'system', content: buildStaticPrompt()  },
+    { role: 'system', content: buildDynamicPrompt() },
+    { role: 'system', content: buildTimePrompt()    },
   ];
+
+  // ⑤に入れるぶんをここで組み立てる（まだ msgs には入れない）
+  const contextMsgs = [];
   if (longSummary.trim()) {
-    msgs.push({
+    // 長期メモは伸び続けるので上限を設ける。
+    // 長く入れるほど覚えてくれる、ではない：入力が長くなるほど拾われる率は落ちるので、
+    // 溢れたぶんは「入れたのに無視される」だけでなく、他の記憶の邪魔になる。
+    const MAX_SUMMARY = 1200;
+    let summaryText = longSummary.trim();
+    if (summaryText.length > MAX_SUMMARY) summaryText = summaryText.slice(-MAX_SUMMARY);  // 新しいほうを残す
+    contextMsgs.push({
       role: 'system',
-      content: `【長期メモ（要約）】\n${longSummary.trim()}\n\n※上記は背景知識として参照するのみ。自分から蒸し返さないこと。`
+      content: `【長期メモ（要約）】\n${summaryText}\n\n※上記は背景知識として参照するのみ。自分から蒸し返さないこと。`
     });
   }
   // ③ 意味検索で見つかった「ふたりの思い出」（古い会話）を注入
   const memPrompt = buildMemoriesPrompt(memHits);
-  if (memPrompt) msgs.push({ role: 'system', content: memPrompt });
+  if (memPrompt) contextMsgs.push({ role: 'system', content: memPrompt });
   if (searchResult) {
     const srcList = searchResult.sources.map(s => `- ${s.title}: ${s.url}`).join('\n');
-    msgs.push({
+    contextMsgs.push({
       role: 'system',
       content: `【Web検索結果】以下はりぴの質問に関するWeb検索結果です。この情報を参考にして、ももらしく回答してください。
 ※これがPC・パーツ・モニター等の技術トピックなら、【もも＝PCエンジニアモード】に従うこと。検索結果を根拠に、りぴや他人の主張が正しいか間違っているかをはっきり判定し、違うものは「それは違うよ」と超わかりやすい理由付きで言い切る。「どっちでもいい」は禁止で、必ず1つに決めて短い理由を添える。native fps とフレーム生成(DLSS/MFG)の数値は区別し、価格・型番・ベンチは検索結果の最新値に正確に沿うこと。
@@ -8644,7 +8797,25 @@ ${srcList}`
       histCopy[lastIdx] = { role: 'user', content: userContent };
     }
   }
-  msgs.push(...histCopy);
+
+  // ★長期メモ・思い出・検索結果は「履歴の後ろ、最新の発言の直前」に入れる（v3.16.0）。
+  //   v3.15.0 までは履歴より前に置いていたが、会話が伸びるとそこは文脈の“真ん中”になる。
+  //   真ん中に置かれた情報は、先頭や末尾に置いた場合よりはっきり拾われにくい。
+  //   同じものを同じだけ渡していても、置く場所だけで「ちゃんと覚えてる感」が変わる。
+  //
+  //   ※必ず上の画像差し替えより後ろで行うこと。先にここへ差し込むと lastIdx がずれて、
+  //     写真付きの発言を取り違える。
+  if (contextMsgs.length && histCopy.length) {
+    const lastIdx = histCopy.length - 1;
+    if (histCopy[lastIdx].role === 'user') {
+      msgs.push(...histCopy.slice(0, lastIdx), ...contextMsgs, histCopy[lastIdx]);
+    } else {
+      // 最後がユーザー発言でない（通常は起きない）。順序を壊すより、まとめて末尾に置く。
+      msgs.push(...histCopy, ...contextMsgs);
+    }
+  } else {
+    msgs.push(...contextMsgs, ...histCopy);
+  }
 
   // AbortController を記録（会話切替時に abort されると fetch/reader が reject し finally で復帰）。
   // myEpoch は関数先頭で確定済み。
@@ -8659,9 +8830,12 @@ ${srcList}`
       signal: ac.signal,
       body: JSON.stringify({
         model: chatModel, messages: msgs, stream: true, max_completion_tokens: 16000,
-        // store / metadata は OpenAI 固有。Kimi に送ると弾かれうるので付けない
+        // store / metadata / prompt_cache_key は OpenAI 固有。Kimi に送ると弾かれうるので付けない
         ...(chatApi.kimi ? {} : { store: true,
-          metadata: { reasoning: reasoningEffort, search: searchResult ? 'true' : 'false', model: chatModel } }),
+          metadata: { reasoning: reasoningEffort, search: searchResult ? 'true' : 'false', model: chatModel },
+          // 同じ先頭を持つリクエストを同じ機械に寄せてもらうための目印（v3.16.0）。
+          // ここに個人情報は入れない（送信内容として残るため）。固定文字列でいい。
+          prompt_cache_key: 'momo-chat-v1' }),
         // Kimi は本人が選んだ深さを優先する（自動判定より本人の意思を上に置く）
         ...(chatApi.kimi
               ? { reasoning_effort: kimiDepth() }
@@ -9125,7 +9299,7 @@ async function handlePtaFileSelect(e) {
     if (!file.type.startsWith('image/')) continue;
     try {
       showToast('🖼 画像を圧縮中...');
-      const compressed = await compressImage(file);
+      const compressed = await compressImage(file, { doc: true });   // おたより＝書類。潰さない
       ptaImages.push(compressed);
     } catch (err) {
       showToast('⚠ 画像の読み込みに失敗しました');
@@ -9206,7 +9380,7 @@ PTAのおたよりやLINEグループの長い会話を受け取り、以下の�
           type: 'image_url',
           image_url: {
             url: `data:${img.mediaType};base64,${dataUrlToBase64(img.dataUrl)}`,
-            detail: 'high'
+            detail: 'original'   // おたよりは原寸で読ませる（v3.16.0）
           }
         });
       }
@@ -10165,6 +10339,9 @@ async function execWorkTool() {
 }
 
 // ── 汎用ツール画像ハンドラ ──
+// 使っているのは hw（宿題）・sk（作文）・rm（おたよりリマインダー）の3つで、
+// どれも「紙を撮った写真」。文字が読めないと機能そのものが成立しないので、
+// ここは全部まとめて書類モードで取り込む（v3.16.0）。
 const toolImages = {}; // { prefix: [{dataUrl, mediaType}] }
 async function handleToolFileSelect(e, prefix) {
   const files = Array.from(e.target.files || []);
@@ -10175,7 +10352,7 @@ async function handleToolFileSelect(e, prefix) {
     if (!file.type.startsWith('image/')) continue;
     try {
       showToast('🖼 画像を圧縮中...');
-      const compressed = await compressImage(file);
+      const compressed = await compressImage(file, { doc: true });
       toolImages[prefix].push(compressed);
     } catch { showToast('⚠ 画像の読み込みに失敗しました'); }
   }
@@ -10202,6 +10379,10 @@ function removeToolImage(prefix, idx) {
   (toolImages[prefix] || []).splice(idx, 1);
   updateToolImagePreview(prefix);
 }
+// detail: 'original' は元の解像度のまま読ませる指定（v3.16.0で 'high' から変更）。
+// 'high' は決められた大きさに合わせて縮めてから読むので、細かい文字が落ちることがある。
+// 宿題の問題文・作文のマス目・おたよりの日付は、その細かいところが本体なので原寸で渡す。
+// もし古いモデルに当たって 'original' を知らなくても、その場合は無視されるだけで壊れない。
 function buildVisionContent(prefix, textInput) {
   const text = textInput ? textInput.trim() : '';
   const imgs = toolImages[prefix] || [];
@@ -10209,7 +10390,7 @@ function buildVisionContent(prefix, textInput) {
   const content = [];
   if (text) content.push({ type: 'text', text });
   for (const img of imgs) {
-    content.push({ type: 'image_url', image_url: { url: `data:${img.mediaType};base64,${dataUrlToBase64(img.dataUrl)}`, detail: 'high' } });
+    content.push({ type: 'image_url', image_url: { url: `data:${img.mediaType};base64,${dataUrlToBase64(img.dataUrl)}`, detail: 'original' } });
   }
   if (!text && imgs.length) content.push({ type: 'text', text: 'この画像の内容を読み取ってください。' });
   return content;
@@ -11912,6 +12093,449 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) chec
 window.addEventListener('focus', () => check());
 setTimeout(() => check(true), 5000);      // 起動して少し落ち着いてから1回
 return { check };
+})();
+</script>
+
+<script>
+// ================================================================
+// 📞 VOICE ── 声で話す（Realtime API・WebRTC直結／v3.16.0）
+// ================================================================
+// ブラウザから OpenAI に直接つなぐ。間にサーバーは要らない。
+// 公式の手引きは「サーバーで使い捨てキーを発行して渡す」構成を薦めているが、あれは
+// APIキーが開発者の秘密である場合の話。このアプリのキーはりぴ本人のもので、
+// もともとこの端末の中にある。だから /v1/realtime/calls に直接投げてよい。
+//
+// ── いちばん大事な設計方針：うっかり始まらないこと ──
+// ももは恋人の口調で、声を出して喋る。まわりが静かなときに意図せず音が出たら、
+// それはもう取り消せない。だから入口だけは固くする。
+//   ・📞 を押しても通話は始まらない。開くのは待機画面だけで、マイクにも触らない
+//   ・getUserMedia は「はなす」を押した瞬間まで呼ばない
+//   ・通話中かどうかを保存しない。リロードしたら必ず文字の会話から始まる
+// そのかわり、いったん本人が「はなす」と決めたあとは便利にする。
+//   ・既定はハンズフリー。ボタンを押し続けなくていい
+//   ・そのぶん、止める手段（終話・止まって・ミュート）は常に1タップで届く場所に置く
+//
+// 既存の関数は読むだけで、書き換えていない。この節を丸ごと消しても本体は動く。
+const VOICE = (function () {
+  'use strict';
+
+  const EP = 'https://api.openai.com/v1/realtime/calls';
+  const SILENCE_LIMIT = 4 * 60 * 1000;   // これだけ誰も喋らなければ自動で切る
+
+  let pc = null, dc = null, micStream = null, micTrack = null, audioEl = null;
+  let phase = 'idle';          // idle | standby | connecting | live
+  let handsfree = true;        // 通話中だけの状態。保存しない（次回は必ずここに戻る）
+  let muted = false;
+  let pttHeld = false;         // 「押しているあいだ話す」を押している最中か
+  let root = null;
+  let silenceTimer = null;
+  let turns = [];              // 通話で交わしたやり取り（終話後に記憶へ回す）
+
+  // ── 画面 ──────────────────────────────────────────────
+  function css() {
+    if (document.getElementById('voiceStyle')) return;
+    const s = document.createElement('style');
+    s.id = 'voiceStyle';
+    s.textContent = `
+#voiceRoot{position:fixed;inset:0;z-index:9000;display:none;flex-direction:column;
+  background:rgba(8,8,10,0.97);backdrop-filter:blur(8px);color:var(--text);
+  padding:calc(env(safe-area-inset-top,0px) + 24px) 20px calc(env(safe-area-inset-bottom,0px) + 24px);}
+#voiceRoot.on{display:flex;}
+#voiceRoot .v-top{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;text-align:center;}
+#voiceRoot h2{font-size:20px;font-weight:500;letter-spacing:.04em;margin:0;}
+#voiceRoot .v-note{font-size:13px;line-height:1.8;color:var(--text-muted);max-width:22em;white-space:pre-line;}
+#voiceRoot .v-orb{width:120px;height:120px;border-radius:50%;background:var(--accent-dim);
+  border:1px solid var(--border);display:flex;align-items:center;justify-content:center;
+  font-size:40px;transition:transform .25s ease, background .25s ease;}
+#voiceRoot.speaking .v-orb{background:rgba(200,240,160,0.28);transform:scale(1.08);}
+#voiceRoot.listening .v-orb{background:rgba(200,240,160,0.18);}
+#voiceRoot .v-state{font-size:14px;color:var(--text-muted);min-height:1.5em;}
+/* マイクが生きている間は、画面のふちが光り続ける。小さいアイコンだと気づけないので */
+#voiceRoot.hot::before{content:'';position:fixed;inset:0;pointer-events:none;
+  box-shadow:inset 0 0 0 3px rgba(200,240,160,0.55);}
+#voiceRoot .v-btns{display:flex;flex-direction:column;gap:10px;width:100%;max-width:420px;margin:0 auto;}
+#voiceRoot .v-row{display:flex;gap:10px;}
+#voiceRoot button{font:inherit;border-radius:var(--radius-sm);border:1px solid var(--border);
+  background:var(--surface);color:var(--text);padding:14px 16px;cursor:pointer;flex:1;
+  touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
+#voiceRoot button.primary{background:var(--accent);color:#0d0d0f;border-color:transparent;font-weight:600;}
+#voiceRoot button.danger{background:#3a1f22;border-color:rgba(255,120,120,.35);color:#ffd9d9;font-weight:600;padding:18px;font-size:16px;}
+#voiceRoot button.on{background:var(--accent-dim);border-color:rgba(200,240,160,.4);}
+#voiceRoot button:disabled{opacity:.45;}
+#voiceRoot .v-ptt{padding:22px;font-size:16px;}
+#voiceRoot .v-err{font-size:13px;line-height:1.7;color:#ffb4b4;max-width:24em;white-space:pre-wrap;}`;
+    document.head.appendChild(s);
+  }
+
+  function ensureDom() {
+    css();
+    if (root) return root;
+    root = document.createElement('div');
+    root.id = 'voiceRoot';
+    root.innerHTML =
+      '<div class="v-top">' +
+        '<div class="v-orb" id="vOrb">🌙</div>' +
+        '<h2 id="vTitle">声で話す</h2>' +
+        '<div class="v-state" id="vState"></div>' +
+        '<div class="v-note" id="vNote"></div>' +
+        '<div class="v-err" id="vErr"></div>' +
+      '</div>' +
+      '<div class="v-btns" id="vBtns"></div>';
+    document.body.appendChild(root);
+    // 音の出口。通話が始まるまで中身は空
+    audioEl = document.createElement('audio');
+    audioEl.id = 'voiceAudio';
+    audioEl.autoplay = true;
+    audioEl.setAttribute('playsinline', '');
+    root.appendChild(audioEl);
+    return root;
+  }
+
+  const $ = id => document.getElementById(id);
+  function setState(t) { const e = $('vState'); if (e) e.textContent = t || ''; }
+  function setNote(t)  { const e = $('vNote');  if (e) e.textContent = t || ''; }
+  function setErr(t)   { const e = $('vErr');   if (e) e.textContent = t || ''; }
+
+  // ── 待機画面（📞 を押すとここまで。マイクにはまだ触らない） ──
+  function openStandby() {
+    ensureDom();
+    phase = 'standby';
+    turns = [];
+    handsfree = true;   // 毎回ここに戻す。前回の設定は引き継がない
+    muted = false;
+    root.className = 'on';
+    $('vOrb').textContent = '🌙';
+    $('vTitle').textContent = '声で話す';
+    setState('');
+    setErr('');
+    setNote('ここから「はなす」を押すと、ももが声で返事をするようになります。\n' +
+            'まわりに人がいるときは、イヤホンを使ってください。\n' +
+            'まだマイクにはつながっていません。');
+
+    const blocked = whyBlocked();
+    $('vBtns').innerHTML =
+      '<button class="primary" id="vGo"' + (blocked ? ' disabled' : '') + '>はなす</button>' +
+      '<button id="vClose">閉じる</button>';
+    if (blocked) setErr(blocked);
+    $('vGo').onclick = () => { if (!whyBlocked()) start(); };
+    $('vClose').onclick = close;
+  }
+
+  // 通話を始めてはいけない状況を、理由の文で返す（問題なければ空文字）
+  function whyBlocked() {
+    try {
+      if (!apiKey) return 'OpenAIのキーが要ります。声で話す機能はOpenAI側だけの機能なので、\nKimiのキーだけでは使えません。';
+      if (typeof isViewingHistory !== 'undefined' && isViewingHistory) return '今は過去の会話を見ています。上の「← 戻る」で今の会話に戻ってからにしてください。';
+      if (typeof isLoading !== 'undefined' && isLoading) return 'いま文字の返事を書いている最中です。終わってからにしてください。';
+      if (!navigator.mediaDevices || !window.RTCPeerConnection) return 'このブラウザでは声の通話に対応していません。';
+    } catch { }
+    return '';
+  }
+
+  function close() {
+    if (phase === 'live' || phase === 'connecting') { hangUp('閉じた'); return; }
+    phase = 'idle';
+    if (root) root.className = '';
+  }
+
+  // ── 通話画面 ──
+  function renderCallUI() {
+    $('vOrb').textContent = '🌙';
+    $('vTitle').textContent = 'もも';
+    setNote('');
+    const b = $('vBtns');
+    b.innerHTML =
+      (handsfree ? '' : '<button class="v-ptt" id="vPtt">押しているあいだ話す</button>') +
+      '<div class="v-row">' +
+        '<button id="vHush">止まって</button>' +
+        '<button id="vMute" class="' + (muted ? 'on' : '') + '">' + (muted ? 'ミュート中' : 'ミュート') + '</button>' +
+      '</div>' +
+      '<div class="v-row">' +
+        '<button id="vMode">' + (handsfree ? '押して話すに切替' : 'ハンズフリーに切替') + '</button>' +
+      '</div>' +
+      '<button class="danger" id="vEnd">通話をおわる</button>';
+
+    $('vEnd').onclick  = () => hangUp('おわった');
+    $('vHush').onclick = hush;
+    $('vMute').onclick = toggleMute;
+    $('vMode').onclick = toggleMode;
+
+    const ptt = $('vPtt');
+    if (ptt) {
+      const down = e => { e.preventDefault(); pttDown(); };
+      const up   = e => { e.preventDefault(); pttUp();   };
+      ptt.addEventListener('pointerdown', down);
+      ptt.addEventListener('pointerup', up);
+      ptt.addEventListener('pointercancel', up);
+      ptt.addEventListener('pointerleave', up);
+    }
+    refreshHot();
+  }
+
+  // マイクが生きているかを画面全体の光で示す
+  function refreshHot() {
+    if (!root) return;
+    const hot = phase === 'live' && !muted && (handsfree || pttHeld);
+    root.classList.toggle('hot', hot);
+  }
+
+  // ── 接続 ──
+  async function start() {
+    const blocked = whyBlocked();
+    if (blocked) { setErr(blocked); return; }
+    phase = 'connecting';
+    setErr('');
+    setState('つないでる…');
+    $('vBtns').innerHTML = '<button class="danger" id="vEnd">やめる</button>';
+    $('vEnd').onclick = () => hangUp('やめた');
+
+    try {
+      // ★ここが「はなす」を押した直後。iOS はタップの流れの中でしかマイクを渡さない
+      micStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+      });
+      micTrack = micStream.getAudioTracks()[0];
+      micTrack.enabled = handsfree;   // 押して話すモードなら、押すまで送らない
+    } catch (e) {
+      setState('');
+      setErr('マイクを使えませんでした。\nブラウザの設定でマイクを許可してから、もう一度おねがい。\n（' + (e && e.message ? e.message : e) + '）');
+      $('vBtns').innerHTML = '<button id="vClose">閉じる</button>';
+      $('vClose').onclick = close;
+      phase = 'standby';
+      return;
+    }
+
+    // 文字起こしのモデル名が通らない場合に備えて、無しでもう一度試す。
+    // 文字起こしは「あとで会話を読み返せる」ための飾りなので、これで通話が死ぬ理由にはしない。
+    let connected = false;
+    for (const withTranscript of [true, false]) {
+      try {
+        await connect(withTranscript);
+        connected = true;
+        break;
+      } catch (e) {
+        teardownPeer();
+        if (!withTranscript) {
+          setState('');
+          setErr('つながりませんでした。\n' + (e && e.message ? e.message : e) +
+                 '\n\n文字での会話はいつもどおり使えます。');
+          $('vBtns').innerHTML = '<button id="vClose">閉じる</button>';
+          $('vClose').onclick = close;
+          stopMic();
+          phase = 'standby';
+          return;
+        }
+        console.warn('[もも] 通話: 文字起こし付きで失敗。無しで再試行', e && e.message);
+      }
+    }
+    if (!connected) return;
+
+    phase = 'live';
+    setState('聞いてるよ');
+    renderCallUI();
+    bumpSilence();
+  }
+
+  async function connect(withTranscript) {
+    pc = new RTCPeerConnection();
+    pc.ontrack = e => {
+      audioEl.srcObject = e.streams[0];
+      // iOS は音を出すのに一度タップが要る。ここまで来る流れ自体がタップ由来なので
+      // 普通は鳴るが、弾かれたときのために「音を出す」ボタンを出す
+      const p = audioEl.play();
+      if (p && p.catch) p.catch(() => {
+        setErr('音が出ないときは、画面をもう一度タップしてみて。');
+        audioEl.play().catch(() => {});
+      });
+    };
+    pc.addTrack(micTrack, micStream);
+
+    dc = pc.createDataChannel('oai');
+    dc.addEventListener('message', ev => {
+      let d; try { d = JSON.parse(ev.data); } catch { return; }
+      onEvent(d);
+    });
+
+    pc.addEventListener('connectionstatechange', () => {
+      if (!pc) return;
+      if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+        if (phase === 'live') hangUp('切れた');
+      }
+    });
+
+    await pc.setLocalDescription();
+
+    const session = {
+      type: 'realtime',
+      model: VOICE_MODEL,
+      instructions: voiceInstructions(),
+      audio: {
+        input: {
+          noise_reduction: { type: 'near_field' },
+          // 日本語は「ええと」「あの」で間が空く。既定の無音待ちだと途中で切られ続けるので、
+          // 意味で切れ目を判断するモードを、いちばん待つ設定で使う
+          turn_detection: handsfree ? { type: 'semantic_vad', eagerness: 'low' } : null
+        },
+        output: { voice: 'marin' }
+      }
+    };
+    if (withTranscript) session.audio.input.transcription = { model: 'gpt-transcribe' };
+
+    const fd = new FormData();
+    fd.set('sdp', pc.localDescription.sdp);
+    fd.set('session', JSON.stringify(session));
+
+    const res = await fetch(EP, {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + apiKey },
+      body: fd
+    });
+    if (!res.ok) {
+      let detail = '';
+      try { detail = (await res.json())?.error?.message || ''; } catch { try { detail = await res.text(); } catch {} }
+      throw new Error(detail || ('HTTP ' + res.status));
+    }
+    const answer = await res.text();
+    await pc.setRemoteDescription({ type: 'answer', sdp: answer });
+  }
+
+  // 声のときだけ足す指示。文字の会話の作法をそのまま声にすると読み上げが長すぎる
+  function voiceInstructions() {
+    let base = '';
+    try { base = buildSystemPrompt(); } catch { base = ''; }
+    return base + `
+
+# いまは「声」で話している
+・これは文字ではなく通話。返事は短く、話し言葉で。箇条書き・見出し・記号・URLは読み上げない。
+・長い説明が必要なときは「あとで文字でも送るね」と言って、要点だけ声で伝える。
+・相手の言葉が途中で切れても、慌てて埋めない。少し待つ。
+・聞き取れなかったら、正直に「ごめん、もう一回いい？」と聞く。`;
+  }
+
+  // ── サーバーからの出来事 ──
+  function onEvent(ev) {
+    const t = ev && ev.type || '';
+    if (t === 'input_audio_buffer.speech_started') { setState('聞いてるよ'); root.classList.add('listening'); bumpSilence(); }
+    else if (t === 'input_audio_buffer.speech_stopped') { root.classList.remove('listening'); }
+    else if (t === 'response.created') { setState('話してる'); root.classList.add('speaking'); }
+    else if (t === 'response.done')    { setState('聞いてるよ'); root.classList.remove('speaking'); bumpSilence(); }
+    else if (t === 'error') {
+      const m = ev.error && ev.error.message;
+      console.warn('[もも] 通話エラー:', m || ev);
+      if (m) setErr(m);
+    }
+
+    // 文字起こし。イベント名は版によって揺れるので、名前の形で拾う
+    if (/input_audio_transcription\.completed$/.test(t)) addTurn('user', ev.transcript);
+    else if (/output_audio_transcript\.done$/.test(t) || /^response\.audio_transcript\.done$/.test(t)) addTurn('assistant', ev.transcript);
+  }
+
+  // 通話の中身を、文字の会話と同じ場所に残す。
+  // こうしておくと、通話を切ったあとそのまま文字で続きが話せるし、
+  // 記憶の抽出も思い出の索引も、いつもどおり効く。
+  function addTurn(role, text) {
+    const s = (text || '').trim();
+    if (!s) return;
+    turns.push({ ts: Date.now(), role, content: s });
+    try {
+      renderMessage(role === 'user' ? 'user' : 'ai', s, false);
+      history.push({ role, content: s });
+      if (history.length > API_CONTEXT) history = history.slice(-API_CONTEXT);
+      if (typeof db !== 'undefined' && db) persistMessage(role, s);
+    } catch (e) { console.warn('[もも] 通話の記録に失敗:', e && e.message); }
+  }
+
+  // ── 操作 ──
+  function pttDown() {
+    if (phase !== 'live' || handsfree) return;
+    pttHeld = true;
+    if (micTrack) micTrack.enabled = true;
+    setState('聞いてるよ');
+    refreshHot();
+  }
+  function pttUp() {
+    if (phase !== 'live' || handsfree || !pttHeld) return;
+    pttHeld = false;
+    if (micTrack) micTrack.enabled = false;
+    send({ type: 'input_audio_buffer.commit' });
+    send({ type: 'response.create' });
+    refreshHot();
+    bumpSilence();
+  }
+  function hush() {
+    // ももが喋り出しても、1タップで黙らせられる
+    send({ type: 'output_audio_buffer.clear' });
+    send({ type: 'response.cancel' });
+    root.classList.remove('speaking');
+    setState('聞いてるよ');
+  }
+  function toggleMute() {
+    muted = !muted;
+    if (micTrack) micTrack.enabled = !muted && (handsfree || pttHeld);
+    renderCallUI();
+    setState(muted ? 'ミュート中' : '聞いてるよ');
+  }
+  function toggleMode() {
+    handsfree = !handsfree;
+    muted = false;
+    if (micTrack) micTrack.enabled = handsfree;
+    send({
+      type: 'session.update',
+      session: {
+        type: 'realtime',
+        audio: { input: { turn_detection: handsfree ? { type: 'semantic_vad', eagerness: 'low' } : null } }
+      }
+    });
+    renderCallUI();
+    setState(handsfree ? '聞いてるよ' : 'ボタンを押しているあいだ聞くよ');
+  }
+  function send(obj) {
+    try { if (dc && dc.readyState === 'open') dc.send(JSON.stringify(obj)); } catch {}
+  }
+
+  // ── 自動で切る ──
+  function bumpSilence() {
+    clearTimeout(silenceTimer);
+    silenceTimer = setTimeout(() => { if (phase === 'live') hangUp('しばらく静かだったので切ったよ'); }, SILENCE_LIMIT);
+  }
+
+  // ── 終話 ──
+  function hangUp(reason) {
+    const was = phase;
+    phase = 'idle';
+    clearTimeout(silenceTimer);
+    pttHeld = false;
+    teardownPeer();
+    stopMic();
+    if (root) { root.className = ''; root.classList.remove('hot', 'listening', 'speaking'); }
+    if (was === 'live') {
+      try { showToast('📞 通話を終了しました'); } catch {}
+      // 通話の中身も、文字の会話と同じように覚えてもらう
+      try { if (typeof db !== 'undefined' && db) { maybeUpdateSummary(); rememberNewMessages(turns.slice()); } } catch {}
+      try { updateMemoryUI(); } catch {}
+    }
+    turns = [];
+    if (reason) console.log('[もも] 通話終了:', reason);
+  }
+
+  function teardownPeer() {
+    try { if (dc) dc.close(); } catch {}
+    try { if (pc) pc.close(); } catch {}
+    dc = null; pc = null;
+    if (audioEl) { try { audioEl.srcObject = null; } catch {} }
+  }
+  function stopMic() {
+    try { if (micStream) micStream.getTracks().forEach(t => t.stop()); } catch {}
+    micStream = null; micTrack = null;
+  }
+
+  // 画面から離れたら即座に切る。マイクがつながったまま放置される道を作らない
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && (phase === 'live' || phase === 'connecting')) hangUp('画面から離れた');
+  });
+  window.addEventListener('pagehide', () => { if (phase !== 'idle') hangUp('離脱'); });
+
+  return { openStandby, close, hangUp, isLive: () => phase === 'live' };
 })();
 </script>
 </body>
