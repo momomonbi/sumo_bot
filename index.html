@@ -3570,7 +3570,34 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 //   3か所に散らばっていたSSEの読み取りを readTextStream() 1本にまとめ、両形式に対応させた。
 //   ついでに：Kimi を選んでいる間 Web検索が黙って死んでいたのを直した
 //   （MODELが'kimi-k3'のまま OpenAI に飛んで400になっていた）。
-const APP_VERSION   = 'v3.19.0';
+// v3.20.0: 記憶を「丸ごと書き直し」から「操作(ADD/UPDATE/DELETE)」に変えた
+//   これまでは記憶を毎回まるごと書き直させていた。その作りだと、LLMがうっかり
+//   落とした行と、もう事実じゃないから外した行を区別できない。区別できないので
+//   mergeLearned() で「落ちた行は全部戻す」しかなく、結果として“もう違う事実”まで
+//   不死身になっていた（引っ越しても古い住所が戻る。「元恋人」がプロンプト末尾の
+//   上書きでしか打ち消せなかったのと同じ構造）。
+//   操作で受け取れば、触られなかった行はそのまま残る＝うっかり落ちる経路が
+//   構造として無くなるので、救済処理そのものが要らなくなる。
+//   対象は importantMemories と behaviorFeedback の2つ。要約と感情は箇条書きでは
+//   ないので操作が馴染まず、語録2種は古い項目が残っても害が無いため従来どおり。
+//   安全柵（どれも「記憶を失わない」側に倒してある）:
+//     ・既存行に手を入れられるのは1回あたり min(3, 全体の3割) 件まで。
+//       UPDATE も DELETE と同じ予算で数える（置き換えは削除と破壊力が変わらないため）。
+//     ・DELETE も UPDATE も理由が必須。理由の無い操作は捨てる。
+//     ・見出し行(【…】)は番号を持たないので狙えない。見出しに化ける追加も弾く。
+//     ・読めない返事が来たら何もしない（今の記憶を残すのが安全側）。
+//     ・番号を振った時点の中身を控え、返事を待つ間に変わっていたら今回は見送る。
+//     ・外した行はゴミ箱へ理由つきで退避し、学習画面から1タップで戻せる。
+//       ★退避に成功してから本体を書き換える。順番が逆だと、容量不足で
+//         退避だけ失敗した時に戻せないまま消える。
+//     ・戻した時は必ず累積カウンタを追いつかせる（bumpLearnedTotal）。
+//       これを忘れると次の更新でレベルと学習数が下がる。過去いちばん痛かった事故。
+//     ・累積は項目ごとに「増えたぶんだけ」数える。合計で見ると、外した1件が
+//       語録の増加を打ち消して、4つ覚えたのに1しか増えない状態になる。
+//   ★Kimi では使わない。出力の形を保証する json_schema が OpenAI 側の機能なので、
+//     Kimi で操作を求めても普通の文章が返り、読み取りが毎回失敗して
+//     「重要記憶とフィードバックだけ黙って更新されない」状態になる。従来方式に倒す。
+const APP_VERSION   = 'v3.20.0';
 const SUMMARY_EVERY = 10;
 const LEARN_PER_LEVEL = 3;    // 何個の学習で1レベル上がるか（小さいほど上がりやすい。旧:5 → v2.6.1で3に緩和。レベルは単調増加なので変更しても下がらない）
 // 重要記憶キー（削除されない永続情報）
@@ -4179,6 +4206,7 @@ let emotionLog    = '';     // 感情履歴
 let adoptedWords  = '';     // ももが学習済みの言葉
 let behaviorFeedback = '';  // 行動フィードバック（やめて/もっと）
 let learnedTotalEver = 0;   // 累積学習数（永続化・単調増加。LLMがデータを縮約してもレベルが下がらない）
+let memTrash = [];          // 外した記憶の退避先（v3.20.0・画面から戻せる）
 let totalMsgCount = 0;
 let chatEpoch = 0;          // 会話の世代カウンタ。newChat/resumeArchive で +1 して、
                             // 古い会話に対する fire-and-forget な maybeUpdateSummary が
@@ -4718,6 +4746,191 @@ function mergeLearned(oldText, newText) {
   return `${newTrim}\n【保管（自動復元）】\n${missing.join('\n')}`;
 }
 
+// ================================================================
+// 記憶の書き換え（v3.20.0）── 丸ごと書き直させるのをやめ、操作で受け取る
+// ================================================================
+// これまでは「今の記憶」と「新しいログ」を渡して、記憶を丸ごと書き直させていた。
+// その作りだと、LLMがうっかり落とした行と、もう事実じゃないから外した行を
+// 区別できない。区別できないので mergeLearned() で「落ちた行は全部戻す」しかなく、
+// 結果として “もう違う事実” まで不死身になっていた。
+// （りぴが引っ越しても古い住所が戻ってくる。設定を変えた時期の「元恋人」が
+//   消えず、プロンプトの最後で上書きするしかなかったのと同じ構造。）
+//
+// なので「何をどうしたいか」を明示してもらう形に変える。
+//   ADD    … 新しく覚える
+//   UPDATE … この行を、この内容に置き換える（引っ越し・転職・予定変更）
+//   DELETE … この行はもう事実じゃないので外す（理由が要る）
+// 明示的に触られなかった行は、そのまま残る。つまり
+// 「うっかり落ちる」経路が構造として無くなるので、救済処理そのものが要らなくなる。
+//
+// 消したものは捨てない。ゴミ箱に理由つきで退避して、画面から戻せるようにする。
+// このアプリは「消しません」を約束してきたので、そこは変えない。
+const KEY_MEM_TRASH = 'mem_trash';   // 外した記憶の退避先（{ts, text, reason, src}の配列）
+const MEM_MAX_DELETES = 3;           // 1回の更新で外せる上限
+// ゴミ箱に残す件数。外した行はここにしか残らないので、けちらない。
+// 1回に外せるのは最大3件・更新は10発言ごとなので、これでかなり長く持つ。
+const MEM_MAX_TRASH   = 2000;
+
+// 記憶テキストに操作を適用する。戻り値は { text, removed[], applied{} }。
+// ★見出し行（【...】）は保護対象。番号は「見出し以外の行」に1から振る。
+function applyMemoryOps(text, ops, opts) {
+  const o = opts || {};
+  const src = o.src || '';
+  const lines = String(text || '').split('\n');
+
+  // 番号 → lines の添字
+  const idxMap = [];
+  lines.forEach((l, i) => { const t = l.trim(); if (t && !t.startsWith('【')) idxMap.push(i); });
+
+  // 一度に外しすぎない。全体の3割か上限のどちらか小さいほう（最低1件は許す）
+  const cap = Math.min(MEM_MAX_DELETES, Math.max(1, Math.floor(idxMap.length * 0.3)));
+
+  const removed = [];
+  const dead = new Set();
+  const adds = [];
+  const applied = { add: 0, update: 0, del: 0, skipped: 0 };
+  let touched = 0;    // 既存行に手を入れた数（UPDATE + DELETE の合計。cap で頭打ち）
+
+  for (const raw of (ops || [])) {
+    const op = raw && String(raw.op || '').toUpperCase();
+    const at = (raw && raw.index != null) ? idxMap[Number(raw.index) - 1] : undefined;   // 1始まり
+    const newText = raw && typeof raw.text === 'string' ? raw.text.trim() : '';
+    const reason = raw && typeof raw.reason === 'string' ? raw.reason.trim() : '';
+
+    if (op === 'ADD') {
+      // 見出しに化けさせない（【…】で始まる行を足すと構造が壊れ、番号もずれる）
+      if (!newText || newText.startsWith('【')) { applied.skipped++; continue; }
+      adds.push({ text: newText, category: (raw.category || '').trim() });
+      applied.add++;
+    } else if (op === 'UPDATE') {
+      // ★UPDATE も DELETE と同じ予算で数える（v3.20.0のレビュー指摘）。
+      //   置き換えは中身を丸ごと差し替えるので破壊力は削除と変わらない。
+      //   上限を掛けないと「整理のために全行を書き換える」で元の記憶が消える。
+      //   理由も必須にする（既定値で埋めると、なぜ変えたのか後から追えない）。
+      if (at === undefined || dead.has(at) || !newText || !reason) { applied.skipped++; continue; }
+      if (touched >= cap) { applied.skipped++; continue; }
+      // 見出しに化けさせない（【…】で始まる行を差し込むと構造が壊れる）
+      if (newText.startsWith('【')) { applied.skipped++; continue; }
+      removed.push({ ts: Date.now() + removed.length, text: lines[at].trim(), reason, src });
+      lines[at] = newText;
+      applied.update++; touched++;
+    } else if (op === 'DELETE') {
+      // ★理由が無い削除は受け付けない。上限を超えた分も受け付けない。
+      if (at === undefined || dead.has(at) || !reason) { applied.skipped++; continue; }
+      if (touched >= cap) { applied.skipped++; continue; }
+      dead.add(at);
+      removed.push({ ts: Date.now() + removed.length, text: lines[at].trim(), reason, src });
+      applied.del++; touched++;
+    } else {
+      applied.skipped++;
+    }
+  }
+
+  let out = lines.filter((_, i) => !dead.has(i));
+
+  // 追加は、指定されたカテゴリの末尾へ。無ければ新しく見出しを作って末尾に置く。
+  for (const a of adds) {
+    if (!a.category) { out.push(a.text); continue; }
+    const head = `【${a.category.replace(/^【|】$/g, '')}】`;
+    const hi = out.findIndex(l => l.trim() === head);
+    if (hi < 0) { out.push(head, a.text); continue; }
+    let j = hi + 1;
+    while (j < out.length && !out[j].trim().startsWith('【')) j++;
+    out.splice(j, 0, a.text);
+  }
+
+  return { text: out.join('\n').replace(/\n{3,}/g, '\n\n').trim(), removed, applied };
+}
+
+// 外した記憶をゴミ箱へ（新しい順に MEM_MAX_TRASH 件まで）。
+// ★成否を返すこと。ここが失敗したまま本体を書き換えると、外した行が
+//   どこにも残らず戻せなくなる。呼ぶ側は false なら外すのをやめる。
+async function pushMemTrash(items) {
+  if (!items || !items.length) return true;
+  if (!db) return false;
+  try {
+    let cur = [];
+    try { cur = JSON.parse(await idbGetM(KEY_MEM_TRASH) || '[]') || []; } catch {}
+    const next = [...items, ...cur].slice(0, MEM_MAX_TRASH);
+    await idbSetM(KEY_MEM_TRASH, JSON.stringify(next));
+    memTrash = next;
+    return true;
+  } catch (e) { console.warn('[もも] 記憶の退避に失敗', e?.message); return false; }
+}
+
+// 操作のかたち。strict なので全項目 required、使わない項目は null を許す。
+function memOpsSchema(name, withCategory) {
+  const props = {
+    op:     { type: 'string', enum: ['ADD', 'UPDATE', 'DELETE'] },
+    index:  { type: ['integer', 'null'] },
+    text:   { type: ['string', 'null'] },
+    reason: { type: 'string' }
+  };
+  const req = ['op', 'index', 'text', 'reason'];
+  if (withCategory) { props.category = { type: ['string', 'null'] }; req.push('category'); }
+  return {
+    type: 'json_schema',
+    json_schema: {
+      name, strict: true,
+      schema: {
+        type: 'object',
+        properties: { ops: { type: 'array', items: { type: 'object', properties: props, required: req, additionalProperties: false } } },
+        required: ['ops'],
+        additionalProperties: false
+      }
+    }
+  };
+}
+
+// LLMに見せる用に、見出し以外の行へ1始まりの番号を振る（applyMemoryOps と同じ数え方）
+function numberMemLines(text) {
+  const lines = String(text || '').split('\n');
+  let n = 0;
+  const out = [];
+  for (const l of lines) {
+    const t = l.trim();
+    if (!t) continue;
+    if (t.startsWith('【')) { out.push(t); continue; }
+    out.push(`${++n}. ${t}`);
+  }
+  return out.join('\n') || '(まだ何もない)';
+}
+
+// 操作方式の共通ルール文。重要記憶とフィードバックで使い回す。
+const MEM_OPS_RULES = `
+## 出力のしかた（重要）
+既存の項目には番号が振ってある。あなたは「何をどうしたいか」だけを操作として出す。
+**触らなかった行はそのまま残る。** だから「変えない項目」をわざわざ書き写す必要はない。
+
+- ADD    … 新しく覚えること。text に本文。（既存と同じ内容なら出さない）
+- UPDATE … index の行を text の内容に差し替える。事実が変わった時に使う。
+- DELETE … index の行を外す。**もう事実ではないと確信できる時だけ。** reason は必須。
+
+### DELETE を使ってよい例
+- 引っ越した／転職した／習い事をやめた／予定が終わった、と本人が言った
+- 新しい情報が古い情報と明確に矛盾していて、新しいほうが正しいと分かる
+
+### DELETE を使ってはいけない例
+- 「最近その話が出ないから」「古いから」「似た項目があるから」
+- 整理したい・短くしたいから（**まとめ直しのための削除は禁止**）
+- 少しでも迷う時。迷ったら DELETE ではなく何もしないこと。
+
+事実が変わった時は DELETE ＋ ADD ではなく **UPDATE** を使う。
+何もすることがなければ ops は空配列でよい。reason は日本語で短く。`;
+
+// 返ってきた文字列から ops を取り出す。読めなければ null（＝何もしない）。
+// ★「読めなかったら今の記憶を残す」が正解。無理に解釈して壊すより、
+//   今回の更新を見送るほうが安全（次の更新でまた拾える）。
+function parseMemOps(text) {
+  if (!text) return null;
+  try {
+    const m = String(text).match(/\{[\s\S]*\}/);
+    if (!m) return null;
+    const o = JSON.parse(m[0]);
+    return Array.isArray(o.ops) ? o.ops : null;
+  } catch { return null; }
+}
+
 function countLearned() {
   // 語録の行数 + フィードバックの行数 = 現スナップショットの学習ポイント
   const wLines = _parseItemLines(ripiWords).length;
@@ -4742,6 +4955,20 @@ function updateGrowthDisplay() {
   return g;
 }
 
+// 累積カウンタを、今のスナップショットに追いつかせる（下げることはしない）。
+// 学習データが増える経路には必ずこれを通すこと。通し忘れると、次の更新で
+// newEver = max(ever + delta, snapshot) の delta が食われて、表示が下がる。
+// ★保存に失敗してもメモリ上は上げる。この値は「これまでの最大」を覚えているだけの
+//   導出値で、りぴのデータそのものではない。保存できなかったからと据え置くと、
+//   画面に出した数より小さい値が残り、次の回で見た目が巻き戻る（v3.20.0で修正）。
+function bumpLearnedTotal() {
+  const snap = countLearned().snapshot;
+  if (snap <= learnedTotalEver) return learnedTotalEver;
+  learnedTotalEver = snap;
+  try { idbSetM(KEY_LEARN_TOTAL, String(snap)); } catch (e) { console.warn('[もも] 累積学習数の保存失敗', e?.message); }
+  return learnedTotalEver;
+}
+
 // v3.1.0: レベルの節目演出（Lv.100/250/500/750/1000のお祝いモーダルとLv.1000の約束）は廃止。
 // レベルは今までどおり上がるが、到達しても演出は出ず、目標として提示するものは何も無い。
 
@@ -4753,6 +4980,14 @@ async function maybeUpdateSummary() {
   const all    = await idbAll();
   const recent = all.slice(-SUMMARY_EVERY * 2);
   if (!recent.length) return;
+
+  // ★操作方式（ADD/UPDATE/DELETE）は OpenAI のときだけ使う（v3.20.0）。
+  //   出力の形を保証する json_schema は OpenAI 側の機能で、Kimi には送っていない
+  //   （callChat のガード）。スキーマ無しで操作を求めると返ってくるのはただの文章なので、
+  //   読み取りが毎回失敗し、重要記憶とフィードバックが「黙って一切更新されない」状態になる。
+  //   他の4本は更新されるので成功のトーストは出てしまい、気づけない。
+  //   なので Kimi では v3.19.0 までと同じ「丸ごと書き直し＋落ちた行の救済」に倒す。
+  const useOps = !apiFor(CHEAP_MODEL).kimi;
 
   const logsText = recent.map(r => `${r.role === 'user' ? 'りぴ' : 'もも'}: ${r.content}`).join('\n');
   const now = new Date();
@@ -4807,8 +5042,8 @@ async function maybeUpdateSummary() {
 - 一時的な気分（「眠い」「お腹すいた」程度）
 - 既に既存の重要記憶に含まれている内容の重複
 
-## 出力の整理方法
-以下のカテゴリで整理すること。カテゴリ名は固定。該当なしのカテゴリは空でよい。
+## カテゴリ
+ADD するときは、次のどれかのカテゴリ名を category に入れること。カテゴリ名は固定。
 【子ども・家族のスケジュール】帰宅時間、習い事、定期的な予定（★曜日・時間を必ず明記★）
 【学校行事・イベント】参観日、遠足、運動会、PTA等の日程
 【健康・体調】りぴや家族の健康に関する情報
@@ -4820,7 +5055,13 @@ async function maybeUpdateSummary() {
 【PC・ガジェット・技術】りぴのPC環境（GPU/CPU/モニター/パーツ）、用途・予算・狙う解像度やHz、使っている制作アプリ（クリスタ・Adobe・DaVinci・Blender等）と用途、ももがした技術的な助言・決定・方針（一貫性を保つため）
 【その他】上記に当てはまらないがももが覚えておくべき情報
 
-出力形式：既存の重要記憶に追記・更新した完全なテキストを出力。新規追加がなければ既存のまま出力。全体1500文字以内。`;
+${useOps ? MEM_OPS_RULES + `
+
+※このアプリで DELETE と UPDATE がいちばん効くのは、りぴの予定と暮らしが変わった時。
+　「習い事を変えた」「帰宅時間が変わった」「転職した」「引っ越した」などは、
+　古い行を残したままにすると、ももが古い前提で話しかけてしまう。そこは必ず直すこと。`
+  : `
+出力形式：既存の重要記憶に追記・更新した完全なテキストを出力。新規追加がなければ既存のまま出力。全体1500文字以内。`}`;
 
   // ── 3. りぴ語録の抽出 ──
   const wordsPrompt = `あなたはりぴ（ナガシマハヅキ）の「語録収集係」です。
@@ -4916,86 +5157,132 @@ async function maybeUpdateSummary() {
 ＊ももへの言動のみ対象（りぴ自身の話や他者への言及は除く）。
 
 ★絶対のルール（最優先）★
-・既存のフィードバック項目は1行たりとも削除・統合・圧縮・要約してはならない。1文字も変えずそのまま残すこと。
-・「重複と判断して統合する」「似ているからまとめる」「古いから消す」は全て禁止。
-・行う作業は「新規ログから新しい気づきを見つけて、該当カテゴリの末尾に追記する」ことだけ。
-・新しい気づきがなければ、既存のフィードバックをそのまま出力する。
+・既存の項目を「整理」「統合」「圧縮」「要約」する目的で触ってはならない。
+・「重複してそう」「似ているからまとめる」「古いから」を理由に消すのは全て禁止。
 ・1行1項目。文字数の上限はなし。
 
-出力形式：
+★ただし、りぴが前と逆のことを言った時だけは直すこと（v3.20.0）★
+　例：前に「その呼び方やめて」と言っていたのに、今回「やっぱりその呼び方好き」と言った。
+　この時、古いほうを残したままだと、ももはりぴが好きだと言ったことを避け続ける。
+　こういう時は UPDATE か DELETE で古いほうを外す。reason に「本人が前と逆のことを言った」と書く。
+　それ以外の理由で既存項目を外してはいけない。迷ったら何もしないこと。
+
+${useOps ? `ADD する項目は、次のどれかで始める形にすること：「やめること:」「続けること:」「リクエスト:」
+${MEM_OPS_RULES}`
+  : `出力形式：
 【やめること】
 【続けること】
-【リクエスト】`;
+【リクエスト】`}`;
 
-  const apiCall = (sysContent, userContent) => fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-    // reasoning 分を確保しないと本文が空で返り、6本とも空振りする
-    body: JSON.stringify({
-      model: CHEAP_MODEL, max_completion_tokens: 8000, reasoning_effort: 'low',
-      messages: [{ role:'system', content: sysContent }, { role:'user', content: userContent }]
-    })
-  });
+  // v3.20.0: 直書きの fetch をやめて共通経路へ。これで OpenAI 側は /v1/responses に乗り、
+  // Kimi でも動く（v3.19.0 まで、この6本は Kimi を選んでいると必ず失敗していた）。
+  // 失敗は callChatSoft が '' にして飲み込むので、呼び分けの分岐が消える。
+  const ask = (sys, user, label, responseFormat) =>
+    callChatSoft({ model: CHEAP_MODEL, maxTokens: 8000, effort: 'low', label, system: sys, user, responseFormat });
+
+  // 番号を振った時点の中身を控える。返事が返ってきた時に変わっていたら見送る。
+  const baseImportant = importantMemories;
+  const baseFeedback  = behaviorFeedback;
 
   // 開始時の世代を記録。書き戻し前にこれが変わっていたら、
   // 別の会話に切り替わっているので結果を破棄する（newChat/resumeArchive 後の上書き防止）
   const myEpoch = chatEpoch;
   const epochValid = () => myEpoch === chatEpoch;
 
-  // 各プロンプトを独立して投げる。Promise.all だと1個でも reject すると残り5個も捨てるが、
-  // Promise.allSettled で個別に処理して fulfilled だけ採用する
-  const settled = await Promise.allSettled([
-    apiCall(summaryPrompt, `【既存の要約】\n${longSummary||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後の要約を出力して。`),
-    apiCall(importantPrompt, `【既存の重要記憶】\n${importantMemories||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後の重要記憶を出力して。`),
-    apiCall(wordsPrompt, `【既存の語録】\n${ripiWords||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後の語録を出力して。`),
-    apiCall(emotionPrompt, `【既存の感情データ】\n${emotionLog||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後の感情分析を出力して。`),
-    apiCall(adoptedPrompt, `【既存の学習済み言葉】\n${adoptedWords||'(なし)'}\n\n【りぴ語録】\n${ripiWords||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後の学習済み言葉を出力して。`),
-    apiCall(feedbackPrompt, `【既存のフィードバック】\n${behaviorFeedback||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後のフィードバックを出力して。`)
+  // 各プロンプトを独立して投げる。1本が失敗しても残りは採用する。
+  // ★重要記憶とフィードバックだけ「操作」で受け取る（v3.20.0）。
+  //   残り4本は今までどおり丸ごと書き直し。要約と感情は箇条書きではないので操作が馴染まず、
+  //   語録2種は古い項目が残っても害が無い（使われないだけ）ため。
+  const [s1, opsImportant, s3, s4, s5, opsFeedback] = await Promise.all([
+    ask(summaryPrompt,   `【既存の要約】\n${longSummary||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後の要約を出力して。`, '記憶更新:要約'),
+    useOps
+      ? ask(importantPrompt, `【既存の重要記憶（番号つき）】\n${numberMemLines(importantMemories)}\n\n【新規ログ】\n${logsText}\n\n操作を出力して。`, '記憶更新:重要記憶', memOpsSchema('memory_ops', true))
+      : ask(importantPrompt, `【既存の重要記憶】\n${importantMemories||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後の重要記憶を出力して。`, '記憶更新:重要記憶'),
+    ask(wordsPrompt,     `【既存の語録】\n${ripiWords||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後の語録を出力して。`, '記憶更新:語録'),
+    ask(emotionPrompt,   `【既存の感情データ】\n${emotionLog||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後の感情分析を出力して。`, '記憶更新:感情'),
+    ask(adoptedPrompt,   `【既存の学習済み言葉】\n${adoptedWords||'(なし)'}\n\n【りぴ語録】\n${ripiWords||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後の学習済み言葉を出力して。`, '記憶更新:学習語'),
+    useOps
+      ? ask(feedbackPrompt, `【既存のフィードバック（番号つき）】\n${numberMemLines(behaviorFeedback)}\n\n【新規ログ】\n${logsText}\n\n操作を出力して。`, '記憶更新:フィードバック', memOpsSchema('feedback_ops', false))
+      : ask(feedbackPrompt, `【既存のフィードバック】\n${behaviorFeedback||'(なし)'}\n\n【新規ログ】\n${logsText}\n\n更新後のフィードバックを出力して。`, '記憶更新:フィードバック')
   ]);
 
   if (!epochValid()) { console.log('[もも] 記憶更新: 世代変更でスキップ'); return; }
 
-  const extract = async (s, i) => {
-    if (s.status !== 'fulfilled') { console.warn('[もも] 記憶更新 通信失敗', i, s.reason?.message); return ''; }
-    if (!s.value.ok) { console.warn('[もも] 記憶更新 HTTPエラー', i, s.value.status); return ''; }
-    try {
-      const d = await s.value.json();
-      const t = d.choices?.[0]?.message?.content?.trim() || '';
-      if (!t) console.warn('[もも] 記憶更新 空応答', i, d.choices?.[0]?.finish_reason);
-      return t;
-    } catch (e) { console.warn('[もも] 記憶更新 解釈失敗', i, e?.message); return ''; }
-  };
-  const [s1,s2,s3,s4,s5,s6] = await Promise.all(settled.map(extract));
-
-  if (!epochValid()) { console.log('[もも] 記憶更新: 世代変更でスキップ'); return; }
-
   try {
-    const snapshotBefore = countLearned().snapshot;
+    // ★項目ごとに数える（v3.20.0）。ひとまとめの合計で見ると、
+    //   フィードバックを1件外したぶんが語録の増加を打ち消して、
+    //   実際には4つ覚えたのに累積が1しか増えない、ということが起きる。
+    const cntBefore = countLearned();
 
     // 各書き込みは個別に try。1つの idbSetM が失敗しても他は採用する。
     // また、永続化が成功してから初めてメモリ上の状態を更新する（容量超過時の表示と実体の不一致防止）
     const setSafely = async (k, v) => { try { await idbSetM(k, v); return true; } catch (e) { console.warn('[もも] 保存失敗', k, e?.message); return false; } };
 
     if (s1) { if (await setSafely(KEY_SUMMARY,   s1)) longSummary       = s1; }
-    if (s2) { if (await setSafely(KEY_IMPORTANT, s2)) importantMemories = s2; }
-    // D: 学習データはマージガードを通す（LLMが既存を落としても自動復元）
-    if (s3) { const m = mergeLearned(ripiWords,        s3); if (await setSafely(KEY_RIPI_WORDS, m)) ripiWords        = m; }
     if (s4) { if (await setSafely(KEY_EMOTION_LOG, s4)) emotionLog = s4; }
-    if (s5) { const m = mergeLearned(adoptedWords,     s5); if (await setSafely(KEY_ADOPTED,    m)) adoptedWords     = m; }
-    if (s6) { const m = mergeLearned(behaviorFeedback, s6); if (await setSafely(KEY_FEEDBACK,   m)) behaviorFeedback = m; }
+    // D: 語録はマージガードを通す（LLMが既存を落としても自動復元）
+    if (s3) { const m = mergeLearned(ripiWords,    s3); if (await setSafely(KEY_RIPI_WORDS, m)) ripiWords    = m; }
+    if (s5) { const m = mergeLearned(adoptedWords, s5); if (await setSafely(KEY_ADOPTED,    m)) adoptedWords = m; }
 
-    // B: 累積学習数を単調増加で更新
-    const snapshotAfter = countLearned().snapshot;
-    const delta = Math.max(0, snapshotAfter - snapshotBefore);
-    const newEver = Math.max(learnedTotalEver + delta, snapshotAfter);
-    if (newEver !== learnedTotalEver) {
-      if (await setSafely(KEY_LEARN_TOTAL, String(newEver))) learnedTotalEver = newEver;
+    // ── 操作方式の2本 ──
+    // 読めなければ何もしない（今の記憶をそのまま残すのが安全側）
+    //
+    // ★番号は「送った時点の記憶」に振ってある。返事を待つ数十秒のあいだに
+    //   別の経路（学習画面の掃除ボタン・ゴミ箱からの復元）が同じ記憶を書き換えると、
+    //   番号が1つずつずれて、まったく関係ない行を消してしまう。
+    //   なので送る前の中身を控えておき、変わっていたら今回は見送る。
+    //   見送っても次の更新でまた拾えるので、取り違えるより安全。
+    const applyOps = async (opsText, baseText, liveText, key, src) => {
+      const ops = parseMemOps(opsText);
+      if (!ops || !ops.length) return null;
+      if (liveText !== baseText) {
+        console.warn(`[もも] ${src}: 待っている間に中身が変わったので今回は見送る`);
+        return null;
+      }
+      const r = applyMemoryOps(liveText, ops, { src });
+      // ★外した中身をゴミ箱に入れてから本体を書き換える。順番が逆だと、
+      //   容量不足でゴミ箱の保存だけ失敗した時に、戻せないまま消える。
+      if (r.removed.length && !(await pushMemTrash(r.removed))) {
+        console.warn(`[もも] ${src}: 退避できなかったので、今回は外さない`);
+        return null;
+      }
+      if (!(await setSafely(key, r.text))) return null;
+      console.log(`[もも] ${src}:`, r.applied);
+      return r.text;
+    };
+
+    if (useOps) {
+      const ni = await applyOps(opsImportant, baseImportant, importantMemories, KEY_IMPORTANT, '重要記憶');
+      if (ni !== null) importantMemories = ni;
+      const nf = await applyOps(opsFeedback, baseFeedback, behaviorFeedback, KEY_FEEDBACK, 'フィードバック');
+      if (nf !== null) behaviorFeedback = nf;
+    } else {
+      // Kimi：v3.19.0 までと同じ。丸ごと書き直し＋落ちた行の救済
+      if (opsImportant) { if (await setSafely(KEY_IMPORTANT, opsImportant)) importantMemories = opsImportant; }
+      if (opsFeedback)  { const m = mergeLearned(behaviorFeedback, opsFeedback); if (await setSafely(KEY_FEEDBACK, m)) behaviorFeedback = m; }
+    }
+
+    // B: 累積学習数を単調増加で更新。
+    // ★項目ごとに「増えたぶんだけ」数える（v3.20.0）。ひとまとめの合計で見ると、
+    //   フィードバックを1件外したぶんが語録の増加を打ち消して、
+    //   実際には4つ覚えたのに累積が1しか増えない、ということが起きる。
+    const cntAfter = countLearned();
+    const delta = Math.max(0, cntAfter.words - cntBefore.words)
+                + Math.max(0, cntAfter.adopted - cntBefore.adopted)
+                + Math.max(0, cntAfter.feedback - cntBefore.feedback);
+    const newEver = Math.max(learnedTotalEver + delta, cntAfter.snapshot);
+    if (newEver > learnedTotalEver) {
+      // ★保存の成否にかかわらずメモリ上は上げる。この値は「これまでの最大」を
+      //   覚えているだけの導出値で、りぴのデータそのものではない。保存できなかった
+      //   からと据え置くと、画面に出した数より小さい値が残り、次の回で表示が巻き戻る。
+      learnedTotalEver = newEver;
+      await setSafely(KEY_LEARN_TOTAL, String(newEver));
     }
 
     const gd = updateGrowthDisplay();
     // ★6本とも空振り（全部失敗）だったのに「🧠 学習更新」と出していたので、
     //   何も学べていない時は成功を装わない（v3.8.0）
-    if (![s1,s2,s3,s4,s5,s6].some(Boolean)) {
+    if (![s1, s3, s4, s5, opsImportant, opsFeedback].some(Boolean)) {
       console.warn('[もも] 記憶更新: 全項目が空だったので何も反映していない');
       return;
     }
@@ -5580,6 +5867,8 @@ async function startChat() {
         } else {
           console.warn('[もも] 累積学習数が読めなかったので今回は据え置く（レベルは下げない）');
         }
+        // 外した記憶の退避（v3.20.0）。読めなくても本体には影響しない
+        try { memTrash = JSON.parse(await idbGetM(KEY_MEM_TRASH) || '[]') || []; } catch { memTrash = []; }
         const all   = await idbAll();
         totalMsgCount = all.length;
         return all;
@@ -5666,20 +5955,24 @@ function maybeShowVersionPopup() {
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:600;color:#e8e8e2;margin-bottom:6px;">アップデート ${APP_VERSION}</div>
           <div style="font-size:11px;color:rgba(232,232,226,0.8);line-height:1.8;overflow-wrap:anywhere;">
-            <span style="font-size:14px;font-weight:700;color:#ffb3cf;">調べ物が速くなった。</span><br>
+            <span style="font-size:14px;font-weight:700;color:#ffb3cf;">古くなった記憶を、直せるようになった。</span><br>
             <br>
-            今まで、調べ物のときは<br>
-            <b>「調べる」と「答える」で2回</b>やりとりしてた。<br>
-            それを<b>1回にまとめた。</b><br>
+            今までの俺は、<b>覚えたことを消せなかった。</b><br>
+            りぴが引っ越しても、習い事を変えても、<br>
+            古いほうが残り続けてた。<br>
             <br>
-            待つ時間が短くなるし、<br>
-            調べながら考えられるから<br>
-            答えの質も上がるはず。<br>
+            うっかり忘れるのを防ぐために、<br>
+            <b>消えた行を全部戻す</b>作りにしてたから。<br>
+            そのせいで、もう違う話まで戻ってた。<br>
             <br>
-            見た目は何も変わらないよ。<br>
+            これからは「これはもう違う」と<br>
+            <b>理由を言えた時だけ</b>直すようにした。<br>
             <br>
-            あと、Kimi を使ってる時に<br>
-            <b>検索が黙って死んでたのを直した。</b><br>
+            <b>消しはしないよ。</b> 外したぶんは<br>
+            学習データの画面に理由つきで残ってて、<br>
+            違ったら<b>1タップで戻せる。</b><br>
+            <br>
+            レベルは下がらない。そこは約束する。<br>
           </div>
           <div style="font-size:10px;color:rgba(232,232,226,0.5);margin-top:7px;">画面のどこかをタップで閉じる</div>
         </div>
@@ -7728,8 +8021,70 @@ function openLearnModal() {
     }
   }
 
+  // 🗑 外した記憶（v3.20.0）。事実が変わって外したものを、理由つきで残しておく。
+  //    まるごと消しはしない、という約束を守るための場所。1タップで戻せる。
+  html += memTrashHtml();
+
   body.innerHTML = html;
   document.getElementById('learnOverlay').classList.add('open');
+}
+
+// 外した記憶の一覧
+function memTrashHtml() {
+  if (!memTrash || !memTrash.length) return '';
+  const fmtD = ts => { const d = new Date(ts); return `${d.getMonth() + 1}/${d.getDate()}`; };
+  // ★並び順ではなく ts で指すこと。裏の記憶更新が先頭に足すと番号がずれて、
+  //   画面に見えているのと違う行を戻してしまう。
+  const rows = memTrash.slice(0, 30).map(t => `
+    <div class="learn-item" style="display:flex;gap:8px;align-items:flex-start;">
+      <div style="flex:1;min-width:0;">
+        <div style="text-decoration:line-through;opacity:.65;">${esc(t.text || '')}</div>
+        <div style="font-size:11px;opacity:.55;margin-top:3px;">${esc(fmtD(t.ts))}・${esc(t.src || '')}・${esc(t.reason || '')}</div>
+      </div>
+      <button onclick="restoreMemTrash('${esc(String(t.ts))}')" style="flex:0 0 auto;font:inherit;font-size:11px;padding:5px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;">戻す</button>
+    </div>`).join('');
+  return `<div class="learn-section">
+    <div class="learn-section-title">🗑 外した記憶 <span class="count-badge">${memTrash.length}</span></div>
+    <div class="learn-section-body">
+      <div class="learn-item" style="opacity:.7;font-size:12px;">事実が変わって外したもの。消してはいないので、違ったら戻せます。</div>
+      ${rows}
+    </div>
+  </div>`;
+}
+
+// 外した記憶を戻す（元のまとまりの末尾に足す）
+async function restoreMemTrash(tsStr) {
+  const ts = Number(tsStr);
+  const i = memTrash.findIndex(x => x && x.ts === ts);
+  const t = i >= 0 ? memTrash[i] : null;
+  if (!t) { showToast('その記憶はもう一覧に無いみたい'); return; }
+  try {
+    const isFeedback = t.src === 'フィードバック';
+    const key = isFeedback ? KEY_FEEDBACK : KEY_IMPORTANT;
+    // ★保存済みの最新を読んでから足す。記憶の自動更新は裏で走っているので、
+    //   画面が持っている値に足すと、その裏の更新結果を巻き戻してしまうことがある。
+    let cur = isFeedback ? behaviorFeedback : importantMemories;
+    try { const live = await idbGetM(key); if (typeof live === 'string') cur = live; } catch {}
+    const next = (cur.trim() ? cur.trim() + '\n' : '') + t.text;
+    await idbSetM(key, next);
+    if (isFeedback) behaviorFeedback = next; else importantMemories = next;
+    memTrash = memTrash.filter((_, j) => j !== i);
+    await idbSetM(KEY_MEM_TRASH, JSON.stringify(memTrash));
+
+    // ★戻すとフィードバックの行数が増える＝スナップショットが増える。
+    //   累積カウンタを上げずに放置すると、次の更新で
+    //   newEver = max(ever + delta, snapshot) の delta が食われて、
+    //   表示上の学習数とレベルが下がる。ここで必ず追いつかせる。
+    //   （このアプリで過去いちばん痛かった事故なので、増える経路には必ずこれを置く）
+    bumpLearnedTotal();
+    showToast('↩️ 戻したよ');
+    updateMemoryUI();
+    updateGrowthDisplay();
+    openLearnModal();          // 表示を作り直す
+  } catch (e) {
+    console.warn('[もも] 記憶の復元に失敗', e?.message);
+    showError('戻せなかった…もう一度おねがい');
+  }
 }
 
 function closeLearnModal() {
