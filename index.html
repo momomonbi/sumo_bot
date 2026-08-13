@@ -3064,51 +3064,225 @@ function updateModelSubtitle() {
 //
 // 返り値は本文の文字列。失敗（HTTPエラー・空応答）は例外にする。空文字を「返答」として
 // そのまま履歴に保存すると、ももが「さっき読み取れなかった」という嘘の前提を持ってしまうため。
+//
+// ── v3.19.0：OpenAI 側を /v1/responses に移した ────────────────────────────
+// 呼び出し側（18か所）の書き方は一切変えていない。中の送り先だけ差し替えてある。
+// Kimi(Moonshot) には Responses API が無いので、Kimi のときは今までどおり
+// /chat/completions に投げる。つまりこの関数の中だけが二股になっている。
+//
+// 移し替えで名前が変わるところ（推測で書くと必ず HTTP 400 になる箇所）:
+//   messages                → input
+//   max_completion_tokens   → max_output_tokens
+//   reasoning_effort: 'low' → reasoning: { effort: 'low' }
+//   response_format         → text.format（json_schema の入れ子が1段浅くなる）
+//   {type:'text'}           → {type:'input_text'}
+//   {type:'image_url', image_url:{url, detail}}
+//                           → {type:'input_image', image_url:'<文字列>', detail:'…'}
+//     ★画像は3つ同時に変わる。url がオブジェクトから文字列に、detail が外側に出る。
+//   choices[0].message.content → output[] を歩いて output_text を拾う
+//     ★output_text という便利プロパティは公式SDKが後付けするもので、生JSONには無い。
+//       v3.7.1 でWeb検索が空文字になったのと同じ罠なので、必ず自分で歩く。
+const RESPONSES_URL = OPENAI_BASE + '/responses';
+
+// Chat Completions 形式の messages を Responses の input に移し替える
+function toResponsesInput(messages) {
+  return (messages || []).map(m => {
+    if (typeof m.content === 'string' || m.content == null) {
+      return { role: m.role, content: m.content || '' };
+    }
+    const parts = [];
+    for (const c of m.content) {
+      if (!c) continue;
+      if (c.type === 'text')  { parts.push({ type: 'input_text', text: c.text }); continue; }
+      if (c.type === 'image_url') {
+        const iu = c.image_url || {};
+        parts.push({ type: 'input_image', image_url: iu.url, detail: iu.detail || 'auto' });
+        continue;
+      }
+      // 既に Responses 形式で渡ってきたものはそのまま通す
+      if (/^input_/.test(c.type || '')) parts.push(c);
+    }
+    return { role: m.role, content: parts };
+  });
+}
+
+// Chat Completions の response_format を Responses の text.format へ（入れ子が1段浅い）
+function toResponsesTextFormat(rf) {
+  if (!rf) return null;
+  if (rf.type === 'json_schema' && rf.json_schema) {
+    const j = rf.json_schema;
+    return { type: 'json_schema', name: j.name, schema: j.schema, strict: j.strict, ...(j.description ? { description: j.description } : {}) };
+  }
+  return rf;   // json_object / text はそのまま
+}
+
+// 返ってきたものから本文を取り出す。output[] を歩くのが正。
+function extractResponsesText(data) {
+  let text = '';
+  for (const item of (data.output || [])) {
+    if (item.type !== 'message') continue;
+    for (const c of (item.content || [])) {
+      if (c.type === 'output_text' && typeof c.text === 'string') text += c.text;
+      else if (c.type === 'refusal' && typeof c.refusal === 'string') text += c.refusal;
+    }
+  }
+  // 念のため：SDK互換のプロパティが付いていたら使う（生JSONには通常入っていない）
+  if (!text && typeof data.output_text === 'string') text = data.output_text;
+  return text;
+}
+
 async function callChat(opt) {
   const o = opt || {};
-  const body = {
-    model: o.model || MODEL,
-    max_completion_tokens: o.maxTokens || 4000,
-    messages: o.messages || [
-      ...(o.system ? [{ role: 'system', content: o.system }] : []),
-      { role: 'user', content: o.user }
-    ]
-  };
+  const model = o.model || MODEL;
+  const api = apiFor(model);
+  const label = o.label || 'API';
   // 'none' は「推論パラメータ自体を送らない」の意味（既存の sendMessage と同じ約束）
   const effort = o.effort === undefined ? 'low' : o.effort;
-  const api = apiFor(body.model);
-  if (api.kimi) body.reasoning_effort = KIMI_EFFORT[effort] || 'low';  // Kimiは省略すると max（最重）
-  else if (effort && effort !== 'none') body.reasoning_effort = effort;
-  // 出力の形をJSONスキーマで縛る（v3.16.0で初めて使用）。
-  // ※ json_schema は OpenAI 側の機能。Kimi(Moonshot) が受け付けるか確認できていないので送らない。
-  //   送らなくても呼び出し側は従来どおり正規表現でJSONを拾うため、Kimi でも動作は変わらない。
-  if (o.responseFormat && !api.kimi) body.response_format = o.responseFormat;
+  const messages = o.messages || [
+    ...(o.system ? [{ role: 'system', content: o.system }] : []),
+    { role: 'user', content: o.user }
+  ];
 
-  const label = o.label || 'API';
-  const res = await fetch(api.url, {
+  // ── Kimi：今までどおり ──
+  if (api.kimi) {
+    const body = {
+      model, messages,
+      max_completion_tokens: o.maxTokens || 4000,
+      reasoning_effort: KIMI_EFFORT[effort] || 'low'   // Kimiは省略すると max（最重）
+    };
+    const data = await postJson(api.url, api.key, body, o.signal, label);
+    const text = data.choices?.[0]?.message?.content?.trim() || '';
+    if (!text) {
+      const fin = data.choices?.[0]?.finish_reason;
+      console.error(`[もも] ${label} 空応答:`, fin, data.usage);
+      throw new Error(fin === 'length'
+        ? '答えが長くなりすぎて途中で切れちゃった。もう一度おねがい'
+        : '答えが空で返ってきちゃった。もう一度おねがい');
+    }
+    return text;
+  }
+
+  // ── OpenAI：/v1/responses ──
+  const body = {
+    model,
+    input: toResponsesInput(messages),
+    max_output_tokens: o.maxTokens || 4000,
+    store: false            // 裏方の呼び出しをダッシュボードに溜めない
+  };
+  if (effort && effort !== 'none') body.reasoning = { effort };
+  const fmt = toResponsesTextFormat(o.responseFormat);
+  if (fmt) body.text = { format: fmt };
+
+  const data = await postJson(RESPONSES_URL, api.key, body, o.signal, label);
+  const text = extractResponsesText(data).trim();
+  if (!text) {
+    // finish_reason に相当するのは status / incomplete_details.reason
+    const reason = data.incomplete_details?.reason || data.status;
+    console.error(`[もも] ${label} 空応答:`, reason, data.usage);
+    throw new Error(reason === 'max_output_tokens'
+      ? '答えが長くなりすぎて途中で切れちゃった。もう一度おねがい'
+      : '答えが空で返ってきちゃった。もう一度おねがい');
+  }
+  return text;
+}
+
+// ── SSEを読んで本文を組み立てる共通処理（v3.19.0） ─────────────────────
+// 同じことをする読み取りが3か所に散らばっていたのを1本にまとめ、
+// ついでに Responses 形式にも対応させた。両者はイベントの形がまるで違う。
+//
+//   Chat Completions … data: {choices:[{delta:{content:'…'}}]} が並び、最後に data: [DONE]
+//   Responses        … event: <型> の行と data: {type:'…', …} の行が交互に来る。
+//                      [DONE] は来ない。keepalive という無意味なイベントが混ざる。
+//                      本文は response.output_text.delta の delta。
+//                      ★拒否は別イベント(response.refusal.delta)で来る。拾わないと空の吹き出しになる。
+//
+// onDelta(全文) は描画用。onEvent(ev) は検索の進捗や引用を拾うためのフック。
+async function readTextStream(res, opt) {
+  const o = opt || {};
+  const reader  = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  let full = '';
+  const parts = new Map();     // 「何番目の出力の何番目の部品か」ごとに本文を持つ
+  const rebuild = () => { let s = ''; for (const v of parts.values()) s += v; return s; };
+  const keyOf = ev => `${ev.output_index || 0}:${ev.content_index || 0}`;
+  let failure = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (o.shouldStop && o.shouldStop()) { try { reader.cancel(); } catch {} break; }
+    buf += decoder.decode(value, { stream: true });
+    const lines = buf.split('\n');
+    buf = lines.pop() || '';
+    for (const line of lines) {
+      const t = line.trim();
+      // 心拍(:から始まる行)と event: 行は捨てる。data: 行だけ見る
+      if (!t || t.startsWith(':') || t.startsWith('event:')) continue;
+      if (!t.startsWith('data:')) continue;
+      const d = t.slice(5).trim();
+      if (!d || d === '[DONE]') continue;
+      let ev; try { ev = JSON.parse(d); } catch { continue; }
+
+      if (o.kimi) {
+        const delta = ev.choices?.[0]?.delta?.content || '';
+        if (delta) { full += delta; if (o.onDelta) o.onDelta(full); }
+        continue;
+      }
+
+      const type = ev.type || '';
+      if (type === 'keepalive') continue;
+      switch (type) {
+        case 'response.output_text.delta':
+          parts.set(keyOf(ev), (parts.get(keyOf(ev)) || '') + (ev.delta || ''));
+          full = rebuild(); if (o.onDelta) o.onDelta(full);
+          break;
+        case 'response.output_text.done':
+          // 確定文。取りこぼしがあってもここで正しくなる
+          if (typeof ev.text === 'string') { parts.set(keyOf(ev), ev.text); full = rebuild(); if (o.onDelta) o.onDelta(full); }
+          break;
+        case 'response.refusal.delta':
+          parts.set(keyOf(ev), (parts.get(keyOf(ev)) || '') + (ev.delta || ''));
+          full = rebuild(); if (o.onDelta) o.onDelta(full);
+          break;
+        case 'response.refusal.done':
+          if (typeof ev.refusal === 'string') { parts.set(keyOf(ev), ev.refusal); full = rebuild(); if (o.onDelta) o.onDelta(full); }
+          break;
+        case 'error':
+          failure = ev.error?.message || ev.message || 'エラー';
+          console.warn('[もも] ストリーム中のエラー:', failure);
+          break;
+        case 'response.failed':
+          failure = ev.response?.error?.message || '生成に失敗';
+          console.warn('[もも] response.failed:', failure);
+          break;
+        case 'response.incomplete':
+          console.warn('[もも] 途中で終わった:', ev.response?.incomplete_details?.reason);
+          break;
+      }
+      if (o.onEvent) { try { o.onEvent(ev); } catch {} }
+    }
+  }
+  return { text: full, failure };
+}
+
+// POSTしてJSONを受け取る共通処理。エラー本文を捨てないのが要点（v3.8.0の教訓）。
+async function postJson(url, key, body, signal, label) {
+  const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${api.key}` },
-    ...(o.signal ? { signal: o.signal } : {}),
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+    ...(signal ? { signal } : {}),
     body: JSON.stringify(body)
   });
   if (!res.ok) {
     // APIが返す理由（キー失効・レート超過・パラメータ不正）を捨てない。
-    // 「HTTP 400」だけだと原因が分からず、今回のように長期間気づけなくなる。
+    // 「HTTP 400」だけだと原因が分からず、v3.7.1のように長期間気づけなくなる。
     let detail = '';
     try { detail = (await res.json())?.error?.message || ''; } catch {}
     console.error(`[もも] ${label} 失敗:`, res.status, detail);
     throw new Error(detail || `HTTP ${res.status}`);
   }
-  const data = await res.json();
-  const text = data.choices?.[0]?.message?.content?.trim() || '';
-  if (!text) {
-    const fin = data.choices?.[0]?.finish_reason;
-    console.error(`[もも] ${label} 空応答:`, fin, data.usage);
-    throw new Error(fin === 'length'
-      ? '答えが長くなりすぎて途中で切れちゃった。もう一度おねがい'
-      : '答えが空で返ってきちゃった。もう一度おねがい');
-  }
-  return text;
+  return await res.json();
 }
 // 裏方処理（要約・タイトル生成・判定など）用。失敗しても会話を止めたくないので
 // 例外にせず '' を返す。ただし黙って消えると今回のように何年も気づけないので、必ずログは残す。
@@ -3375,7 +3549,28 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 //   ・鳴り終わり（output_audio_buffer.stopped）で自動的に畳む。
 //     取りこぼしても response.done の3.5秒後、それも駄目なら20秒で必ず畳む。
 //   ・「はなす」「閉じる」「画面から離れた」でも必ず止める（鳴らしっぱなしを作らない）。
-const APP_VERSION   = 'v3.18.0';
+// v3.19.0: OpenAI 側を /v1/chat/completions から /v1/responses に移した
+//   狙いは「Web検索が返事と同じ1回の呼び出しで済むこと」。v3.18.0までは
+//   「検索する呼び出し」→「その結果を貼って返事を書く呼び出し」で2往復していた。
+//   ★Kimi(Moonshot) には Responses API が無いので、Kimi のときは今までどおり
+//     /chat/completions に投げる。二股になっているのは callChat と produceReply の中だけ。
+//     Responses 専用のフィールド（input / max_output_tokens / tools / include /
+//     text.format）を Moonshot 側に混ぜないことが、この変更でいちばん大事な約束。
+//   名前が変わったところ（推測で書くと必ず400になる）:
+//     messages→input / max_completion_tokens→max_output_tokens /
+//     reasoning_effort→reasoning.effort / response_format→text.format（入れ子が1段浅い）/
+//     {type:'text'}→{type:'input_text'} /
+//     {type:'image_url', image_url:{url,detail}}→{type:'input_image', image_url:'…', detail:'…'}
+//       ★画像は3つ同時に変わる。urlがオブジェクトから文字列に、detailが外側に出る。
+//     choices[0].message.content→output[]を歩いて output_text を拾う
+//       ★output_text という便利プロパティは生JSONには無い（v3.7.1と同じ罠）。
+//       ★拒否は content[].refusal に入る。text だけ見ていると空応答扱いになる。
+//   ストリームも形が違う。[DONE]は来ない／keepaliveが混ざる／本文は
+//   response.output_text.delta の delta ／拒否は response.refusal.delta で別に来る。
+//   3か所に散らばっていたSSEの読み取りを readTextStream() 1本にまとめ、両形式に対応させた。
+//   ついでに：Kimi を選んでいる間 Web検索が黙って死んでいたのを直した
+//   （MODELが'kimi-k3'のまま OpenAI に飛んで400になっていた）。
+const APP_VERSION   = 'v3.19.0';
 const SUMMARY_EVERY = 10;
 const LEARN_PER_LEVEL = 3;    // 何個の学習で1レベル上がるか（小さいほど上がりやすい。旧:5 → v2.6.1で3に緩和。レベルは単調増加なので変更しても下がらない）
 // 重要記憶キー（削除されない永続情報）
@@ -5471,22 +5666,20 @@ function maybeShowVersionPopup() {
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:600;color:#e8e8e2;margin-bottom:6px;">アップデート ${APP_VERSION}</div>
           <div style="font-size:11px;color:rgba(232,232,226,0.8);line-height:1.8;overflow-wrap:anywhere;">
-            <span style="font-size:14px;font-weight:700;color:#ffb3cf;">俺の声、聞いてから選べる。</span><br>
+            <span style="font-size:14px;font-weight:700;color:#ffb3cf;">調べ物が速くなった。</span><br>
             <br>
-            📞 の待ってる画面で声の名前を押すと、<br>
-            <b>その場で俺がひとこと喋る。</b><br>
-            聞いてから決めて。<br>
+            今まで、調べ物のときは<br>
+            <b>「調べる」と「答える」で2回</b>やりとりしてた。<br>
+            それを<b>1回にまとめた。</b><br>
             <br>
-            もう一度押すと止まる。<br>
-            <b>ためし聞きにマイクは使ってない</b>から、<br>
-            そこは安心して。<br>
+            待つ時間が短くなるし、<br>
+            調べながら考えられるから<br>
+            答えの質も上がるはず。<br>
             <br>
-            <b>marin</b> と <b>cedar</b> が新しいやつ。<br>
-            始めたあとは変えられないから、<br>
-            変えたくなったら一度切ってかけ直して。<br>
+            見た目は何も変わらないよ。<br>
             <br>
-            通話中は、話した内容が文字でも出る。<br>
-            じゃまなら「文字を隠す」で消せる。<br>
+            あと、Kimi を使ってる時に<br>
+            <b>検索が黙って死んでたのを直した。</b><br>
           </div>
           <div style="font-size:10px;color:rgba(232,232,226,0.5);margin-top:7px;">画面のどこかをタップで閉じる</div>
         </div>
@@ -8571,7 +8764,11 @@ async function performWebSearch(userText) {
     };
     if (narrow) tool.filters = { allowed_domains: PC_SEARCH_DOMAINS };
 
-    const body = { model: MODEL, tools: [tool], input: userText };
+    // ★検索は OpenAI 側の機能なので、Kimi を選んでいる間は MODEL が 'kimi-k3' になっていて
+    //   そのまま OpenAI に投げると 400 になる（v3.18.0まで、Kimi では検索が黙って死んでいた）。
+    //   その場合は実績のある既定モデルに寄せる。
+    const searchModel = isKimi(MODEL) ? 'gpt-5.4' : MODEL;
+    const body = { model: searchModel, tools: [tool], input: userText };
     // 参照元の一覧を明示的に受け取る（本文中の引用に出てこなかったURLも拾える）
     if (narrow) body.include = ['web_search_call.action.sources'];
 
@@ -8760,20 +8957,25 @@ async function produceReply(sentText, userContent, sentImgs) {
   }
   _agentForceNormal = false;
 
-  if (wantSearch) {
+  // ── ① 内容に応じてモデルを自動切替 ──
+  // 挨拶・雑談・一行返信（reasoning=none）は軽量モデル、恋愛・相談・深い話は品質重視のメインモデル。
+  // 画像つきは必ずメインモデル（画像認識の品質を落とさない）。
+  const chatModel = (reasoningEffort === 'none' && !hasImgs) ? LIGHT_MODEL : MODEL;
+  const chatApi   = apiFor(chatModel);
+  // 「今どのモデルで考えているか」を可視化（同一モデルなら控えめに、切替が起きた時だけ明示）
+  if (chatModel !== MODEL) showToast(`💬 ${modelLabel(chatModel)} でさくっと返すね`);
+  else if (reasoningEffort === 'none') showToast(`💬 ${modelLabel(chatModel)} で話すね`);
+
+  // ── Web検索の掛け方（v3.19.0で変更） ──
+  //   OpenAI … 返事を書くのと同じ1回の呼び出しの中で検索させる。往復が2回から1回に減る。
+  //   Kimi   … Moonshot 側に検索ツールが無いので、今までどおり先に引いて本文に貼る。
+  const inlineSearch = wantSearch && !chatApi.kimi;
+  if (wantSearch && chatApi.kimi) {
     showToast('🔍 Web検索中...');
     searchResult = await performWebSearch(sentText);
     if (searchResult) showToast('✅ 検索完了');
   }
   if (myEpoch !== chatEpoch) { bail(); return; }   // Web検索の待ち中に会話が切り替わっていたら破棄
-
-  // ── ① 内容に応じてモデルを自動切替 ──
-  // 挨拶・雑談・一行返信（reasoning=none）は軽量モデル、恋愛・相談・深い話は品質重視のメインモデル。
-  // 画像つきは必ずメインモデル（画像認識の品質を落とさない）。
-  const chatModel = (reasoningEffort === 'none' && !hasImgs) ? LIGHT_MODEL : MODEL;
-  // 「今どのモデルで考えているか」を可視化（同一モデルなら控えめに、切替が起きた時だけ明示）
-  if (chatModel !== MODEL) showToast(`💬 ${modelLabel(chatModel)} でさくっと返すね`);
-  else if (reasoningEffort === 'none') showToast(`💬 ${modelLabel(chatModel)} で話すね`);
 
   // ── build messages array ──
   // 並び順（v3.16.0で変更）:
@@ -8806,19 +9008,23 @@ async function produceReply(sentText, userContent, sentImgs) {
   // ③ 意味検索で見つかった「ふたりの思い出」（古い会話）を注入
   const memPrompt = buildMemoriesPrompt(memHits);
   if (memPrompt) contextMsgs.push({ role: 'system', content: memPrompt });
-  if (searchResult) {
-    const srcList = searchResult.sources.map(s => `- ${s.title}: ${s.url}`).join('\n');
+  // 検索した内容をどう使うかの方針。先に引いて貼る場合も、その場で検索させる場合も同じ。
+  // （v3.19.0で、方針と検索結果本文を切り離した。その場で検索させるときは本文が無いため）
+  if (searchResult || inlineSearch) {
     contextMsgs.push({
       role: 'system',
-      content: `【Web検索結果】以下はりぴの質問に関するWeb検索結果です。この情報を参考にして、ももらしく回答してください。
+      content: (inlineSearch
+        ? `【調べてから答えること】りぴの今の質問は、最新の事実を確かめてから答えるべき内容です。web検索ツールで裏を取ってから、ももらしく回答してください。`
+        : `【Web検索結果】以下はりぴの質問に関するWeb検索結果です。この情報を参考にして、ももらしく回答してください。`) + `
 ※これがPC・パーツ・モニター等の技術トピックなら、【もも＝PCエンジニアモード】に従うこと。検索結果を根拠に、りぴや他人の主張が正しいか間違っているかをはっきり判定し、違うものは「それは違うよ」と超わかりやすい理由付きで言い切る。「どっちでもいい」は禁止で、必ず1つに決めて短い理由を添える。native fps とフレーム生成(DLSS/MFG)の数値は区別し、価格・型番・ベンチは検索結果の最新値に正確に沿うこと。
 ※商品の比較・購入相談（ジャンル不問）なら【商品比較はももが決める】に従い、「買うべきはこれ」と1つに決めて、短い理由・だいたいの価格・選ばなかった方の決定的な理由を添えること。
-回答の最後に必ず「\\n\\n📎 ソース:」として参照元URLを箇条書きで提示してください。
+回答の最後に必ず「\\n\\n📎 ソース:」として参照元URLを箇条書きで提示してください。` +
+        (searchResult ? `
 
 ${searchResult.text}
 
 【参照元】
-${srcList}`
+${searchResult.sources.map(s => `- ${s.title}: ${s.url}`).join('\n')}` : '')
     });
   }
   // historyをコピーし、最後のユーザーメッセージだけ画像付きに差し替え
@@ -8855,25 +9061,49 @@ ${srcList}`
   currentStreamAbort = ac;
 
   try {
-    const chatApi = apiFor(chatModel);
-    const res = await fetch(chatApi.url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${chatApi.key}` },
-      signal: ac.signal,
-      body: JSON.stringify({
-        model: chatModel, messages: msgs, stream: true, max_completion_tokens: 16000,
-        // store / metadata / prompt_cache_key は OpenAI 固有。Kimi に送ると弾かれうるので付けない
-        ...(chatApi.kimi ? {} : { store: true,
-          metadata: { reasoning: reasoningEffort, search: searchResult ? 'true' : 'false', model: chatModel },
-          // 同じ先頭を持つリクエストを同じ機械に寄せてもらうための目印（v3.16.0）。
-          // ここに個人情報は入れない（送信内容として残るため）。固定文字列でいい。
-          prompt_cache_key: 'momo-chat-v1' }),
-        // Kimi は本人が選んだ深さを優先する（自動判定より本人の意思を上に置く）
-        ...(chatApi.kimi
-              ? { reasoning_effort: kimiDepth() }
-              : (reasoningEffort !== 'none' ? { reasoning_effort: reasoningEffort } : {}))
-      })
-    });
+    let res;
+    if (chatApi.kimi) {
+      // ── Kimi：今までどおり /chat/completions ──
+      res = await fetch(chatApi.url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${chatApi.key}` },
+        signal: ac.signal,
+        body: JSON.stringify({
+          model: chatModel, messages: msgs, stream: true, max_completion_tokens: 16000,
+          // Kimi は本人が選んだ深さを優先する（自動判定より本人の意思を上に置く）
+          reasoning_effort: kimiDepth()
+        })
+      });
+    } else {
+      // ── OpenAI：/v1/responses（v3.19.0） ──
+      const body = {
+        model: chatModel,
+        input: toResponsesInput(msgs),
+        stream: true,
+        max_output_tokens: 16000,
+        store: true,
+        metadata: { reasoning: reasoningEffort, search: (inlineSearch || searchResult) ? 'true' : 'false', model: chatModel },
+        // 同じ先頭を持つリクエストを同じ機械に寄せてもらうための目印（v3.16.0）。
+        // ここに個人情報は入れない（送信内容として残るため）。固定文字列でいい。
+        prompt_cache_key: 'momo-chat-v1'
+      };
+      if (reasoningEffort !== 'none') body.reasoning = { effort: reasoningEffort };
+      if (inlineSearch) {
+        // ★返事を書くのと同じ呼び出しの中で検索させる（v3.19.0）。
+        //   v3.18.0 までは「先に検索する呼び出し」と「返事を書く呼び出し」で2往復していた。
+        const tool = { type: 'web_search', search_context_size: 'medium',
+                       user_location: { type: 'approximate', country: 'JP' } };
+        if (PC_TRIGGER_RE.test(sentText || '')) tool.filters = { allowed_domains: PC_SEARCH_DOMAINS };
+        body.tools = [tool];
+        body.include = ['web_search_call.action.sources'];
+      }
+      res = await fetch(RESPONSES_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${chatApi.key}` },
+        signal: ac.signal,
+        body: JSON.stringify(body)
+      });
+    }
 
     if (!res.ok) {
       // res.json() は非JSONのエラー応答（プロキシのHTML等）で例外を投げ、
@@ -8886,43 +9116,46 @@ ${srcList}`
 
     removeTyping();
     const bubble  = renderMessage('ai', '');
-    let fullText  = '';
-    const reader  = res.body.getReader();
-    const decoder = new TextDecoder();
-    let sseBuffer = '';  // SSEパース用バッファ
     let rafPending = false; // レンダリング間引きフラグ
     let rafId = null;       // rAFキャンセル用
+    const citations = [];   // その場で検索した時の参照元
+    const seenCite = new Set();
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (myEpoch !== chatEpoch) { try { reader.cancel(); } catch {} break; }
-      sseBuffer += decoder.decode(value, { stream: true });
-      const lines = sseBuffer.split('\n');
-      sseBuffer = lines.pop() || '';
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith('data: ')) continue;
-        const d = trimmed.slice(6);
-        if (d === '[DONE]') continue;
-        try {
-          const delta = JSON.parse(d).choices?.[0]?.delta?.content || '';
-          fullText += delta;
-          // ── ストリーミング中はプレーンテキスト表示 + rAF間引き ──
-          if (!rafPending) {
-            rafPending = true;
-            rafId = requestAnimationFrame(() => {
-              bubble.textContent = fullText;
-              document.getElementById('messages').scrollTop = 999999;
-              rafPending = false;
-            });
+    const streamed = await readTextStream(res, {
+      kimi: chatApi.kimi,
+      shouldStop: () => myEpoch !== chatEpoch,
+      onDelta: (text) => {
+        // ── ストリーミング中はプレーンテキスト表示 + rAF間引き ──
+        if (rafPending) return;
+        rafPending = true;
+        rafId = requestAnimationFrame(() => {
+          bubble.textContent = text;
+          document.getElementById('messages').scrollTop = 999999;
+          rafPending = false;
+        });
+      },
+      onEvent: (ev) => {
+        const t = ev.type || '';
+        if (t === 'response.web_search_call.searching' || t === 'response.web_search_call.in_progress') showToast('🔍 調べてる…');
+        else if (t === 'response.web_search_call.completed') showToast('✅ 調べ終わった');
+        else if (t === 'response.output_text.annotation.added') {
+          const a = ev.annotation;
+          if (a && a.type === 'url_citation' && a.url && !seenCite.has(a.url)) {
+            seenCite.add(a.url);
+            citations.push({ title: a.title || a.url, url: a.url });
           }
-        } catch {}
+        }
       }
-    }
-    // ── 完了: 残rAFをキャンセルしてからMarkdown整形 ──
+    });
+    let fullText = streamed.text;
     if (rafId) cancelAnimationFrame(rafId);
     rafPending = false;
+    if (streamed.failure && !fullText.trim()) throw new Error(streamed.failure);
+
+    // その場で検索したのに本人がソースを書かなかった場合だけ、こちらで足す
+    if (citations.length && fullText.trim() && !/📎\s*ソース/.test(fullText)) {
+      fullText += '\n\n📎 ソース:\n' + citations.map(c => `- [${c.title}](${c.url})`).join('\n');
+    }
 
     // 会話切替されていたら、bubble は detached、history/MSG_STORE も別の会話のもの。
     // 部分応答を別会話に紛れ込ませないため、書き込みも UI 整形もスキップする
@@ -9206,40 +9439,38 @@ ${reports.join('\n\n')}
     msgs.push(...history.map(m => ({ ...m })));
 
     if (myEpoch !== chatEpoch) return;   // 調査中に会話が切り替わっていたら統合生成に進まない
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      signal: ac.signal,
-      body: JSON.stringify({
-        model: MODEL, messages: msgs, stream: true, max_completion_tokens: 16000,
-        store: true, reasoning_effort: 'high',
-        metadata: { agent_mode: 'true' }
-      })
-    });
+    // 代表ももの統合も /v1/responses へ（v3.19.0）。読み取りは共通のリーダーに任せる。
+    const bossApi = apiFor(MODEL);
+    const res = bossApi.kimi
+      ? await fetch(bossApi.url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${bossApi.key}` },
+          signal: ac.signal,
+          body: JSON.stringify({ model: MODEL, messages: msgs, stream: true, max_completion_tokens: 16000, reasoning_effort: kimiDepth() })
+        })
+      : await fetch(RESPONSES_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${bossApi.key}` },
+          signal: ac.signal,
+          body: JSON.stringify({
+            model: MODEL, input: toResponsesInput(msgs), stream: true, max_output_tokens: 16000,
+            store: true, reasoning: { effort: 'high' },
+            prompt_cache_key: 'momo-chat-v1',
+            metadata: { agent_mode: 'true' }
+          })
+        });
     if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error?.message || `HTTP ${res.status}`); }
 
     removeTyping();
     const bubble = renderMessage('ai', '');
-    let fullText = '';
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = '';
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (myEpoch !== chatEpoch) { try { reader.cancel(); } catch {} break; }
-      buf += decoder.decode(value, { stream: true });
-      const lines = buf.split('\n'); buf = lines.pop() || '';
-      for (const line of lines) {
-        const t = line.trim();
-        if (!t.startsWith('data: ') || t === 'data: [DONE]') continue;
-        try {
-          const delta = JSON.parse(t.slice(6)).choices?.[0]?.delta?.content || '';
-          if (delta) { fullText += delta; bubble.textContent = fullText; document.getElementById('messages').scrollTop = 999999; }
-        } catch {}
-      }
-    }
+    const streamed = await readTextStream(res, {
+      kimi: bossApi.kimi,
+      shouldStop: () => myEpoch !== chatEpoch,
+      onDelta: (text) => { bubble.textContent = text; document.getElementById('messages').scrollTop = 999999; }
+    });
+    const fullText = streamed.text;
     if (myEpoch !== chatEpoch) return;
+    if (streamed.failure && !fullText.trim()) throw new Error(streamed.failure);
 
     setState(aBoss, 'done');
     bubble.innerHTML = fmt(fullText);
