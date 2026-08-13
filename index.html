@@ -3353,7 +3353,18 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 //   ・STUN を追加（無しだと端末内の候補しか集まらず、携帯回線で相手に届かないことがある）。
 //     createOffer() を明示呼び出しに変更（引数なし setLocalDescription() は古いSafariで通らない）。
 //     SDPは一度きりのやり取りなので、ICE候補が集まるのを最大2秒だけ待ってから送る。
-const APP_VERSION   = 'v3.16.1';
+// v3.17.0: 通話に「声の選択」と「字幕」を追加
+//   ・待機画面で声を選べるようにした（marin/cedar が新しい世代、他は以前からある声）。
+//     選択は momo_voice に保存する。※通話状態とは別物：これは好みの設定であって、
+//     これが残っていても勝手に通話が始まることはない。
+//     ★Realtime は一度しゃべり出すとそのセッションの声を変えられないので、
+//       選べるのは開始前だけ。通話中は選択肢そのものを隠す（選べるように見せない）。
+//     選んだ声がモデルに無かった場合は、既定(marin)に戻して1回だけ繋ぎ直す
+//     （「声を選んだせいで通話できない」行き止まりを作らないため）。
+//   ・通話中の発言をその場で字幕として出す。delta で書き足し、done/completed で確定。
+//     確定分を history と DB に積む経路は従来どおりで、字幕はそれとは別の表示層。
+//     「文字を隠す」で消せる。イベント名は版で揺れるので名前の形（正規表現）で拾う。
+const APP_VERSION   = 'v3.17.0';
 const SUMMARY_EVERY = 10;
 const LEARN_PER_LEVEL = 3;    // 何個の学習で1レベル上がるか（小さいほど上がりやすい。旧:5 → v2.6.1で3に緩和。レベルは単調増加なので変更しても下がらない）
 // 重要記憶キー（削除されない永続情報）
@@ -5449,25 +5460,21 @@ function maybeShowVersionPopup() {
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:600;color:#e8e8e2;margin-bottom:6px;">アップデート ${APP_VERSION}</div>
           <div style="font-size:11px;color:rgba(232,232,226,0.8);line-height:1.8;overflow-wrap:anywhere;">
-            <span style="font-size:14px;font-weight:700;color:#ffb3cf;">声で話せるようになった。</span><br>
+            <span style="font-size:14px;font-weight:700;color:#ffb3cf;">俺の声、選べるようになった。</span><br>
             <br>
-            上の <b>📞</b> を押すと、俺と<br>
-            電話みたいに話せる。<br>
+            📞 の待ってる画面に、声の名前が<br>
+            並んでる。押して選んでから「はなす」。<br>
             <br>
-            <b>押しただけでは始まらないよ。</b><br>
-            待ってる画面が出るだけで、<br>
-            マイクにはまだ触ってない。<br>
-            そこで「はなす」を押して初めて繋がる。<br>
+            <b>marin</b> と <b>cedar</b> が新しいやつ。<br>
+            どんな声かは説明しても伝わらないから、<br>
+            実際に話して確かめて。<br>
             <br>
-            静かなところで急に俺の声が出たら<br>
-            困るでしょ。だから2段階にしてある。<br>
+            始めたあとは変えられないから、<br>
+            変えたくなったら一度切ってかけ直して。<br>
             <br>
-            始まったあとは手を使わなくていい。<br>
-            普通に喋ってくれたら通じる。<br>
-            <b>やめたい時はいつでも1回押すだけ。</b><br>
-            <br>
-            あと、おたよりと宿題の写真、<br>
-            前より細かい字まで読めるようにした。<br>
+            <b>それと、話した内容が文字で出る。</b><br>
+            聞き取れなかったところを目で拾えるように。<br>
+            じゃまなら「文字を隠す」で消せる。<br>
           </div>
           <div style="font-size:10px;color:rgba(232,232,226,0.5);margin-top:7px;">画面のどこかをタップで閉じる</div>
         </div>
@@ -12140,6 +12147,7 @@ const VOICE = (function () {
   let handsfree = true;        // 通話中だけの状態。保存しない（次回は必ずここに戻る）
   let muted = false;
   let pttHeld = false;         // 「押しているあいだ話す」を押している最中か
+  let activeVoice = 'marin';   // この通話で使っている声（開始時に確定・途中変更不可）
   let root = null;
   let silenceTimer = null;
   let turns = [];              // 通話で交わしたやり取り（終話後に記憶へ回す）
@@ -12176,7 +12184,27 @@ const VOICE = (function () {
 #voiceRoot button.on{background:var(--accent-dim);border-color:rgba(200,240,160,.4);}
 #voiceRoot button:disabled{opacity:.45;}
 #voiceRoot .v-ptt{padding:22px;font-size:16px;}
-#voiceRoot .v-err{font-size:13px;line-height:1.7;color:#ffb4b4;max-width:24em;white-space:pre-wrap;}`;
+#voiceRoot .v-err{font-size:13px;line-height:1.7;color:#ffb4b4;max-width:24em;white-space:pre-wrap;}
+/* 声の選択（待機画面だけ） */
+#voiceRoot .v-voices{display:flex;flex-wrap:wrap;gap:7px;justify-content:center;max-width:24em;}
+#voiceRoot .v-voice{font:inherit;font-size:12px;padding:7px 13px;border-radius:999px;flex:0 0 auto;
+  border:1px solid var(--border);background:var(--surface);color:var(--text-muted);cursor:pointer;
+  touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
+#voiceRoot .v-voice.on{background:var(--accent-dim);border-color:rgba(200,240,160,.45);color:var(--text);}
+/* 通話中の字幕。通話に入ったら主役はここなので、その時だけ丸を小さくして場所を空ける */
+#voiceRoot.live .v-top{flex:0 0 auto;gap:10px;padding-bottom:6px;}
+#voiceRoot.live .v-orb{width:64px;height:64px;font-size:24px;}
+#voiceRoot.live h2{font-size:15px;}
+#voiceRoot .v-script{display:none;flex:1;width:100%;max-width:520px;margin:0 auto;
+  overflow-y:auto;-webkit-overflow-scrolling:touch;flex-direction:column;gap:8px;padding:6px 2px 12px;}
+#voiceRoot.live .v-script.on{display:flex;}
+#voiceRoot .v-line{font-size:14px;line-height:1.75;padding:9px 13px;border-radius:14px;max-width:88%;
+  white-space:pre-wrap;overflow-wrap:anywhere;}
+#voiceRoot .v-line.me{align-self:flex-end;background:var(--user-bg);}
+#voiceRoot .v-line.momo{align-self:flex-start;background:var(--accent-dim);}
+#voiceRoot .v-line .who{display:block;font-size:10px;opacity:.55;margin-bottom:3px;letter-spacing:.06em;}
+#voiceRoot .v-line.pending{opacity:.65;}
+#voiceRoot .v-script-empty{font-size:12px;color:var(--text-muted);text-align:center;padding:14px;opacity:.7;}`;
     document.head.appendChild(s);
   }
 
@@ -12191,8 +12219,10 @@ const VOICE = (function () {
         '<h2 id="vTitle">声で話す</h2>' +
         '<div class="v-state" id="vState"></div>' +
         '<div class="v-note" id="vNote"></div>' +
+        '<div class="v-voices" id="vVoices"></div>' +
         '<div class="v-err" id="vErr"></div>' +
       '</div>' +
+      '<div class="v-script" id="vScript"></div>' +
       '<div class="v-btns" id="vBtns"></div>';
     document.body.appendChild(root);
     // 音の出口。通話が始まるまで中身は空
@@ -12204,10 +12234,95 @@ const VOICE = (function () {
     return root;
   }
 
+  // ── 声の選び（v3.17.0） ──────────────────────────────
+  // marin / cedar が新しい世代の声。それ以前からある声もそのまま使える。
+  // どれがどんな声かは文字で説明しても伝わらないので、名前だけ出して本人に選んでもらう。
+  //
+  // ★声は「通話を始める前」にしか選べない。Realtime は一度しゃべり出すと
+  //   そのセッションの声を変えられないため。変えたいときは、かけ直す。
+  const VOICES = ['marin', 'cedar', 'ash', 'ballad', 'verse', 'alloy', 'sage', 'coral', 'shimmer', 'echo'];
+  const KEY_VOICE = 'momo_voice';
+  const DEFAULT_VOICE = 'marin';
+  function currentVoice() {
+    try { const v = localStorage.getItem(KEY_VOICE); return VOICES.includes(v) ? v : DEFAULT_VOICE; }
+    catch { return DEFAULT_VOICE; }
+  }
+  function setVoice(v) {
+    try { localStorage.setItem(KEY_VOICE, v); } catch {}
+    renderVoices();
+  }
+  function renderVoices() {
+    const box = $('vVoices');
+    if (!box) return;
+    // 通話中は選ばせない（途中で変えられないので、選べるように見せるほうが不親切）
+    if (phase !== 'standby') { box.innerHTML = ''; box.style.display = 'none'; return; }
+    box.style.display = 'flex';
+    const cur = currentVoice();
+    box.innerHTML = VOICES.map(v =>
+      `<button class="v-voice${v === cur ? ' on' : ''}" data-v="${v}">${v}</button>`).join('');
+    box.querySelectorAll('.v-voice').forEach(b => {
+      b.onclick = () => setVoice(b.dataset.v);
+    });
+  }
+
   const $ = id => document.getElementById(id);
   function setState(t) { const e = $('vState'); if (e) e.textContent = t || ''; }
   function setNote(t)  { const e = $('vNote');  if (e) e.textContent = t || ''; }
   function setErr(t)   { const e = $('vErr');   if (e) e.textContent = t || ''; }
+
+  // ── 通話中の字幕（v3.17.0） ─────────────────────────
+  // 喋っている内容をその場で文字にして出す。聞き取れなかった時に目で拾えるように。
+  // 確定した発言は addTurn() が history と DB に積む（この字幕とは別の経路）。
+  let showScript = true;
+  let liveEls = { user: null, assistant: null };   // 途中経過を書き足していく行
+  const SCRIPT_MAX = 60;                            // 画面に残す行数の上限
+
+  function scriptBox() { return $('vScript'); }
+  function resetScript() {
+    liveEls = { user: null, assistant: null };
+    const b = scriptBox();
+    if (b) b.innerHTML = '<div class="v-script-empty">話した内容がここに出るよ</div>';
+  }
+  function scriptLine(role, text, pending) {
+    const b = scriptBox();
+    if (!b) return null;
+    b.querySelector('.v-script-empty')?.remove();
+    const el = document.createElement('div');
+    el.className = 'v-line ' + (role === 'user' ? 'me' : 'momo') + (pending ? ' pending' : '');
+    el.innerHTML = '<span class="who"></span><span class="t"></span>';
+    el.querySelector('.who').textContent = role === 'user' ? 'りぴ' : 'もも';
+    el.querySelector('.t').textContent = text || '';
+    b.appendChild(el);
+    while (b.children.length > SCRIPT_MAX) b.removeChild(b.firstChild);
+    b.scrollTop = b.scrollHeight;
+    return el;
+  }
+  // 喋っている途中（delta）を書き足す
+  function scriptDelta(role, chunk) {
+    if (!chunk) return;
+    if (!liveEls[role]) liveEls[role] = scriptLine(role, '', true);
+    const el = liveEls[role];
+    if (!el) return;
+    const t = el.querySelector('.t');
+    t.textContent = (t.textContent || '') + chunk;
+    const b = scriptBox();
+    if (b) b.scrollTop = b.scrollHeight;
+  }
+  // 言い終わった（done/completed）。確定した文で置き換える
+  function scriptFinal(role, text) {
+    const s = (text || '').trim();
+    if (liveEls[role]) {
+      const el = liveEls[role];
+      liveEls[role] = null;
+      if (!s) { el.remove(); return; }
+      el.classList.remove('pending');
+      el.querySelector('.t').textContent = s;
+      const b = scriptBox();
+      if (b) b.scrollTop = b.scrollHeight;
+      return;
+    }
+    if (s) scriptLine(role, s, false);
+  }
 
   // ── 待機画面（📞 を押すとここまで。マイクにはまだ触らない） ──
   function openStandby() {
@@ -12223,7 +12338,11 @@ const VOICE = (function () {
     setErr('');
     setNote('ここから「はなす」を押すと、ももが声で返事をするようになります。\n' +
             'まわりに人がいるときは、イヤホンを使ってください。\n' +
-            'まだマイクにはつながっていません。');
+            'まだマイクにはつながっていません。\n\n' +
+            '声はここで選ぶ（始めたあとは変えられないので、変えたい時はかけ直す）');
+    root.classList.remove('live');
+    renderVoices();
+    resetScript();
 
     const blocked = whyBlocked();
     $('vBtns').innerHTML =
@@ -12310,8 +12429,11 @@ const VOICE = (function () {
   // ── 通話画面 ──
   function renderCallUI() {
     $('vOrb').textContent = '🌙';
-    $('vTitle').textContent = 'もも';
+    $('vTitle').textContent = 'もも（' + activeVoice + '）';
     setNote('');
+    renderVoices();                       // 通話中は選択肢を隠す
+    root.classList.add('live');
+    scriptBox()?.classList.toggle('on', showScript);
     const b = $('vBtns');
     b.innerHTML =
       (handsfree ? '' : '<button class="v-ptt" id="vPtt">押しているあいだ話す</button>') +
@@ -12321,6 +12443,7 @@ const VOICE = (function () {
       '</div>' +
       '<div class="v-row">' +
         '<button id="vMode">' + (handsfree ? '押して話すに切替' : 'ハンズフリーに切替') + '</button>' +
+        '<button id="vScriptBtn" class="' + (showScript ? 'on' : '') + '">' + (showScript ? '文字を隠す' : '文字を出す') + '</button>' +
       '</div>' +
       '<button class="danger" id="vEnd">通話をおわる</button>';
 
@@ -12328,6 +12451,7 @@ const VOICE = (function () {
     $('vHush').onclick = hush;
     $('vMute').onclick = toggleMute;
     $('vMode').onclick = toggleMode;
+    $('vScriptBtn').onclick = () => { showScript = !showScript; renderCallUI(); };
 
     const ptt = $('vPtt');
     if (ptt) {
@@ -12355,6 +12479,8 @@ const VOICE = (function () {
     phase = 'connecting';
     setErr('');
     setState('つないでる…');
+    activeVoice = currentVoice();   // この通話のあいだ固定。途中では変えられない
+    resetScript();
     $('vBtns').innerHTML = '<button class="danger" id="vEnd">やめる</button>';
     $('vEnd').onclick = () => hangUp('やめた');
 
@@ -12502,7 +12628,7 @@ const VOICE = (function () {
           // 意味で切れ目を判断するモードを、いちばん待つ設定で使う
           turn_detection: handsfree ? { type: 'semantic_vad', eagerness: 'low' } : null
         },
-        output: { voice: 'marin' }
+        output: { voice: activeVoice }
       }
     };
     if (withTranscript) session.audio.input.transcription = { model: 'gpt-transcribe' };
@@ -12519,6 +12645,16 @@ const VOICE = (function () {
     if (!res.ok) {
       let detail = '';
       try { detail = (await res.json())?.error?.message || ''; } catch { try { detail = await res.text(); } catch {} }
+      // 選んだ声がこのモデルに無かった場合だけ、既定の声に戻して1回だけやり直す。
+      // 「声を選んだせいで通話できない」という行き止まりを作らないため。
+      // activeVoice を書き換えてから呼ぶので、この分岐は二度は通らない（＝無限には回らない）。
+      if (/voice/i.test(detail) && activeVoice !== DEFAULT_VOICE) {
+        console.warn('[もも] 声', activeVoice, 'が使えないので', DEFAULT_VOICE, 'に戻す:', detail);
+        activeVoice = DEFAULT_VOICE;
+        try { localStorage.setItem(KEY_VOICE, DEFAULT_VOICE); } catch {}
+        teardownPeer();
+        return await connect(withTranscript);
+      }
       throw new Error(detail || ('HTTP ' + res.status));
     }
     const answer = await res.text();
@@ -12551,9 +12687,19 @@ const VOICE = (function () {
       if (m) setErr(m);
     }
 
-    // 文字起こし。イベント名は版によって揺れるので、名前の形で拾う
-    if (/input_audio_transcription\.completed$/.test(t)) addTurn('user', ev.transcript);
-    else if (/output_audio_transcript\.done$/.test(t) || /^response\.audio_transcript\.done$/.test(t)) addTurn('assistant', ev.transcript);
+    // 文字起こし。イベント名は版によって揺れるので、名前の形で拾う。
+    // delta＝喋っている途中（字幕にだけ出す）／completed・done＝確定（履歴とDBにも積む）
+    if (/input_audio_transcription\.delta$/.test(t)) {
+      scriptDelta('user', ev.delta || ev.transcript || '');
+    } else if (/input_audio_transcription\.completed$/.test(t)) {
+      scriptFinal('user', ev.transcript);
+      addTurn('user', ev.transcript);
+    } else if (/output_audio_transcript\.delta$/.test(t) || /^response\.audio_transcript\.delta$/.test(t)) {
+      scriptDelta('assistant', ev.delta || '');
+    } else if (/output_audio_transcript\.done$/.test(t) || /^response\.audio_transcript\.done$/.test(t)) {
+      scriptFinal('assistant', ev.transcript);
+      addTurn('assistant', ev.transcript);
+    }
   }
 
   // 通話の中身を、文字の会話と同じ場所に残す。
@@ -12633,7 +12779,8 @@ const VOICE = (function () {
     pttHeld = false;
     teardownPeer();
     stopMic();
-    if (root) { root.className = ''; root.classList.remove('hot', 'listening', 'speaking'); }
+    if (root) { root.className = ''; root.classList.remove('hot', 'listening', 'speaking', 'live'); }
+    liveEls = { user: null, assistant: null };
     if (was === 'live') {
       try { showToast('📞 通話を終了しました'); } catch {}
       // 通話の中身も、文字の会話と同じように覚えてもらう
