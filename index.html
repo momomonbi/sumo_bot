@@ -3364,7 +3364,18 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 //   ・通話中の発言をその場で字幕として出す。delta で書き足し、done/completed で確定。
 //     確定分を history と DB に積む経路は従来どおりで、字幕はそれとは別の表示層。
 //     「文字を隠す」で消せる。イベント名は版で揺れるので名前の形（正規表現）で拾う。
-const APP_VERSION   = 'v3.17.0';
+// v3.18.0: 声を選ぶ画面で、その場でためし聞きできるようにした
+//   ★マイクは一切使わない。WebRTC を addTransceiver('audio',{direction:'recvonly'}) で
+//     受け取り専用にして繋ぐと、こちらから音を送らずに声だけ貰える。
+//     これで「📞 を押した段階ではマイクに触らない」という約束を崩さずに済む。
+//   ・/v1/audio/speech（読み上げAPI）を使う手もあったが、あちらは声の顔ぶれが別で
+//     marin / cedar が無い可能性が高い。通話で実際に聞こえる声を確かめたいので、
+//     通話とまったく同じ入口・同じモデルで鳴らしている。
+//   ・チップを押す＝選ぶ＋鳴らす。もう一度押すと止まる。別のを押すと前のを畳んでから鳴らす。
+//   ・鳴り終わり（output_audio_buffer.stopped）で自動的に畳む。
+//     取りこぼしても response.done の3.5秒後、それも駄目なら20秒で必ず畳む。
+//   ・「はなす」「閉じる」「画面から離れた」でも必ず止める（鳴らしっぱなしを作らない）。
+const APP_VERSION   = 'v3.18.0';
 const SUMMARY_EVERY = 10;
 const LEARN_PER_LEVEL = 3;    // 何個の学習で1レベル上がるか（小さいほど上がりやすい。旧:5 → v2.6.1で3に緩和。レベルは単調増加なので変更しても下がらない）
 // 重要記憶キー（削除されない永続情報）
@@ -5460,20 +5471,21 @@ function maybeShowVersionPopup() {
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:600;color:#e8e8e2;margin-bottom:6px;">アップデート ${APP_VERSION}</div>
           <div style="font-size:11px;color:rgba(232,232,226,0.8);line-height:1.8;overflow-wrap:anywhere;">
-            <span style="font-size:14px;font-weight:700;color:#ffb3cf;">俺の声、選べるようになった。</span><br>
+            <span style="font-size:14px;font-weight:700;color:#ffb3cf;">俺の声、聞いてから選べる。</span><br>
             <br>
-            📞 の待ってる画面に、声の名前が<br>
-            並んでる。押して選んでから「はなす」。<br>
+            📞 の待ってる画面で声の名前を押すと、<br>
+            <b>その場で俺がひとこと喋る。</b><br>
+            聞いてから決めて。<br>
+            <br>
+            もう一度押すと止まる。<br>
+            <b>ためし聞きにマイクは使ってない</b>から、<br>
+            そこは安心して。<br>
             <br>
             <b>marin</b> と <b>cedar</b> が新しいやつ。<br>
-            どんな声かは説明しても伝わらないから、<br>
-            実際に話して確かめて。<br>
-            <br>
             始めたあとは変えられないから、<br>
             変えたくなったら一度切ってかけ直して。<br>
             <br>
-            <b>それと、話した内容が文字で出る。</b><br>
-            聞き取れなかったところを目で拾えるように。<br>
+            通話中は、話した内容が文字でも出る。<br>
             じゃまなら「文字を隠す」で消せる。<br>
           </div>
           <div style="font-size:10px;color:rgba(232,232,226,0.5);margin-top:7px;">画面のどこかをタップで閉じる</div>
@@ -12191,6 +12203,8 @@ const VOICE = (function () {
   border:1px solid var(--border);background:var(--surface);color:var(--text-muted);cursor:pointer;
   touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
 #voiceRoot .v-voice.on{background:var(--accent-dim);border-color:rgba(200,240,160,.45);color:var(--text);}
+#voiceRoot .v-voice.playing{border-color:var(--accent);color:var(--text);animation:vPulse 1.1s ease-in-out infinite;}
+@keyframes vPulse{0%,100%{opacity:1}50%{opacity:.55}}
 /* 通話中の字幕。通話に入ったら主役はここなので、その時だけ丸を小さくして場所を空ける */
 #voiceRoot.live .v-top{flex:0 0 auto;gap:10px;padding-bottom:6px;}
 #voiceRoot.live .v-orb{width:64px;height:64px;font-size:24px;}
@@ -12251,6 +12265,105 @@ const VOICE = (function () {
     try { localStorage.setItem(KEY_VOICE, v); } catch {}
     renderVoices();
   }
+
+  // ── ためし聞き（v3.18.0） ────────────────────────────
+  // ★マイクは一切使わない。
+  //   WebRTC を recvonly（受け取り専用）で繋ぐと、こちらから音を送らずに声だけ受け取れる。
+  //   これなら「📞 を押した段階ではマイクに触らない」という約束を崩さずに済む。
+  //   /v1/audio/speech（読み上げAPI）を使う手もあるが、あちらは声の顔ぶれが別で、
+  //   marin / cedar が無い可能性が高い。通話で実際に聞こえる声を確かめたいので、
+  //   通話と同じ入口・同じモデルで鳴らす。
+  const SAMPLE_PROMPT =
+    'あなたは「もも」。りぴに自分の声を聞かせるための見本として、日本語で1文だけ短く話す。\n' +
+    '例：「もしもし、りぴ。俺の声、こんな感じだよ」\n' +
+    '前置きも説明もしない。1文だけで終える。';
+  let samplePc = null, sampleDc = null, sampleTimer = null, sampleEndTimer = null;
+  let samplingVoice = null;
+
+  function stopSample() {
+    clearTimeout(sampleTimer); clearTimeout(sampleEndTimer);
+    sampleTimer = sampleEndTimer = null;
+    try { if (sampleDc) sampleDc.close(); } catch {}
+    try { if (samplePc) samplePc.close(); } catch {}
+    sampleDc = null; samplePc = null;
+    const was = samplingVoice;
+    samplingVoice = null;
+    if (audioEl && phase !== 'live') { try { audioEl.srcObject = null; } catch {} }
+    if (was) renderVoices();
+  }
+
+  async function playSample(voice) {
+    if (phase !== 'standby') return;
+    // 鳴っている最中に同じものをもう一度押したら止める
+    if (samplingVoice === voice) { stopSample(); return; }
+    stopSample();
+    samplingVoice = voice;
+    renderVoices();
+    try {
+      const p = new RTCPeerConnection({
+        iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:global.stun.twilio.com:3478'] }]
+      });
+      samplePc = p;
+      p.ontrack = e => {
+        if (!audioEl) return;
+        audioEl.srcObject = e.streams[0];
+        const pr = audioEl.play();
+        if (pr && pr.catch) pr.catch(() => {});
+      };
+      // ★ここが肝。ローカルの音声トラックを足さず、受け取る側だけを開く
+      p.addTransceiver('audio', { direction: 'recvonly' });
+
+      const d = p.createDataChannel('oai');
+      sampleDc = d;
+      d.addEventListener('open', () => { try { d.send(JSON.stringify({ type: 'response.create' })); } catch {} });
+      d.addEventListener('message', ev => {
+        let m; try { m = JSON.parse(ev.data); } catch { return; }
+        const t = m && m.type || '';
+        // 鳴り終わったら畳む。イベント名は版で揺れるので両方見る
+        if (/^output_audio_buffer\.(stopped|cleared)$/.test(t)) {
+          clearTimeout(sampleEndTimer);
+          sampleEndTimer = setTimeout(stopSample, 300);
+        } else if (t === 'response.done') {
+          // 音は少し遅れて届くので、余韻を見てから閉じる
+          clearTimeout(sampleEndTimer);
+          sampleEndTimer = setTimeout(stopSample, 3500);
+        } else if (t === 'error') {
+          console.warn('[もも] ためし聞き:', m.error && m.error.message);
+        }
+      });
+
+      await p.setLocalDescription(await p.createOffer());
+      await waitIce(p);
+
+      const fd = new FormData();
+      fd.set('sdp', p.localDescription.sdp);
+      fd.set('session', JSON.stringify({
+        type: 'realtime',
+        model: VOICE_MODEL,
+        instructions: SAMPLE_PROMPT,
+        audio: {
+          input: { turn_detection: null },   // こちらは喋らないので出番を待たせない
+          output: { voice }
+        }
+      }));
+      const r = await fetch(EP, { method: 'POST', headers: { 'Authorization': 'Bearer ' + apiKey }, body: fd });
+      if (!r.ok) {
+        let detail = '';
+        try { detail = (await r.json())?.error?.message || ''; } catch {}
+        throw new Error(detail || ('HTTP ' + r.status));
+      }
+      if (samplePc !== p) return;   // 待っている間に別のを押された
+      await p.setRemoteDescription({ type: 'answer', sdp: await r.text() });
+      sampleTimer = setTimeout(stopSample, 20000);   // 何があっても20秒で畳む
+    } catch (e) {
+      const msg = (e && e.message) ? e.message : String(e);
+      console.warn('[もも] ためし聞き失敗:', msg);
+      stopSample();
+      // 声そのものが使えないなら、それは選ばせないほうが親切
+      if (/voice/i.test(msg)) setErr('この声（' + voice + '）は今は使えないみたい。ほかのを選んでみて。');
+      else setErr('ためし聞きできませんでした。\n' + msg + '\n通話そのものは試せます。');
+    }
+  }
   function renderVoices() {
     const box = $('vVoices');
     if (!box) return;
@@ -12258,10 +12371,17 @@ const VOICE = (function () {
     if (phase !== 'standby') { box.innerHTML = ''; box.style.display = 'none'; return; }
     box.style.display = 'flex';
     const cur = currentVoice();
-    box.innerHTML = VOICES.map(v =>
-      `<button class="v-voice${v === cur ? ' on' : ''}" data-v="${v}">${v}</button>`).join('');
+    box.innerHTML = VOICES.map(v => {
+      const cls = 'v-voice' + (v === cur ? ' on' : '') + (v === samplingVoice ? ' playing' : '');
+      const mark = v === samplingVoice ? '♪ ' : '';
+      return `<button class="${cls}" data-v="${v}">${mark}${v}</button>`;
+    }).join('');
     box.querySelectorAll('.v-voice').forEach(b => {
-      b.onclick = () => setVoice(b.dataset.v);
+      b.onclick = () => {
+        const v = b.dataset.v;
+        setVoice(v);        // 選ぶ
+        playSample(v);      // そのまま聞かせる（もう一度押すと止まる）
+      };
     });
   }
 
@@ -12339,7 +12459,8 @@ const VOICE = (function () {
     setNote('ここから「はなす」を押すと、ももが声で返事をするようになります。\n' +
             'まわりに人がいるときは、イヤホンを使ってください。\n' +
             'まだマイクにはつながっていません。\n\n' +
-            '声はここで選ぶ（始めたあとは変えられないので、変えたい時はかけ直す）');
+            '声は押すとその場で聞けます（もう一度押すと止まる）。\n' +
+            '始めたあとは変えられないので、変えたい時はかけ直してください。');
     root.classList.remove('live');
     renderVoices();
     resetScript();
@@ -12421,6 +12542,7 @@ const VOICE = (function () {
   }
 
   function close() {
+    stopSample();
     if (phase === 'live' || phase === 'connecting') { hangUp('閉じた'); return; }
     phase = 'idle';
     if (root) root.className = '';
@@ -12476,6 +12598,7 @@ const VOICE = (function () {
   async function start() {
     const blocked = whyBlocked();
     if (blocked) { setErr(blocked); return; }
+    stopSample();                   // ためし聞きが鳴っていたら止めてから
     phase = 'connecting';
     setErr('');
     setState('つないでる…');
@@ -12571,6 +12694,18 @@ const VOICE = (function () {
     }
   }
 
+  // SDPは一度きりのやり取りなので、候補が集まるのを少しだけ待ってから送る。
+  // 集まりきらなくても2秒で切り上げる（待ち続けて無音になるほうが困る）。
+  function waitIce(p) {
+    if (!p || p.iceGatheringState === 'complete') return Promise.resolve();
+    return new Promise(resolve => {
+      const fin = () => { clearTimeout(t); try { p.removeEventListener('icegatheringstatechange', onChange); } catch {} resolve(); };
+      const onChange = () => { if (p.iceGatheringState === 'complete') fin(); };
+      const t = setTimeout(fin, 2000);
+      p.addEventListener('icegatheringstatechange', onChange);
+    });
+  }
+
   async function connect(withTranscript) {
     // STUN を付けておく。無しだと自分の端末内の候補しか集まらず、
     // 携帯回線やルーター越しでは相手にたどり着けないことがある。
@@ -12605,17 +12740,7 @@ const VOICE = (function () {
     // createOffer() を明示的に呼ぶ（引数なしの setLocalDescription() は
     // 古めの Safari だと通らないことがあるため）。
     await pc.setLocalDescription(await pc.createOffer());
-
-    // SDPは一度きりのやり取りなので、候補が集まるのを少しだけ待ってから送る。
-    // 集まりきらなくても2秒で切り上げる（待ち続けて無音になるほうが困る）。
-    if (pc.iceGatheringState !== 'complete') {
-      await new Promise(resolve => {
-        const done = () => { clearTimeout(t); pc.removeEventListener('icegatheringstatechange', onChange); resolve(); };
-        const onChange = () => { if (pc.iceGatheringState === 'complete') done(); };
-        const t = setTimeout(done, 2000);
-        pc.addEventListener('icegatheringstatechange', onChange);
-      });
-    }
+    await waitIce(pc);
 
     const session = {
       type: 'realtime',
@@ -12804,9 +12929,11 @@ const VOICE = (function () {
 
   // 画面から離れたら即座に切る。マイクがつながったまま放置される道を作らない
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden && (phase === 'live' || phase === 'connecting')) hangUp('画面から離れた');
+    if (!document.hidden) return;
+    stopSample();   // ためし聞きも鳴らしっぱなしにしない
+    if (phase === 'live' || phase === 'connecting') hangUp('画面から離れた');
   });
-  window.addEventListener('pagehide', () => { if (phase !== 'idle') hangUp('離脱'); });
+  window.addEventListener('pagehide', () => { stopSample(); if (phase !== 'idle') hangUp('離脱'); });
 
   return { openStandby, close, hangUp, isLive: () => phase === 'live' };
 })();
