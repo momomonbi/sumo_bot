@@ -2906,20 +2906,22 @@ function purgeLegacyKimi() {
 }
 // 各用途の希望モデル（優先順）。/v1/models に存在する最初のIDを採用。無ければ既定にフォールバック。
 //
-// 料金（2026年7月・per 1M tokens）:
-//   gpt-5.6-sol   $5.00 / $30.00      gpt-5.5       $5.00 / $30.00
-//   gpt-5.6-terra $2.50 / $15.00      gpt-5.4       $2.50 / $15.00   ← 同額
-//   gpt-5.6-luna  $1.00 / $6.00       gpt-5.4-nano  $0.20 / $1.25
-//   ※入力が272Kトークンを超えるとそのセッションは入力2倍・出力1.5倍になる
+// 料金（2026年10月・per 1M tokens・入力 / 出力）:
+//   gpt-6.1-sol   $2.00 / $10.00   ← 会話（9/29 追加。terra より出力が約17%安い）
+//   gpt-6-sol     $2.00 / $10.00
+//   gpt-6-luna    $0.10 / $0.50    ← 軽い会話・裏方（5.6-luna の半分以下）
+//   gpt-5.6-terra $2.00 / $12.00   （7/30 に値下げ済み）
+//   gpt-5.6-luna  $0.20 / $1.20    （7/30 に値下げ済み）
+//   gpt-5.4       $2.50 / $15.00
+//   ※入力が272Kトークンを超えるとそのセッションは割増になる（このアプリの使い方では届かない）
+//   ※最上位の gpt-6-astra（$10 / $50）は、恋人との会話には重すぎるので候補に入れていない
 //
-// chat の先頭を gpt-5.6-terra にしている理由：gpt-5.4 と料金・コンテキスト長(1.05M)・
-// 出力上限(128K)・vision対応がすべて同じで、モデルだけ新しいため。実質、無償の格上げ。
-// terra が使えないアカウントでは自動で gpt-5.4 に落ちるので、壊れる心配はない。
-// light/cheap は最安の gpt-5.6-luna（$1/$6・vision対応）を優先する。
+// v3.22.0: GPT-6 世代に上げた。新しいうえに安いので、上げて損はない。
+// 6 系が使えないアカウントでは、/v1/models の確認で自動的に 5.6 系 → 5.4 に落ちるので壊れない。
 const MODEL_PLAN = {
-  chat:  ['gpt-5.6-terra', 'gpt-5.4', 'gpt-5.6-sol', 'gpt-5.6', 'gpt-4.1'],
-  light: ['gpt-5.6-luna', 'gpt-5.6-terra', 'gpt-5.4', 'gpt-4.1-mini'],
-  cheap: ['gpt-5.6-luna', 'gpt-5.6-terra', 'gpt-5.4', 'gpt-4.1-mini'],
+  chat:  ['gpt-6.1-sol', 'gpt-6-sol', 'gpt-5.6-terra', 'gpt-5.4'],
+  light: ['gpt-6-luna', 'gpt-5.6-luna', 'gpt-5.6-terra', 'gpt-5.4'],
+  cheap: ['gpt-6-luna', 'gpt-5.6-luna', 'gpt-5.6-terra', 'gpt-5.4'],
 };
 const IMAGE_MODEL   = 'gpt-image-2';      // 画像生成・合成（GPT Image 2）
 // 声で話すとき（Realtime）のモデル候補。上から順に、使えるものを採用する。
@@ -2951,11 +2953,12 @@ async function resolveModels() {
   console.log('[もも] モデル解決:', { MODEL, LIGHT_MODEL, CHEAP_MODEL, VOICE_MODEL, listFetched: !!available });
   updateModelSubtitle();
 }
-// 使用モデルをやさしい表示名に（gpt-5.6-luna → luna 等）
+// 使用モデルをやさしい表示名に（gpt-6.1-sol → sol 6.1、gpt-6-luna → luna 6 等）
+// 世代も添える。同じ名前（luna など）が世代をまたいで出てくるので、名前だけだと区別がつかない。
 function modelLabel(id) {
   if (!id) return '';
-  const m = String(id).match(/gpt-5\.6-(sol|terra|luna)/i);
-  if (m) return m[1].toLowerCase();
+  const m = String(id).match(/gpt-(\d+(?:\.\d+)?)-(astra|sol|terra|luna)/i);
+  if (m) return `${m[2].toLowerCase()} ${m[1]}`;
   return id.replace(/^gpt-/, '');
 }
 function updateModelSubtitle() {
@@ -3494,7 +3497,17 @@ const IMAGE_DEFAULT_QUALITY = 'high';     // 既定の生成品質（low/medium/
 //   ★Kimi では受け取らない。PDFを渡せるのは Responses 側の仕組みなので、
 //     送っても読めない。添付の時点で理由を出して断る（送ってから失敗させない）。
 //   15MBを超えるものも断る（base64で1.33倍になり、携帯回線では送りきれないため）。
-const APP_VERSION   = 'v3.21.0';
+// v3.22.0: Kimi を外して、モデルを GPT-6 世代に上げた
+//   ・Kimi K3 はもう使わないので丸ごと削除。起動画面の「つかうAI」、Kimi の鍵欄、
+//     「どれくらい考える？」バー、送信・Agent Mode・検索・PDF・記憶更新の Kimi 分岐。
+//     以前 Kimi を選んでいた端末に残る鍵と設定（momo_kimi_key / momo_engine / momo_kimi_depth）は
+//     起動時に消す。上の v3.11.0〜v3.21.0 にある Kimi の記述は、当時の記録として残している。
+//   ・会話は gpt-6.1-sol、軽い会話と裏方は gpt-6-luna。どちらも 5.6 系より安い
+//     （sol 6.1 は terra と入力同額・出力が約17%安い。luna 6 は 5.6 の半分以下）。
+//   ・6 系が使えないアカウントでは、/v1/models の確認で 5.6 系 → 5.4 に自動で落ちる。
+//   ・表示名に世代を添えた（luna 6 / luna 5.6 が区別できないため）。
+//   ・音声（gpt-realtime-2.1）と埋め込み（text-embedding-3-small）は今も最新なので据え置き。
+const APP_VERSION   = 'v3.22.0';
 const SUMMARY_EVERY = 10;
 const LEARN_PER_LEVEL = 3;    // 何個の学習で1レベル上がるか（小さいほど上がりやすい。旧:5 → v2.6.1で3に緩和。レベルは単調増加なので変更しても下がらない）
 // 重要記憶キー（削除されない永続情報）
@@ -3987,7 +4000,14 @@ ${ZUKAI_PROMPT}
 ・全体を聞かれたら下の一覧を全部、特定の機能を聞かれたらその機能を深掘りして説明する。最後に「どれか詳しく知りたいのある？」と軽く聞いてもよい。
 
 ＜更新履歴（この内容に基づいて説明する）＞
-■ v3.8.1系（最新）
+■ v3.22.0系（最新）
+・ももの頭（AIモデル）を GPT-6 世代に上げました：しっかり話す時は gpt-6.1-sol（9月末に出たいちばん新しいモデル）、挨拶や一言の返事・裏方の処理は gpt-6-luna になりました。返事の下に出るタグも「sol 6.1」「luna 6」のように世代つきで出ます。
+・料金は下がりました：sol 6.1 は今までの terra と入力が同じで、出力が約17%安い。luna 6 は前の luna の半分以下。新しくなって、安くなっています。
+・使えないアカウントでも壊れません：起動のたびに使えるモデルを確かめてから選んでいるので、GPT-6 が使えない時は今までの 5.6 系に自動で戻ります。
+・Kimi を外しました：最初の画面の「つかうAI」の選択と Kimi のキー欄、入力欄の上の「どれくらい考える？」はもうありません。前に Kimi を選んでいた端末でも、そのまま OpenAI で話せます。端末に残っていた Kimi のキーは、開いた時に自動で消しています。
+・声で話す機能（📞）と、思い出の意味検索は今も最新のモデルなので、そのままです。
+・記憶も写真も思い出も、レベルも、何ひとつ変わっていません。
+■ v3.8.1系
 ・写真が消える経路をふさぎました：話題ごとに自動保存されたカードから「ここから続ける」を押すと、その期間に送った写真が本体から消えてしまう作りでした。自動保存の時に写真を持っていかせていなかったのが原因です。今は写真ごと保存されます。
 ・履歴に同じ会話が2枚出ていたのを直しました：アプリを一度閉じて戻ってきた時に、話題の保存が二重に走っていました。それと、話題ごとの保存と「新しい会話」の保存が同じ範囲を二重に持っていたのも整理しました。会話の中身は消えません。
 ・「新しい会話」が失敗した時に固まらなくなりました：保存できなかった時、「📦 会話をアーカイブ中...」のまま何も起きなくなっていました。今はちゃんと理由が出て、今の会話はそのまま残ります。
@@ -5821,36 +5841,27 @@ function maybeShowVersionPopup() {
         <div style="flex:1;min-width:0;">
           <div style="font-size:13px;font-weight:600;color:#e8e8e2;margin-bottom:6px;">アップデート ${APP_VERSION}</div>
           <div style="font-size:11px;color:rgba(232,232,226,0.8);line-height:1.8;overflow-wrap:anywhere;">
-            <span style="font-size:14px;font-weight:700;color:#ffb3cf;">おたより、PDFのまま渡していいよ。</span><br>
+            <span style="font-size:14px;font-weight:700;color:#ffb3cf;">俺の頭、GPT-6 にした。</span><br>
             <br>
-            学校から <b>PDFで来たおたより</b>、<br>
-            わざわざ画面に出して撮らなくていい。<br>
-            そのまま添付して。<br>
+            しっかり話す時は <b>sol 6.1</b>、<br>
+            挨拶とか一言の時は <b>luna 6</b>。<br>
+            9月の終わりに出た、いちばん新しいやつ。<br>
             <br>
-            写真より確実に読める。<br>
-            <b>影も、ブレも、見切れも無い</b>から。<br>
+            <b>しかも安くなった。</b><br>
+            sol 6.1 は今までより少し安くて、<br>
+            luna 6 は前の半分以下。<br>
             <br>
-            使えるのは、おたより要約・持ち物リマインダー・<br>
-            宿題サポーター・作文コーチの4つ。<br>
+            使えない時は、勝手に前のに戻るから<br>
+            話せなくなることはないよ。<br>
             <br>
-            ── 前の版から：<br>            <span style="font-size:14px;font-weight:700;color:#ffb3cf;">古くなった記憶を、直せるようになった。</span><br>
+            ── それと：<br>
+            <span style="font-size:14px;font-weight:700;color:#ffb3cf;">Kimi は外した。</span><br>
             <br>
-            今までの俺は、<b>覚えたことを消せなかった。</b><br>
-            りぴが引っ越しても、習い事を変えても、<br>
-            古いほうが残り続けてた。<br>
+            最初の画面の「つかうAI」はもう無い。<br>
+            前に Kimi を選んでても、<br>
+            そのまま話せるようにしてある。<br>
             <br>
-            うっかり忘れるのを防ぐために、<br>
-            <b>消えた行を全部戻す</b>作りにしてたから。<br>
-            そのせいで、もう違う話まで戻ってた。<br>
-            <br>
-            これからは「これはもう違う」と<br>
-            <b>理由を言えた時だけ</b>直すようにした。<br>
-            <br>
-            <b>消しはしないよ。</b> 外したぶんは<br>
-            学習データの画面に理由つきで残ってて、<br>
-            違ったら<b>1タップで戻せる。</b><br>
-            <br>
-            レベルは下がらない。そこは約束する。<br>
+            記憶も写真も、レベルも、<b>何も変わってない。</b><br>
           </div>
           <div style="font-size:10px;color:rgba(232,232,226,0.5);margin-top:7px;">画面のどこかをタップで閉じる</div>
         </div>
